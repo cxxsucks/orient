@@ -13,7 +13,7 @@ enum class node_hint {
     MODIFIER, PRED
 };
 
-template <class iter_t, class sv_t = traits::sv_t>
+template <class iter_t, class sv_t>
 class builder {
 public:
     using node_type = node<iter_t, sv_t>;

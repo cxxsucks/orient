@@ -2,22 +2,12 @@
 
 #include <memory>
 #include <iterator>
-#include <stdexcept>
 #include <ctime>
 #include <string_view>
 
+#include "excepts.hpp"
+
 namespace orie {
-
-namespace traits {
-#ifdef _WIN32
-    using sv_t = std::wstring_view;
-    using char_t = wchar_t;
-#else
-    using sv_t = std::string_view;
-    using char_t = char;
-#endif
-}
-
 namespace pred_tree {
 
 struct tribool_bad {
@@ -196,6 +186,10 @@ public:
     // Can be overriden
     double cost() const noexcept override { return prev_cost; }
     double success_rate() const noexcept override { return prev_cost; }
+
+    tribool_bad apply(iter_t& it) override {
+        return prev ? prev->apply(it) : false;
+    }
 
     // Update the child's cost, then cache the result (plus some penalty).
     void update_cost() noexcept override {
