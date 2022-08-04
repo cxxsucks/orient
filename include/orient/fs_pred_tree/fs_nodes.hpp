@@ -30,15 +30,16 @@ namespace pred_tree {
 using fs_node = node<fs_data_iter, sv_t>;
 using fs_mod_node = mod_base_node<fs_data_iter, sv_t>;
 
-// PRED: -name -iname -strstr -istrstr
-// ARG: --icase --full STR
+// PRED: -name -iname -strstr -istrstr -path -ipath -lname
+// ARG: --icase --readlink STR
 class strstr_glob_node;
 // PRED: -regex -iregex -bregex -ibregex ARG: --icase --full STR
 class regex_node;
 // PRED: -type
 // TODO: Currently only file, directory, link
 class type_node;
-// PRED: -size -[amc][(time)(min)(newer)] -[ug]id -ino -depth
+// PRED: -size -[amc][(time)(min)] -[ug]id -ino -depth
+// ALSO_COMARE_PRED: -[amc]newer -samefile
 // ARGS: --margin NUM -- [+-]NUM_OR_COMPARE_FILE[cbkMGT]
 class num_node;
 // PRED: -empty
@@ -52,6 +53,22 @@ class print_node;
 class exec_node;
 // TODO: -delete
 class del_node;
+// PRED: -access -readable -writable -executable
+// ARG: --readable --writable --executable
+class access_node;
+// PRED: -perm
+// ARG: /- followed by octal or sympolic permission bit
+class perm_node;
+// PRED: -user -group -nogroup -nouser
+class username_node;
+
+#ifdef ORIE_NEED_SELINUX
+extern "C" {
+#include <selinux/selinux.h>
+}
+// PRED: -context
+class selcontext_node;
+#endif
 
 // Content Matching Nodes
 // PRED: -content-strstr ARG: --icase --block --binary STR
@@ -70,7 +87,7 @@ class strstr_glob_node : public fs_node {
     std::array<char_t, 252 / sizeof(char_t)> _pattern;
     bool _is_glob;
     bool _is_full;
-    bool _is_exact;
+    bool _is_lname;
     bool _is_icase;
     // Total 256B
 
@@ -87,9 +104,9 @@ public:
     bool next_param(sv_t param) override;
 
     strstr_glob_node(bool is_glob, bool full = false, 
-                     bool exact = false, bool icase = false) 
+                     bool lname = false, bool icase = false) 
         : _is_glob(is_glob) , _is_full(full) 
-        , _is_exact(exact), _is_icase(icase) { }
+        , _is_lname(lname), _is_icase(icase) { }
 };
 
 class regex_node : public fs_node {
@@ -253,6 +270,95 @@ public:
     bool next_param(sv_t param) override;
 };
 
+/**
+ * @brief "Best-effort" deletion node. It attempts to delete directories
+ * after scanning and possibly deleting all its children, but does not
+ * guarantee that in an asynchorous context.
+ * @note If all nodes are synchorous, i.e., no @a -content-*, 
+ * dirs will be deleted after its children (if it is empty after that).
+ * @note Would not delete non-empty directory, like @c rmdir(1)
+ * @return Whether the deletion is successful for files
+ */
+class del_node : public fs_node {
+    // Saves the directories "ready" to be deleted
+    std::vector<fs_data_iter> _todel_dirs_stack;
+    std::mutex _todel_mut;
+
+public:
+    double success_rate() const noexcept override { return 0.8; }
+    double cost() const noexcept override { return 1e-5; }
+    fs_node* clone() const override {
+        return new del_node();
+    }
+    bool communicative() const noexcept override {return false;}
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+
+    del_node() noexcept = default;
+    // DO NOT copy the deletion stack!
+    del_node(const del_node&) = delete;
+    del_node& operator=(const del_node&) = delete;
+    // Delete remaining dirs in stack
+    ~del_node() noexcept;
+};
+
+class access_node : public fs_node {
+    int _access_test_mode = 0;
+
+public:
+    double success_rate() const noexcept override { 
+        double res = 1.0;
+        if (_access_test_mode | R_OK) res *= 0.9;
+        if (_access_test_mode | W_OK) res *= 0.6;
+        if (_access_test_mode | X_OK) res *= 0.3;
+        return res;
+    }
+    double cost() const noexcept override { return 1e-5; }
+    fs_node* clone() const override {
+        return new access_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+};
+
+class perm_node : public fs_node {
+    mode_t _must_set = 0;
+    mode_t _must_not_set = 0;
+
+public:
+    // Each bit in `must set` and `must unset` reduce 10% success rate.
+    double success_rate() const noexcept override {
+        return ::pow(0.9, static_cast<double>(
+            ::__builtin_popcount(_must_set | (_must_not_set << 16))
+        ));
+    }
+    double cost() const noexcept override { return 1.2e-5; }
+    fs_node* clone() const override {
+        return new perm_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+};
+
+class username_node : public fs_node {
+    uid_t _targ;
+    bool _is_group;
+    bool _match_invalid; // For -nouser -nogroup
+
+public:
+    double success_rate() const noexcept override { return 0.4; }
+    double cost() const noexcept override { return 1.2e-5; }
+    fs_node* clone() const override {
+        return new username_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+};
+
 // CONTENT
 class content_strstr_node : public fs_node {
     str_t pattern;
@@ -297,6 +403,24 @@ public:
         : _match_dat(pcre2_match_data_create(1, nullptr), pcre2_match_data_free)
         , _blocked(block), _allow_binary(bin), _icase(icase) {}
 };
+
+#ifdef ORIE_NEED_SELINUX
+class context_node : public fs_node {
+    std::array<char_t, 256 / sizeof(char_t)> _pattern;
+
+public:
+    double success_rate() const noexcept override { return 0.2; }
+    double cost() const noexcept override {
+        return 1e-5;
+    }
+    fs_node* clone() const override {
+        return new context_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+};
+#endif 
 
 // MODIFIERS
 /**
