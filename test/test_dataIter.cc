@@ -77,17 +77,17 @@ TEST_F(dataIter, updir) {
         FAIL() << "Unable to set temp directory";
 
     for (fs_data_iter it(dat); it != it.end(); ++it) {
-        if (it.record().file_name_view() == FS_TEXT("fileAA")) {
-            EXPECT_EQ(it.record(1).file_name_view(), FS_TEXT("dirA"));
+        if (it.record().file_name_view() == NATIVE_PATH("fileAA")) {
+            EXPECT_EQ(it.record(1).file_name_view(), NATIVE_PATH("dirA"));
 
             auto tmp = it; tmp.updir();
-            EXPECT_EQ(tmp.record().file_name_view(), FS_TEXT("dirA"));
+            EXPECT_EQ(tmp.record().file_name_view(), NATIVE_PATH("dirA"));
             EXPECT_EQ(tmp.parent_path(), tmpPath.native() + orie::seperator);
         }
 
-        if (it.record().file_name_view() == FS_TEXT("fileBAA")) {
-            EXPECT_EQ(it.record(1).file_name_view(), FS_TEXT("dirBA"));
-            EXPECT_EQ(it.record(2).file_name_view(), FS_TEXT("dirB"));
+        if (it.record().file_name_view() == NATIVE_PATH("fileBAA")) {
+            EXPECT_EQ(it.record(1).file_name_view(), NATIVE_PATH("dirBA"));
+            EXPECT_EQ(it.record(2).file_name_view(), NATIVE_PATH("dirB"));
             EXPECT_EQ(it.record(3).file_name_view(), tmpPath.native());
             EXPECT_EQ(it.record(4).file_type(), orie::unknown_tag);
         }        
@@ -99,7 +99,7 @@ TEST_F(dataIter, downdir) {
         FAIL() << "Unable to set temp directory";
 
     fs_data_iter it(dat), tmp;
-    while (it != it.end() && it.record().file_name_view() != FS_TEXT("dirB"))
+    while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     tmp = it.current_dir_iter();
     EXPECT_EQ(_count_dataIt(tmp), 2);
@@ -110,7 +110,7 @@ TEST_F(dataIter, stat) {
         FAIL() << "Unable to set temp directory";
 
     fs_data_iter it(dat);
-    while (it != it.end() && it.record().file_name_view() != FS_TEXT("dirB"))
+    while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     time_t orig = it->mtime();
     ::sleep(1);

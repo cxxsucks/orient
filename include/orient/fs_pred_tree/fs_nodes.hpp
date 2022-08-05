@@ -6,20 +6,6 @@
 #include <string>
 #include <mutex>
 
-namespace orie {
-#ifdef _WIN32
-    #define PCRE2_CODE_UNIT_WIDTH 16
-    using sv_t = std::wstring_view;
-    using str_t = std::wstring;
-    using char_t = wchar_t;
-#else
-    #define PCRE2_CODE_UNIT_WIDTH 8
-    using sv_t = std::string_view;
-    using str_t = std::string;
-    using char_t = char;
-#endif
-}
-
 extern "C" {
 #include <pcre2.h>
 }
@@ -30,6 +16,7 @@ namespace pred_tree {
 using fs_node = node<fs_data_iter, sv_t>;
 using fs_mod_node = mod_base_node<fs_data_iter, sv_t>;
 
+/* Predicates that require no syscalls; info read directly from fs dump */
 // PRED: -name -iname -strstr -istrstr -path -ipath -lname
 // ARG: --icase --readlink STR
 class strstr_glob_node;
@@ -38,21 +25,18 @@ class regex_node;
 // PRED: -type
 // TODO: Currently only file, directory, link
 class type_node;
+// PRED: -prune
+struct prune_node;
+
+/* Predicates that require only one or two syscalls, 
+ * doing no change to actual filesystem, including stat(2), access(2),
+ * getpwnam(3), getgrnam(3) (which read /etc/passwd), getfilecon(8) */
 // PRED: -size -[amc][(time)(min)] -[ug]id -ino -depth
 // ALSO_COMARE_PRED: -[amc]newer -samefile
 // ARGS: --margin NUM -- [+-]NUM_OR_COMPARE_FILE[cbkMGT]
 class num_node;
 // PRED: -empty
 struct empty_node;
-// PRED: -prune
-struct prune_node;
-// PRED: -print -fprint
-// TODO: -printf -fprintf -ls -fls
-class print_node;
-// TODO: -exec -execdir -ok -okdir
-class exec_node;
-// TODO: -delete
-class del_node;
 // PRED: -access -readable -writable -executable
 // ARG: --readable --writable --executable
 class access_node;
@@ -70,7 +54,18 @@ extern "C" {
 class selcontext_node;
 #endif
 
-// Content Matching Nodes
+/* These predicates (actions) May change current filesystem,
+ * through outputing, command execution and file deletion. */
+// PRED: -print -fprint
+// TODO: -printf -fprintf -ls -fls
+class print_node;
+// TODO: -exec -execdir -ok -okdir
+class exec_node;
+// TODO: -delete
+class del_node;
+
+/* Content Matching Predicates. They will be asynchorously
+ * executed because of their "slow" nature, and thus invalidating -prune */
 // PRED: -content-strstr ARG: --icase --block --binary STR
 class content_strstr_node;
 // PRED: -content-regex ARG: --icase --block --binary STR
@@ -82,6 +77,8 @@ class downdir_node;
 class updir_node;
 // MODIF: -pathmod
 struct pathmod_node;
+// TODO: Action Modifiers
+// -prune-if -delete-if -[f]print[f]-if -exec-if
 
 class strstr_glob_node : public fs_node {
     std::array<char_t, 252 / sizeof(char_t)> _pattern;
@@ -92,7 +89,7 @@ class strstr_glob_node : public fs_node {
     // Total 256B
 
 public:
-    double success_rate() const noexcept override { return 0.1; }
+    double success_rate() const noexcept override { return 0.05; }
     double cost() const noexcept override {
         return _is_glob ? 2.5e-7 : 1e-7;
     }
@@ -113,12 +110,13 @@ class regex_node : public fs_node {
     // Need a custom deleter
     std::shared_ptr<pcre2_code> _re;
     std::shared_ptr<pcre2_match_data> _match_dat;
-    bool _is_full = false;
-    bool _is_exact = false;
-    bool _is_icase = false;
+    bool _is_full;
+    bool _is_exact;
+    bool _is_lname;
+    bool _is_icase;
 
 public:
-    double success_rate() const noexcept override { return 0.1; }
+    double success_rate() const noexcept override { return 0.05; }
     double cost() const noexcept override { return 1e-6; }
     fs_node* clone() const override {
         return new regex_node(*this);
@@ -127,13 +125,14 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    regex_node(bool full = false, bool exact = false, bool icase = false) 
+    regex_node(bool full = false, bool exact = false,
+               bool lname = false, bool icase = false) 
         : _match_dat(pcre2_match_data_create(1, nullptr), pcre2_match_data_free)
-        , _is_full(full) , _is_exact(exact), _is_icase(icase) { }
+        , _is_full(full) , _is_exact(exact), _is_lname(lname), _is_icase(icase) { }
 };
 
 class type_node : public fs_node {
-    std::array<char_t, 8> _permitted;
+    std::array<orie::_category_tag, 8> _permitted;
 
 public:
     double success_rate() const noexcept override;
@@ -145,7 +144,9 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    type_node(sv_t param);
+    type_node() { 
+        ::memset(_permitted.data(), unknown_tag, sizeof(_permitted));
+    };
 };
 
 class num_node : public fs_node {
@@ -204,7 +205,6 @@ struct prune_node : public fs_node {
     bool communicative() const noexcept override {return false;}
 
     bool apply_blocked(fs_data_iter& it) override; 
-    bool next_param(sv_t param) override;
 };
 
 class print_node : public fs_node {
@@ -229,7 +229,7 @@ public:
     // Ctor used in -print -print0 -fprint -fprint0
     // Set _format to "%p" + split, _ofs to nullptr
     // Dest file is set by next_param.
-    print_node(char_t split) : _format(str_t(FS_TEXT("%p")) + split) {}
+    print_node(char_t split) : _format(str_t(NATIVE_PATH("%p")) + split) {}
     // Ctor used in -printf -fprintf
     // Dest file AND format are set by next_param.
     print_node() = default;
@@ -254,6 +254,10 @@ class exec_node : public fs_node {
     ptrdiff_t _name_min_len = 16384;
     ptrdiff_t _name_len_left = 16384;
     bool _parse_finished = false;
+    // -ok variant
+    bool _stdin_confirm;
+    // -execdir variant
+    bool _from_subdir;
 
 public:
     double success_rate() const noexcept override { 
@@ -268,6 +272,9 @@ public:
 
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
+
+    exec_node(bool ok, bool from_subdir) 
+        : _stdin_confirm(ok), _from_subdir(from_subdir) {}
 };
 
 /**
@@ -321,6 +328,8 @@ public:
 
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
+
+    access_node(int rwx_ok) : _access_test_mode(rwx_ok) {}
 };
 
 class perm_node : public fs_node {
@@ -357,6 +366,9 @@ public:
 
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
+
+    username_node(bool group, bool match_invalid) 
+        : _targ(-1), _is_group(group), _match_invalid(match_invalid) {}
 };
 
 // CONTENT
@@ -405,7 +417,7 @@ public:
 };
 
 #ifdef ORIE_NEED_SELINUX
-class context_node : public fs_node {
+class selcontext_node : public fs_node {
     std::array<char_t, 256 / sizeof(char_t)> _pattern;
 
 public:
@@ -414,7 +426,7 @@ public:
         return 1e-5;
     }
     fs_node* clone() const override {
-        return new context_node(*this);
+        return new selcontext_node(*this);
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
@@ -478,6 +490,7 @@ public:
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
+    tribool_bad apply(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 };
 
@@ -491,5 +504,5 @@ struct pathmod_node : public fs_mod_node {
     tribool_bad apply(fs_data_iter& it) override;
 };
 
-}
-}
+} // namespace pred_tree
+} // namespace orie

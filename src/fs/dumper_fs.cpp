@@ -25,8 +25,8 @@ void dir_dumper::from_fs_impl(value_type* upPath, value_type* lnkBuf) noexcept {
     if (!(pd = orie::opendir(upPath)))
         return;
     while ((ent = orie::readdir(pd))) {
-        if (orie::strcmp(FS_TEXT("."), ent->d_name) == 0 ||
-                orie::strcmp(FS_TEXT(".."), ent->d_name) == 0)
+        if (orie::strcmp(NATIVE_PATH("."), ent->d_name) == 0 ||
+                orie::strcmp(NATIVE_PATH(".."), ent->d_name) == 0)
             continue;
         if (ent->d_type != DT_DIR && ent->d_type != DT_LNK) {
             add_file(ent->d_name);
@@ -128,9 +128,9 @@ file_dumper::string_type file_dumper::path(unsigned depth) const {
 }
 
 file_dumper *dir_dumper::visit_one(const string_type &file_name, bool force) {
-    if (file_name.empty() || file_name == FS_TEXT("."))
+    if (file_name.empty() || file_name == NATIVE_PATH("."))
         return this;
-    else if (file_name == FS_TEXT(".."))
+    else if (file_name == NATIVE_PATH(".."))
         return parent_dir;
     auto diter = std::find_if(my_dirs.cbegin(), my_dirs.cend(),
         [&file_name](const dir_dumper* p) {return p && p->filename == file_name; });

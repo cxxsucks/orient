@@ -3,7 +3,6 @@
 #pragma warning(disable: 4996)
 #endif // _MSC_VER
 
-
 extern "C" {
 #if _WIN32
 #include <orient/dirent_win.h>
@@ -14,22 +13,17 @@ extern "C" {
 #undef max
 #undef min
 #endif
+
 #else
-
-#ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE
-#endif // _DEFAULT_SOURCE
-
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <limits.h>
-#define FS_TEXT(str) str
-// #define NATIVE_STDOUT std::cout
-// #define NATIVE_STDERR std::cerr
+#define NATIVE_PATH(str) str
 #endif
 }
+#define NATIVE_PATH_SV(str) orie::sv_t(NATIVE_PATH(str))
 
 #include <cstring>
 #include <cstdlib>
@@ -37,10 +31,15 @@ extern "C" {
 
 namespace orie {
 #ifdef _WIN32
-    using value_type = wchar_t;
+    #define PCRE2_CODE_UNIT_WIDTH 16
     using dir_t = ::_WDIR;
     using dirent_t = ::_wdirent;
     typedef struct _stat stat_t; // using does not work on MSVC :(
+
+    using fs_char_traits = std::char_traits<char>;
+    using sv_t = std::wstring_view;
+    using str_t = std::wstring;
+    using char_t = wchar_t;
 
     constexpr value_type seperator = L'\\';
     constexpr value_type reverse_sep = L'/';
@@ -50,22 +49,60 @@ namespace orie {
     inline std::wostream& NATIVE_STDOUT = std::wcerr;
 
 #else 
+    #define PCRE2_CODE_UNIT_WIDTH 8
     using value_type = char;
     using dir_t = ::DIR;
     using dirent_t = ::dirent;
     using stat_t = struct stat;
 
+    using fs_char_traits = std::char_traits<char>;
+    using sv_t = std::string_view;
+    using str_t = std::string;
+    using char_t = char;
     constexpr value_type seperator = '/';
     constexpr value_type reverse_sep = '\\';
     constexpr size_t path_max = PATH_MAX;
 
     inline std::ostream& NATIVE_STDOUT = std::cout;
     inline std::ostream& NATIVE_STDERR = std::cerr;
-
 #endif
-    constexpr value_type root_path_str[] = FS_TEXT("root_paths");
-    constexpr value_type pruned_path_str[] = FS_TEXT("pruned_paths");
-    constexpr value_type db_path_str[] = FS_TEXT("database_path");
+
+    // https://en.cppreference.com/w/cpp/string/char_traits
+    // Used in case-ignored comparison
+    struct fs_icase_traits : public std::char_traits<char_t> {
+        static char_t to_upper(char_t ch) {
+            if constexpr (sizeof(char_t) == 1)
+                return ::toupper(ch);
+            else return ::towupper(ch);
+        }
+        static bool eq(char_t c1, char_t c2) {
+            return to_upper(c1) == to_upper(c2);
+        }
+        static bool lt(char_t c1, char_t c2) {
+            return to_upper(c1) < to_upper(c2);
+        }
+        static int compare(const char_t *s1, const char_t *s2, size_t n) {
+            while (n-- != 0) {
+                if (to_upper(*s1) < to_upper(*s2)) return -1;
+                if (to_upper(*s1) > to_upper(*s2)) return 1;
+                ++s1; ++s2;
+            }
+            return 0;
+        }
+        static const char_t* find(const char* s, size_t n, char a) {
+            auto const ua(to_upper(a));
+            while (n-- != 0) {
+                if (to_upper(*s) == ua)
+                    return s;
+                ++s;
+            }
+            return nullptr;
+        }
+    };
+
+    constexpr value_type root_path_str[] = NATIVE_PATH("root_paths");
+    constexpr value_type pruned_path_str[] = NATIVE_PATH("pruned_paths");
+    constexpr value_type db_path_str[] = NATIVE_PATH("database_path");
 
     enum _category_tag : value_type {
         unknown_tag = 0,
