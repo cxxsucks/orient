@@ -494,15 +494,5 @@ public:
     bool next_param(sv_t param) override;
 };
 
-struct pathmod_node : public fs_mod_node {
-    double cost() const noexcept override { return prev_cost + 1e-7; }
-    fs_node* clone() const override {
-        return new pathmod_node(*this);
-    }
-
-    bool apply_blocked(fs_data_iter& it) override; 
-    tribool_bad apply(fs_data_iter& it) override;
-};
-
 } // namespace pred_tree
 } // namespace orie

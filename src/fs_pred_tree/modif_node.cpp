@@ -23,13 +23,5 @@ bool updir_node::apply_blocked(fs_data_iter& it) {
     return false;
 }
 
-tribool_bad pathmod_node::apply(fs_data_iter& it) {
-    return tribool_bad::Uncertain;
-}
-
-bool pathmod_node::apply_blocked(fs_data_iter& it) {
-    return false;
-}
-
 }
 }
