@@ -103,20 +103,15 @@ fs_data_iter& fs_data_iter::operator=(const fs_data_iter& rhs) {
     return *this;
 }
 
-const fs_data_iter::string_type &fs_data_iter::path(bool full) const {
-    if (full) {
-        if (opt_fullpath.has_value())
-            return opt_fullpath.value();
-        return opt_fullpath.emplace(prefix + string_type(cur_rec.file_name_view()));
-    } else {
-        if (opt_filename.has_value())
-            return opt_filename.value();
-        return opt_filename.emplace(cur_rec.file_name_view());
-    }
+const fs_data_iter::string_type &
+fs_data_iter::path() const {
+    if (opt_fullpath.has_value())
+        return opt_fullpath.value();
+    return opt_fullpath.emplace(prefix + string_type(cur_rec.file_name_view()));
 }
 
 fs_data_iter& fs_data_iter::operator++() {
-    opt_fullpath.reset(); opt_stat.reset(); opt_filename.reset();
+    opt_fullpath.reset(); opt_stat.reset();
     if (push_count == 0)
         throw std::out_of_range("Incrementing End fsData Iterator");
         
@@ -164,7 +159,7 @@ fs_data_iter& fs_data_iter::updir() {
         return (*this = end());
     if (push_count > 1)
         --push_count;
-    opt_fullpath.reset(); opt_stat.reset(); opt_filename.reset();
+    opt_fullpath.reset(); opt_stat.reset();
     cur_rec = sub_recs.back();
     sub_recs.pop_back();
     prefix.erase(
@@ -236,7 +231,7 @@ int fs_data_iter::_fetch_stat() const noexcept {
         ret_stat = ::stat(plink_name_begin, &opt_stat.value());
         *plink_name_end = tmp_end;
     } else */ 
-    ret_stat = orie::stat(path(true).c_str(), &opt_stat.value());
+    ret_stat = orie::stat(path().c_str(), &opt_stat.value());
 
     if (ret_stat != 0)
         ::memset(&opt_stat.value(), 0xff, sizeof(struct stat));

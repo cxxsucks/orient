@@ -100,13 +100,11 @@ private:
     has_recur_ recur;
 
     mutable std::optional<string_type> opt_fullpath;
-    mutable std::optional<string_type> opt_filename;
+    // mutable std::optional<string_type> opt_filename;
     mutable std::optional<orie::stat_t> opt_stat;
 
     int _fetch_stat() const noexcept;
 public:
-    // Whether or not to return full path when calling path()
-    bool full_path_default = false;
     // Move *this one level up in filesystem hierchary. Return *this.
     // Invalidates *this (== end) if already at top level.
     fs_data_iter& updir();
@@ -132,15 +130,13 @@ public:
             recur = enable ? has_recur_::temp_disable : has_recur_::enable;
     }
 
-    //! @brief Get a reference to current path string.
+    //! @brief Get a reference to current full path string.
     //! @warning The reference is valid until next @a operator++ call.
-    const string_type& path() const { return path(full_path_default); }
-    //! @brief Get a reference to current path string.
-    //! @param full Whether to return full path or just base name.
-    //! @warning The reference is valid until next @a operator++ call.
-    //! @note @code record().file_name_view() @endcode returns view to base name
-    //! without heap allocation and is valid regardless of the iterator state.
-    const string_type& path(bool full) const;
+    const string_type& path() const;
+    //! @brief Get the base name current path, as string_view.
+    //! @note Same as @code record().file_name_view() @endcode
+    strview_type basename() const { return record().file_name_view(); }
+
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.

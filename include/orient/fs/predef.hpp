@@ -43,7 +43,7 @@ namespace orie {
 
     constexpr value_type seperator = L'\\';
     constexpr value_type reverse_sep = L'/';
-    constexpr size_t path_max = 256;
+    constexpr size_t path_max = 2048;
 
     inline std::wostream& NATIVE_STDOUT = std::wcout;
     inline std::wostream& NATIVE_STDOUT = std::wcerr;
