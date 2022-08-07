@@ -17,9 +17,9 @@ using fs_node = node<fs_data_iter, sv_t>;
 using fs_mod_node = mod_base_node<fs_data_iter, sv_t>;
 
 /* Predicates that require no syscalls; info read directly from fs dump */
-// PRED: -name -iname -strstr -istrstr -path -ipath -lname
+// PRED: -name -iname -path -ipath -lname
 // ARG: --icase --readlink STR
-class strstr_glob_node;
+class glob_node;
 // PRED: -regex -iregex -bregex -ibregex ARG: --icase --full STR
 class regex_node;
 // PRED: -type
@@ -75,34 +75,51 @@ class content_regex_node;
 class downdir_node;
 // MODIF: -updir
 class updir_node;
-// MODIF: -pathmod
-struct pathmod_node;
 // TODO: Action Modifiers
 // -prune-if -delete-if -[f]print[f]-if -exec-if
 
-class strstr_glob_node : public fs_node {
+class glob_node : public fs_node {
     std::array<char_t, 252 / sizeof(char_t)> _pattern;
-    bool _is_glob;
-    bool _is_full;
+    bool _is_fullpath;
     bool _is_lname;
     bool _is_icase;
     // Total 256B
 
 public:
     double success_rate() const noexcept override { return 0.05; }
-    double cost() const noexcept override {
-        return _is_glob ? 2.5e-7 : 1e-7;
-    }
+    double cost() const noexcept override { return 2.5e-7; }
     fs_node* clone() const override {
-        return new strstr_glob_node(*this);
+        return new glob_node(*this);
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    strstr_glob_node(bool is_glob, bool full = false, 
-                     bool lname = false, bool icase = false) 
-        : _is_glob(is_glob) , _is_full(full) 
+    glob_node(bool full = false, bool lname = false, bool icase = false)
+        : _is_fullpath(full), _is_lname(lname), _is_icase(icase) { }
+};
+
+class strstr_node : public fs_node {
+    std::array<char_t, 252 / sizeof(char_t)> _pattern;
+    bool _is_fullpath;
+    bool _is_exact;
+    bool _is_lname;
+    bool _is_icase;
+    // Total 256B
+
+public:
+    double success_rate() const noexcept override { return 0.05; }
+    double cost() const noexcept override { return 1e-7; }
+    fs_node* clone() const override {
+        return new strstr_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+
+    strstr_node(bool full = false, bool exact = false,
+                bool lname = false, bool icase = false) 
+        : _is_fullpath(full), _is_exact(exact)
         , _is_lname(lname), _is_icase(icase) { }
 };
 
