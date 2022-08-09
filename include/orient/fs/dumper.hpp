@@ -12,7 +12,7 @@ class link_dumper;
 
 class file_dumper {
 public:
-    using value_type = orie::value_type;
+    using value_type = orie::char_t;
     using string_type = std::basic_string<value_type>;
     using strview_type = std::basic_string_view<value_type>;
 

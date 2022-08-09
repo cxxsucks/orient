@@ -41,8 +41,8 @@ namespace orie {
     using str_t = std::wstring;
     using char_t = wchar_t;
 
-    constexpr value_type seperator = L'\\';
-    constexpr value_type reverse_sep = L'/';
+    constexpr char_t seperator = L'\\';
+    constexpr char_t reverse_sep = L'/';
     constexpr size_t path_max = 2048;
 
     inline std::wostream& NATIVE_STDOUT = std::wcout;
@@ -50,7 +50,6 @@ namespace orie {
 
 #else 
     #define PCRE2_CODE_UNIT_WIDTH 8
-    using value_type = char;
     using dir_t = ::DIR;
     using dirent_t = ::dirent;
     using stat_t = struct stat;
@@ -59,8 +58,8 @@ namespace orie {
     using sv_t = std::string_view;
     using str_t = std::string;
     using char_t = char;
-    constexpr value_type seperator = '/';
-    constexpr value_type reverse_sep = '\\';
+    constexpr char_t seperator = '/';
+    constexpr char_t reverse_sep = '\\';
     constexpr size_t path_max = PATH_MAX;
 
     inline std::ostream& NATIVE_STDOUT = std::cout;
@@ -100,11 +99,11 @@ namespace orie {
         }
     };
 
-    constexpr value_type root_path_str[] = NATIVE_PATH("root_paths");
-    constexpr value_type pruned_path_str[] = NATIVE_PATH("pruned_paths");
-    constexpr value_type db_path_str[] = NATIVE_PATH("database_path");
+    constexpr char_t root_path_str[] = NATIVE_PATH("root_paths");
+    constexpr char_t pruned_path_str[] = NATIVE_PATH("pruned_paths");
+    constexpr char_t db_path_str[] = NATIVE_PATH("database_path");
 
-    enum _category_tag : value_type {
+    enum _category_tag : char_t {
         unknown_tag = 0,
         file_tag = 'f', dir_tag = 'd',
         dir_pop_tag = 'p', link_tag = 'l', 
@@ -113,7 +112,7 @@ namespace orie {
 
 #ifdef _WIN32
     //! Get file attributes for @c path and put them in @c buf
-    inline int stat(const value_type* path, stat_t* buf) {
+    inline int stat(const char_t* path, stat_t* buf) {
         return ::_wstat(path, buf);
     }
 
@@ -121,7 +120,7 @@ namespace orie {
     //! @param path The directory to be opened.
     //! @return A dir stream on the directory
     //! @retval NULL if it could not be opened.
-    inline dir_t* opendir(const value_type* path) {
+    inline dir_t* opendir(const char_t* path) {
         return ::wopendir(path);
     }
 
@@ -139,8 +138,8 @@ namespace orie {
     //! @brief Get the absolute name of @p src.
     //! @param [out] resolv Non-null buffer holding resolved path.
     //! @return @p resolv
-    inline value_type* realpath(const value_type* src,
-                                value_type* resolv, size_t buf_len) 
+    inline char_t* realpath(const char_t* src,
+                            char_t* resolv, size_t buf_len) 
     {
         DWORD _buf_len = static_cast<DWORD>(buf_len);
         DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv, nullptr);
@@ -153,7 +152,7 @@ namespace orie {
 
 #else
     //! Get file attributes for @c path and put them in @c buf
-    inline int stat(const value_type* path, stat_t* buf) {
+    inline int stat(const char_t* path, stat_t* buf) {
         return ::stat(path, buf);
     }
 
@@ -161,7 +160,7 @@ namespace orie {
     //! @param path The directory to be opened.
     //! @return A dir stream on the directory
     //! @retval NULL if it could not be opened.
-    inline dir_t* opendir(const value_type* path) {
+    inline dir_t* opendir(const char_t* path) {
         return ::opendir(path);
     }
 
@@ -179,8 +178,8 @@ namespace orie {
     //! @brief Get the absolute name of @p src.
     //! @param [out] resolv Non-null buffer holding resolved path.
     //! @return @p resolv
-    inline value_type* realpath(const value_type* src,
-                                value_type* resolv, size_t buf_len) 
+    inline char_t* realpath(const char_t* src,
+                            char_t* resolv, size_t buf_len) 
     {
         if (buf_len >= PATH_MAX - 2)
             return ::realpath(src, resolv);

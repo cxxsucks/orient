@@ -168,7 +168,7 @@ public:
 
 class num_node : public fs_node {
 public:
-    enum class compar {GREATER, SMALL, EQUAL};
+    enum class compar {GE, LE, EQUAL};
     enum class stamp {
         ATIME, MTIME, CTIME,
         AMIN, MMIN, CMIN,
@@ -179,11 +179,14 @@ public:
 private:
     stamp _stm;
     compar _comp;
-    double _targ = 0.0;
-    double _margin = 0.01;
+    uint64_t _targ;
+    // -amcmin 60, -amctime 86400
+    // -size NUMb 512, -size NUMk 1024 ...
+    uint64_t _unit;
 
-    double __num_consume(sv_t numstr) const noexcept;
-    double __path_to_num(sv_t fullpath) const noexcept;
+    std::pair<uint64_t, uint64_t> __num_consume(sv_t numstr) const;
+    uint64_t __path_to_num(sv_t path) const noexcept;
+    bool _num_apply(uint64_t n) const noexcept;
 
 public:
     double success_rate() const noexcept override { return 0.1; }
@@ -197,8 +200,7 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    num_node(stamp stm, compar cmp = compar::EQUAL)
-        : _stm(stm), _comp(cmp) {}
+    num_node(stamp stm, compar cmp = compar::EQUAL);
 };
 
 struct empty_node : public fs_node {

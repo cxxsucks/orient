@@ -14,7 +14,7 @@ namespace orie {
  * @c fs_data_iter */
 class fs_data_record {
 public:
-    using char_type = orie::value_type;
+    using char_type = orie::char_t;
     using category_tag = orie::_category_tag;
     using strview_type = std::basic_string_view<char_type>;
 private:
@@ -72,7 +72,7 @@ public:
  * Will change in a distant release. */
 class fs_data_iter {
 public:
-    using char_type = orie::value_type;
+    using char_type = orie::char_t;
     using category_tag = orie::_category_tag;
     using string_type = std::basic_string<char_type>;
     using strview_type = std::basic_string_view<char_type>;

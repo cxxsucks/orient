@@ -55,7 +55,7 @@ void dir_dumper::from_fs_impl(value_type* upPath, value_type* lnkBuf) noexcept {
     orie::closedir(pd);
     clear(8);
 updated:
-    static constexpr orie::value_type sepArr[2] = {
+    static constexpr value_type sepArr[2] = {
         orie::seperator, '\0'
     };
     std::for_each(my_dirs.begin(), my_dirs.end(),
