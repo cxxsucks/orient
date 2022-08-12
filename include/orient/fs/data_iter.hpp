@@ -87,6 +87,7 @@ public:
     using gid_t = decltype(orie::stat_t::st_gid);
     using uid_t = decltype(orie::stat_t::st_uid);
     using ino_t = decltype(orie::stat_t::st_ino);
+    using mode_t = decltype(orie::stat_t::st_mode);
 
 private:
     enum class has_recur_ : uint8_t {
@@ -100,7 +101,6 @@ private:
     has_recur_ recur;
 
     mutable std::optional<string_type> opt_fullpath;
-    // mutable std::optional<string_type> opt_filename;
     mutable std::optional<orie::stat_t> opt_stat;
 
     int _fetch_stat() const noexcept;
@@ -146,6 +146,11 @@ public:
     gid_t gid() const noexcept;
     // Numeric user id. Always 0 on Windows
     uid_t uid() const noexcept;
+    // Inode number of the file
+    ino_t inode() const noexcept;
+    // (Type and) Permission of the file. 
+    // `file_type` is better for getting type.
+    mode_t mode() const noexcept;
     // Last modified time. Returns cached value for directories
     // unless precise stat is acquired, e.g., calling gid() atime() prior.
     ::time_t mtime() const noexcept;
@@ -155,7 +160,7 @@ public:
     ::time_t ctime() const noexcept;
     // Amount of disk space in bytes of current entry.
     ::off_t file_size() const noexcept;
-    ino_t inode() const noexcept;
+
     size_t depth() const noexcept;
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()

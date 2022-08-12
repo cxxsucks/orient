@@ -6,6 +6,10 @@ extern "C" {
 namespace orie {
 namespace pred_tree {
 
+glob_node::glob_node(bool full, bool lname, bool icase)
+    : _is_fullpath(full), _is_lname(lname), _is_icase(icase) 
+{ ::memset(_pattern.data(), 0, sizeof(_pattern)); }
+
 bool glob_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
         throw orie::pred_tree::uninitialized_node("--name");
@@ -19,7 +23,6 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
     }
 
     if (_is_lname) {
-        // Strings matched by fnmatch(3) must be NULL-terminated
         char_t linkat_path[path_max];
         ssize_t re_len = ::readlink(it.path().c_str(), linkat_path,
                                     path_max - 1);
@@ -28,6 +31,7 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
         return ::fnmatch(_pattern.data(), linkat_path,
                          _is_icase ? FNM_CASEFOLD : 0) == 0;
     } else {
+        // Strings matched by fnmatch(3) must be NULL-terminated
         char_t name_buf[path_max];
         sv_t name_sv = it.basename().substr(0, path_max - 1);
         ::memcpy(name_buf, name_sv.data(), name_sv.size());
@@ -54,12 +58,39 @@ bool glob_node::next_param(sv_t param) {
     }
 
     if (param.size() > 252 / sizeof(char_t) - 1) {
-        NATIVE_STDERR << NATIVE_PATH("Current implementation only supports \
-            a pattern of at most 252 bytes :(\n");
+        NATIVE_STDERR << NATIVE_PATH("Current implementation only supports "
+            "a pattern of at most 252 bytes :(\n");
         param = param.substr(0, 252 / sizeof(char_t) - 1);
     }
     ::memcpy(_pattern.data(), param.data(), param.size() * sizeof(char_t));
     return true;
+}
+
+bool strstr_node::apply_blocked(fs_data_iter& it) {
+    if (_pattern[0] == '\0')
+        throw orie::pred_tree::uninitialized_node("--name");
+    if (_is_lname && it.file_type() == link_tag)
+        return false; // Not a symlink 
+
+    // Get the target string_view for matching
+    sv_t haystack;
+    char_t linkat_path[path_max];
+    if (_is_lname) {
+        ssize_t re_len = ::readlink(it.path().c_str(), linkat_path,
+                                    path_max - 1);
+        if (re_len <= 0)
+            return true;
+        haystack = sv_t(linkat_path, re_len);
+    } 
+    else if (_is_fullpath)
+        haystack = it.path();
+    else haystack = it.basename();
+    // And its ignore-case counterpart
+    icase_sv_t icase_hs(haystack.data(), haystack.size());
+
+    return _is_icase ?
+        icase_hs.find(_pattern.data()) != sv_t::npos :
+        haystack.find(_pattern.data()) != sv_t::npos;
 }
 
 bool regex_node::apply_blocked(fs_data_iter& it) {

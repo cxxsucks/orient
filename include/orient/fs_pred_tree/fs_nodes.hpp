@@ -43,8 +43,10 @@ class access_node;
 // PRED: -perm
 // ARG: /- followed by octal or sympolic permission bit
 class perm_node;
-// PRED: -user -group -nogroup -nouser
+// PRED: -user -group ARG: username
 class username_node;
+// PRED: -nogroup -nouser
+class baduser_node;
 
 #ifdef ORIE_NEED_SELINUX
 extern "C" {
@@ -79,6 +81,9 @@ class updir_node;
 // -prune-if -delete-if -[f]print[f]-if -exec-if
 
 class glob_node : public fs_node {
+// Because of the "non-idiomatic" inheritance of strstr_node,
+// "protected" must be used instead of "private"
+protected:
     std::array<char_t, 252 / sizeof(char_t)> _pattern;
     bool _is_fullpath;
     bool _is_lname;
@@ -95,32 +100,22 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    glob_node(bool full = false, bool lname = false, bool icase = false)
-        : _is_fullpath(full), _is_lname(lname), _is_icase(icase) { }
+    glob_node(bool full = false, bool lname = false, bool icase = false);
 };
 
-class strstr_node : public fs_node {
-    std::array<char_t, 252 / sizeof(char_t)> _pattern;
-    bool _is_fullpath;
-    bool _is_exact;
-    bool _is_lname;
-    bool _is_icase;
-    // Total 256B
-
-public:
-    double success_rate() const noexcept override { return 0.05; }
+// Strictly speaking strstr_node "is not a" glob node,
+// but their memory layout and next_param methods are exactly identical.
+// The inheritance is more of a code reusing trick than an abstraction.
+struct strstr_node : public glob_node {
     double cost() const noexcept override { return 1e-7; }
     fs_node* clone() const override {
         return new strstr_node(*this);
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
-    bool next_param(sv_t param) override;
 
-    strstr_node(bool full = false, bool exact = false,
-                bool lname = false, bool icase = false) 
-        : _is_fullpath(full), _is_exact(exact)
-        , _is_lname(lname), _is_icase(icase) { }
+    strstr_node(bool full = false, bool lname = false, bool icase = false)
+        : glob_node(full, lname, icase) {}
 };
 
 class regex_node : public fs_node {
@@ -212,7 +207,6 @@ struct empty_node : public fs_node {
     bool communicative() const noexcept override {return false;}
 
     bool apply_blocked(fs_data_iter& it) override; 
-    bool next_param(sv_t param) override;
 };
 
 struct prune_node : public fs_node {
@@ -352,16 +346,16 @@ public:
 };
 
 class perm_node : public fs_node {
-    mode_t _must_set = 0;
-    mode_t _must_not_set = 0;
+public:
+    enum class compar { EXACT_SET, ALL_SET, ANY_SET, };
+
+private:
+    mode_t _targ = ~mode_t();
+    compar _comp = compar::EXACT_SET;
 
 public:
-    // Each bit in `must set` and `must unset` reduce 10% success rate.
-    double success_rate() const noexcept override {
-        return ::pow(0.9, static_cast<double>(
-            ::__builtin_popcount(_must_set | (_must_not_set << 16))
-        ));
-    }
+    // Each bit reduce 10% success rate.
+    double success_rate() const noexcept override; 
     double cost() const noexcept override { return 1.2e-5; }
     fs_node* clone() const override {
         return new perm_node(*this);
@@ -374,7 +368,7 @@ public:
 class username_node : public fs_node {
     uid_t _targ;
     bool _is_group;
-    bool _match_invalid; // For -nouser -nogroup
+    static_assert(sizeof(uid_t) == sizeof(gid_t));
 
 public:
     double success_rate() const noexcept override { return 0.4; }
@@ -386,8 +380,42 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    username_node(bool group, bool match_invalid) 
-        : _targ(-1), _is_group(group), _match_invalid(match_invalid) {}
+    username_node(bool group) 
+        : _targ(-1), _is_group(group) {}
+};
+
+class baduser_node : public fs_node {
+    bool _is_group;
+    // Caching already queried ids in a circular queue
+    std::array<std::pair<uid_t, bool>, 16> _recent_query;
+    size_t _last_at;
+    // getpwuid(3) and getgrgid(3) are not thread-safe.
+    std::mutex _getid_mut;
+
+public:
+    double success_rate() const noexcept override { return 0.4; }
+    double cost() const noexcept override { return 1.2e-5; }
+    fs_node* clone() const override {
+        return new baduser_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+
+    baduser_node(bool group) : _is_group(group) {
+        // Fill all fields with -1 otherwise uid0 would be mapped to false
+        ::memset(_recent_query.data(), -1, sizeof(_recent_query));
+    }
+    baduser_node(const baduser_node& r)
+        : _is_group(r._is_group), _recent_query(r._recent_query)
+        , _last_at(r._last_at) { }
+    baduser_node& operator=(const baduser_node& r) {
+        if (this != &r) {
+            this->~baduser_node();
+            new (this) baduser_node(r);
+        }
+        return *this;
+    }
 };
 
 // CONTENT

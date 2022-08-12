@@ -98,6 +98,7 @@ namespace orie {
             return nullptr;
         }
     };
+    using icase_sv_t = std::basic_string_view<char_t, fs_icase_traits>;
 
     constexpr char_t root_path_str[] = NATIVE_PATH("root_paths");
     constexpr char_t pruned_path_str[] = NATIVE_PATH("pruned_paths");
