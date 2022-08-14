@@ -19,7 +19,9 @@ num_node::__num_consume(sv_t numstr) const {
         const char_t* __beg = numstr.data(),
             *__end = __beg + numstr.size(),
             *__numend = orie::from_char_t(__beg, __end, __res);
-        if (__beg == __numend)
+        if (__end != __numend && 
+        // Permit a unit succeeding the number for -size
+            (__end != __numend + 1 || stamp::SIZE != _stm))
             throw not_a_number(numstr);
     }
 
@@ -29,7 +31,7 @@ num_node::__num_consume(sv_t numstr) const {
             // 512B block by default
             return std::make_pair(__res, 512);
         uint64_t __unit = 1;
-        switch (numstr.front()) {
+        switch (numstr.back()) {
         case 'G': 
             __unit <<= 10; [[fallthrough]];
         case 'M':
@@ -91,7 +93,7 @@ uint64_t num_node::__path_to_num(sv_t path) const noexcept {
 }
 
 bool num_node::_num_apply(uint64_t n) const noexcept {
-    // `find` -size matching is weird.
+    // `find` -size matching is weird. Number being matched is rounded up.
     // Whereas others match [n, n+1), -size matches (n-1, n], e.g.
     // -size 2M matches anything between (1, 2] MiB
     // -mtime 2 matches anything modified between (2, 3] days.
@@ -107,10 +109,13 @@ bool num_node::_num_apply(uint64_t n) const noexcept {
 }
 
 num_node::num_node(stamp stm, compar cmp)
-    : _stm(stm), _comp(cmp) { } 
+    : _targ(~uint64_t()), _unit(1), _stm(stm), _comp(cmp) { } 
 // there was something inside the bracket which later found to be useless :)
 
 bool num_node::apply_blocked(fs_data_iter& it) {
+    if (_targ == ~uint64_t())
+        throw uninitialized_node(NATIVE_PATH_SV("-num"));
+
     switch(_stm) {
     case stamp::ATIME: 
     case stamp::AMIN:
@@ -131,7 +136,7 @@ bool num_node::apply_blocked(fs_data_iter& it) {
 }
 
 bool num_node::next_param(sv_t param) {
-    if (_targ > 0)
+    if (_targ != ~uint64_t())
         return false;
     // Throw at null argument like `find`
     if (param.empty())
@@ -145,6 +150,9 @@ bool num_node::next_param(sv_t param) {
         param.remove_prefix(1);
         _comp = compar::LE;
     }
+    if (param.empty())
+        throw invalid_param_name(NATIVE_PATH_SV("a single '+' or '-'"), 
+                                 NATIVE_PATH_SV("-num"));
 
     std::tie(_targ, _unit) = __num_consume(param);
     return true;
@@ -257,12 +265,14 @@ bool perm_node::next_param(sv_t param) {
 } 
 
 bool username_node::apply_blocked(fs_data_iter& it) {
+    if (_targ == ~uid_t())
+        throw uninitialized_node("-username");
     return _is_group ?
         it.gid() == _targ : it.uid() == _targ;
 }
 
 bool username_node::next_param(sv_t param) {
-    if (_targ >= 0)
+    if (_targ != ~uid_t())
         return false;
 
     const char_t* __beg = param.data(),

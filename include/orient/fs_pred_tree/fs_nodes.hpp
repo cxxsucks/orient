@@ -172,12 +172,12 @@ public:
     };
 
 private:
-    stamp _stm;
-    compar _comp;
     uint64_t _targ;
     // -amcmin 60, -amctime 86400
     // -size NUMb 512, -size NUMk 1024 ...
     uint64_t _unit;
+    stamp _stm;
+    compar _comp;
 
     std::pair<uint64_t, uint64_t> __num_consume(sv_t numstr) const;
     uint64_t __path_to_num(sv_t path) const noexcept;
@@ -381,7 +381,7 @@ public:
     bool next_param(sv_t param) override;
 
     username_node(bool group) 
-        : _targ(-1), _is_group(group) {}
+        : _targ(~uid_t()), _is_group(group) {}
 };
 
 class baduser_node : public fs_node {
@@ -400,7 +400,6 @@ public:
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
-    bool next_param(sv_t param) override;
 
     baduser_node(bool group) : _is_group(group) {
         // Fill all fields with -1 otherwise uid0 would be mapped to false

@@ -8,7 +8,9 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} TEST_SRCS)
 
 add_executable(orientest ${TEST_SRCS})
 add_dependencies(orientest orie)
-target_link_libraries(orientest orie ${GTEST_BOTH_LIBRARIES})
+target_link_libraries(orientest 
+                      orie pcre2-8
+                      ${GTEST_BOTH_LIBRARIES})
 
 include(GoogleTest)
 gtest_discover_tests(orientest)
