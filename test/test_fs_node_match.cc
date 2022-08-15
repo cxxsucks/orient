@@ -92,6 +92,21 @@ TEST_F(fsNodeMatch, fullpath) {
     EXPECT_EQ(59, _do_tests(matcher2));
 }
 
+TEST_F(fsNodeMatch, lname) {
+    strstr_node str_lname(false, true, false);
+    glob_node glob_lname(false, true, false);
+    // Also tests regex_node's exact matching (2nd param)
+    regex_node regex_lname(false, true, true, false);
+
+    ASSERT_TRUE(str_lname.next_param(NATIVE_PATH_SV("file1")));
+    ASSERT_TRUE(glob_lname.next_param(NATIVE_PATH_SV("*file1")));
+    ASSERT_TRUE(regex_lname.next_param(NATIVE_PATH_SV(".*file1")));
+    // 2 symlinks
+    EXPECT_EQ(2, _do_tests(str_lname));
+    EXPECT_EQ(2, _do_tests(glob_lname));
+    EXPECT_EQ(2, _do_tests(regex_lname));
+}
+
 TEST_F(fsNodeMatch, type) {
     type_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("f")));
@@ -188,5 +203,28 @@ TEST_F(fsNodeMatch, username) {
     matcher = username_node(true);
     matcher.next_param(::getgrgid(::getgid())->gr_name);
     EXPECT_EQ(64, _do_tests(matcher));
+}
+
+TEST_F(fsNodeMatch, perm) {
+    if (::umask(022) != 022) {
+        info.~ABunchOfDirs();
+        new (&info) ABunchOfDirs;
+    }
+
+    access_node rw(R_OK | W_OK), x(X_OK);
+    EXPECT_EQ(64, _do_tests(rw));
+    EXPECT_EQ(31, _do_tests(x));
+
+    perm_node exact, any, all;
+    ASSERT_TRUE(exact.next_param("u+rw,g+r,o+r"));
+    ASSERT_TRUE(any.next_param("/go+w,")); 
+    ASSERT_TRUE(all.next_param("-0555"));
+    EXPECT_EQ(33, _do_tests(exact)); // All files and links to file
+    EXPECT_EQ(0, _do_tests(any));  // No writable files
+    EXPECT_EQ(31, _do_tests(all)); // Everyone has rx, match dirs
+
+    ::chmod((info.tmpPath / "dir4" / "file2").c_str(), 0666);
+    EXPECT_EQ(32, _do_tests(exact)); 
+    EXPECT_EQ(1, _do_tests(any));  
 }
 #endif

@@ -13,7 +13,7 @@ glob_node::glob_node(bool full, bool lname, bool icase)
 bool glob_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
         throw orie::pred_tree::uninitialized_node("--name");
-    if (_is_lname && it.file_type() == link_tag)
+    if (_is_lname && it.file_type() != link_tag)
         return false; // Not a link 
 
     if (_is_fullpath && !_is_lname) {
@@ -23,7 +23,7 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
     }
 
     if (_is_lname) {
-        char_t linkat_path[path_max];
+        char_t linkat_path[path_max] = "";
         ssize_t re_len = ::readlink(it.path().c_str(), linkat_path,
                                     path_max - 1);
         if (re_len <= 0)
@@ -69,7 +69,7 @@ bool glob_node::next_param(sv_t param) {
 bool strstr_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
         throw orie::pred_tree::uninitialized_node("--name");
-    if (_is_lname && it.file_type() == link_tag)
+    if (_is_lname && it.file_type() != link_tag)
         return false; // Not a symlink 
 
     // Get the target string_view for matching
@@ -96,7 +96,7 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
 bool regex_node::apply_blocked(fs_data_iter& it) {
     if (_re == nullptr)
         throw uninitialized_node("--regex");
-    if (_is_lname && it.file_type() == link_tag)
+    if (_is_lname && it.file_type() != link_tag)
         return false; // Not a link 
 
     PCRE2_SPTR re_ptr; PCRE2_SIZE re_len;
