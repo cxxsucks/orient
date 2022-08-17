@@ -41,9 +41,6 @@ public:
     //! in database. Saving mtime of dirs made it possible to skip re-scanning dirs that
     //! remain unchanged since last scan. Saving mtime of files is meaningless.
     time_t dir_mtime() const noexcept;
-    //! @brief Check whether the record has just dived into a directory.
-    //! @warning Undefined if @a file_type returns unknown_tag (end reached)
-    bool start_of_dir() const noexcept;
 
     // Get internal position.
     size_t pos() const noexcept {return cur_pos;}
@@ -108,12 +105,15 @@ public:
     // Move *this one level up in filesystem hierchary. Return *this.
     // Invalidates *this (== end) if already at top level.
     fs_data_iter& updir();
+
     //! @brief Move the iterator to the given path.
     //! @param start_path The path to move to. Must be an unvisited
     //! entry of the data being iterated.
     fs_data_iter& visit(strview_type start_path);
+
     // Get a non-recursive iterator over the parent directory of current entry.
     fs_data_iter current_dir_iter() const;
+
     //! @brief Get the internal data record of the current entry or its parents.
     //! @param sub Get the record of the sub-th parent. 0 returns current.
     //! @retval end() On @p sub is greater than current depth.
@@ -136,11 +136,13 @@ public:
     //! @brief Get the base name current path, as string_view.
     //! @note Same as @code record().file_name_view() @endcode
     strview_type basename() const { return record().file_name_view(); }
-
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
     const string_type& parent_path() const noexcept {return prefix;}
+    //! @brief Whether the directory is empty. @c true for non-dirs;
+    //! @warning Undefined if @a file_type returns unknown_tag (end reached)
+    bool empty_dir() const noexcept;
 
     // Numeric group id. Always 0 on Windows
     gid_t gid() const noexcept;

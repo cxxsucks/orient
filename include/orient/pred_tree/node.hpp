@@ -31,7 +31,7 @@ struct tribool_bad {
     constexpr bool operator!=(const tribool_bad& rhs) const noexcept {
         return val != rhs.val || ((val | rhs.val) & 2);
     }
-    constexpr bool isUncertain() const noexcept {
+    constexpr bool is_uncertain() const noexcept {
         return val & 2;
     }
 

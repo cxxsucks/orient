@@ -248,13 +248,7 @@ public:
     print_node() = default;
     print_node(const print_node& r) 
         : _ofs(r._ofs), _format(r._format) {}
-    print_node& operator=(const print_node& r) {
-        if (this != &r) {
-            this->~print_node();
-            new (this) print_node(r);
-        }
-        return *this;
-    }
+    print_node& operator=(const print_node& r);
 };
 
 class exec_node : public fs_node {
@@ -262,6 +256,9 @@ class exec_node : public fs_node {
     std::vector<str_t> _exec_cmds;
     // Filenames that have not yet get substituted in {}
     std::vector<str_t> _names_to_pass;
+    // Locking the two vectors
+    std::mutex _names_mut;
+
     // Minimum length to substitute in each {}
     // Each {} may be replaced by multiple names
     ptrdiff_t _name_min_len = 16384;
@@ -283,11 +280,16 @@ public:
         return new exec_node(*this);
     }
 
+    tribool_bad apply(fs_data_iter& it) override;
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
     exec_node(bool ok, bool from_subdir) 
         : _stdin_confirm(ok), _from_subdir(from_subdir) {}
+    // Execute remaining tasks in _names_to_pass
+    exec_node(const exec_node&);
+    exec_node& operator=(const exec_node&);
+    ~exec_node();
 };
 
 /**
@@ -319,7 +321,7 @@ public:
     // DO NOT copy the deletion stack!
     del_node(const del_node&) = delete;
     del_node& operator=(const del_node&) = delete;
-    // Delete remaining dirs in stack
+    // Delete remaining dirs "ready" to be deleted
     ~del_node() noexcept;
 };
 
@@ -503,17 +505,9 @@ class updir_node : public fs_mod_node {
     }
 
     bool apply_blocked(fs_data_iter& it) override; 
-    tribool_bad apply(fs_data_iter& it) override;
 
-    updir_node(const updir_node& r)
-        : _last_done_q(r._last_done_q), _last_idx(r._last_idx) {}
-    updir_node& operator=(const updir_node& r) {
-        if (this != &r) {
-            this->~updir_node();
-            new (this) updir_node(r);
-        }
-        return *this;
-    }
+    updir_node(const updir_node& r);
+    updir_node& operator=(const updir_node& r);
 };
 
 /**

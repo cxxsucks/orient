@@ -46,12 +46,6 @@ ptrdiff_t fs_data_record::increment() noexcept {
     return push_count;
 }
 
-bool fs_data_record::start_of_dir() const noexcept {
-    if (cur_pos == 0)
-        return true;
-    return *(&_category - 1) == category_tag::dir_pop_tag;
-}
-
 fs_data_record::category_tag fs_data_record::file_type() const noexcept {
     if (viewing == nullptr)
         return category_tag::unknown_tag;
@@ -196,14 +190,24 @@ fs_data_iter &fs_data_iter::visit(strview_type start_path) {
     return *this;
 }
 
-fs_data_iter fs_data_iter::current_dir_iter() const {
+bool fs_data_iter::empty_dir() const noexcept {
     if (cur_rec.file_type() != category_tag::dir_tag)
+        return true;
+    fs_data_record rec = record();
+    // If a dir is not empty, it would descend into itself 
+    // after incrementing, resulting a positive return.
+    return rec.increment() <= 0;
+}
+
+fs_data_iter fs_data_iter::current_dir_iter() const {
+    if (empty_dir())
         return end();
     fs_data_iter res(*this);
     res.set_recursive(true);
     ++res;
     res.set_recursive(false);
     res.push_count = 1;
+
     return res;
 }
 
