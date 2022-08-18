@@ -421,7 +421,7 @@ public:
 
 // CONTENT
 class content_strstr_node : public fs_node {
-    str_t pattern;
+    str_t _pattern;
     bool _blocked;
     bool _allow_binary;
     bool _icase;
@@ -443,7 +443,6 @@ public:
 
 class content_regex_node : public fs_node {
     std::shared_ptr<pcre2_code> _re;
-    std::shared_ptr<pcre2_match_data> _match_dat;
     bool _blocked;
     bool _allow_binary;
     bool _icase;
@@ -460,8 +459,7 @@ public:
     bool next_param(sv_t param) override;
 
     content_regex_node(bool block, bool bin, bool icase)
-        : _match_dat(pcre2_match_data_create(1, nullptr), pcre2_match_data_free)
-        , _blocked(block), _allow_binary(bin), _icase(icase) {}
+        : _blocked(block), _allow_binary(bin), _icase(icase) {}
 };
 
 #ifdef ORIE_NEED_SELINUX

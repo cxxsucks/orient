@@ -187,7 +187,7 @@ fs_data_iter &fs_data_iter::visit(strview_type start_path) {
         push_count = 1;
     
     set_recursive(recur_old);
-    return *this;
+   return *this;
 }
 
 bool fs_data_iter::empty_dir() const noexcept {
@@ -242,17 +242,17 @@ int fs_data_iter::_fetch_stat() const noexcept {
     return ret_stat;
 }
 
-fs_data_iter::gid_t fs_data_iter::gid() const noexcept{
+gid_t fs_data_iter::gid() const noexcept{
     _fetch_stat();
     return opt_stat.value().st_gid;
 }
 
-fs_data_iter::uid_t fs_data_iter::uid() const noexcept{
+uid_t fs_data_iter::uid() const noexcept{
     _fetch_stat();
     return opt_stat.value().st_uid;
 }
 
-::time_t fs_data_iter::mtime() const noexcept{
+time_t fs_data_iter::mtime() const noexcept{
     if (!opt_stat.has_value()) {
         time_t _ = cur_rec.dir_mtime();
         if (_ != ~time_t())
@@ -262,29 +262,34 @@ fs_data_iter::uid_t fs_data_iter::uid() const noexcept{
     return opt_stat.value().st_mtime;
 }
 
-::time_t fs_data_iter::atime() const noexcept{
+time_t fs_data_iter::atime() const noexcept{
     _fetch_stat();
     return opt_stat.value().st_atime;
 }
 
-::time_t fs_data_iter:: ctime() const noexcept{
+time_t fs_data_iter:: ctime() const noexcept{
     _fetch_stat();
     return opt_stat.value().st_ctime;
 }
 
-::off_t fs_data_iter::file_size() const noexcept{
+off_t fs_data_iter::file_size() const noexcept{
     _fetch_stat();
     return opt_stat.value().st_size;
 }
 
-fs_data_iter::ino_t fs_data_iter::inode() const noexcept {
+ino_t fs_data_iter::inode() const noexcept {
     _fetch_stat();
     return opt_stat.value().st_ino;
 }
 
-fs_data_iter::mode_t fs_data_iter::mode() const noexcept {
+mode_t fs_data_iter::mode() const noexcept {
     _fetch_stat();
     return opt_stat.value().st_mode;
+}
+
+blksize_t fs_data_iter::io_block_size() const noexcept {
+    _fetch_stat();
+    return opt_stat.value().st_blksize;
 }
 
 size_t fs_data_iter::depth() const noexcept {

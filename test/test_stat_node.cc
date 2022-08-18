@@ -5,7 +5,7 @@
 using namespace orie::pred_tree;
 static fs_data_iter __global_dummy_iter;
 
-struct fsNodeMatch : public ::testing::Test {
+struct statNode : public ::testing::Test {
     ABunchOfDirs info;
 
     size_t _do_tests(orie::pred_tree::fs_node& matcher) {
@@ -16,7 +16,7 @@ struct fsNodeMatch : public ::testing::Test {
     }
 };
 
-TEST_F(fsNodeMatch, glob) {
+TEST_F(statNode, glob) {
     glob_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("file?")));
     EXPECT_EQ(31, _do_tests(matcher));
@@ -26,7 +26,7 @@ TEST_F(fsNodeMatch, glob) {
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, strstr) {
+TEST_F(statNode, strstr) {
     strstr_node matcher;
     // Parsing Errors
     ASSERT_THROW(matcher.next_param(NATIVE_PATH_SV("--foo")),
@@ -43,7 +43,7 @@ TEST_F(fsNodeMatch, strstr) {
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, regex) {
+TEST_F(statNode, regex) {
     regex_node matcher;
     // Parsing Errors
     ASSERT_THROW(matcher.next_param(NATIVE_PATH_SV("--foo")),
@@ -62,7 +62,7 @@ TEST_F(fsNodeMatch, regex) {
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, icase) {
+TEST_F(statNode, icase) {
     glob_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--ignore-case")));
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--full")));
@@ -80,7 +80,7 @@ TEST_F(fsNodeMatch, icase) {
     EXPECT_EQ(59, _do_tests(matcher2));
 }
 
-TEST_F(fsNodeMatch, fullpath) {
+TEST_F(statNode, fullpath) {
     strstr_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--full")));
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("dir4")));
@@ -92,7 +92,7 @@ TEST_F(fsNodeMatch, fullpath) {
     EXPECT_EQ(59, _do_tests(matcher2));
 }
 
-TEST_F(fsNodeMatch, lname) {
+TEST_F(statNode, lname) {
     strstr_node str_lname(false, true, false);
     glob_node glob_lname(false, true, false);
     // Also tests regex_node's exact matching (2nd param)
@@ -107,7 +107,7 @@ TEST_F(fsNodeMatch, lname) {
     EXPECT_EQ(2, _do_tests(regex_lname));
 }
 
-TEST_F(fsNodeMatch, type) {
+TEST_F(statNode, type) {
     type_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("f")));
     EXPECT_EQ(31, _do_tests(matcher));
@@ -125,7 +125,7 @@ TEST_F(fsNodeMatch, type) {
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, time) {
+TEST_F(statNode, time) {
     // All files to be matched are created within 1 minute
     num_node matcher(num_node::stamp::AMIN);
     // Parse Errors
@@ -143,7 +143,7 @@ TEST_F(fsNodeMatch, time) {
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, size) {
+TEST_F(statNode, size) {
     std::ofstream(info.tmpPath / "dir0" / "largeSize")
         << std::string(69420, ' '); // 67.8KiB
     info.refreshDat();
@@ -162,7 +162,7 @@ TEST_F(fsNodeMatch, size) {
 }
 
 #ifdef __unix
-TEST_F(fsNodeMatch, ugid) {
+TEST_F(statNode, ugid) {
     char uid_cstr[10] = "", gid_cstr[10] = "";
     orie::to_char_t(uid_cstr, ::getuid());
     orie::to_char_t(gid_cstr, ::getgid());
@@ -196,7 +196,7 @@ extern "C" {
 #include <grp.h>
 }
 
-TEST_F(fsNodeMatch, username) {
+TEST_F(statNode, username) {
     username_node matcher(false);
     matcher.next_param(::getpwuid(::getuid())->pw_name);
     EXPECT_EQ(64, _do_tests(matcher));
@@ -205,7 +205,7 @@ TEST_F(fsNodeMatch, username) {
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
-TEST_F(fsNodeMatch, perm) {
+TEST_F(statNode, perm) {
     if (::umask(022) != 022) {
         info.~ABunchOfDirs();
         new (&info) ABunchOfDirs;

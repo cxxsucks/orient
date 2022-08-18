@@ -81,11 +81,6 @@ public:
     using reference = fs_data_iter&;
     using pointer = fs_data_iter*;
 
-    using gid_t = decltype(orie::stat_t::st_gid);
-    using uid_t = decltype(orie::stat_t::st_uid);
-    using ino_t = decltype(orie::stat_t::st_ino);
-    using mode_t = decltype(orie::stat_t::st_mode);
-
 private:
     enum class has_recur_ : uint8_t {
         enable, all_disable, temp_disable 
@@ -144,6 +139,7 @@ public:
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     bool empty_dir() const noexcept;
 
+    /* Convenience functions for getting the fields of `stat` struct */
     // Numeric group id. Always 0 on Windows
     gid_t gid() const noexcept;
     // Numeric user id. Always 0 on Windows
@@ -155,13 +151,15 @@ public:
     mode_t mode() const noexcept;
     // Last modified time. Returns cached value for directories
     // unless precise stat is acquired, e.g., calling gid() atime() prior.
-    ::time_t mtime() const noexcept;
+    time_t mtime() const noexcept;
     // Last accessed time of current entry.
-    ::time_t atime() const noexcept;
+    time_t atime() const noexcept;
     // Last changed time of current entry. Creation time instead on Windows.
-    ::time_t ctime() const noexcept;
+    time_t ctime() const noexcept;
     // Amount of disk space in bytes of current entry.
-    ::off_t file_size() const noexcept;
+    off_t file_size() const noexcept;
+    // Preferrable IO block size
+    blksize_t io_block_size() const noexcept;
 
     size_t depth() const noexcept;
     //! @brief File type of current entry.
