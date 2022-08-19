@@ -18,10 +18,11 @@ public:
 	fifo_thpool() : fifo_thpool(std::thread::hardware_concurrency()) {}
 
     template<class F, class... Args>
-	std::future<typename std::result_of<F(Args...)>::type> 
+	std::future<typename std::invoke_result<F, Args...>::type> 
 	enqueue(F&& f, Args&&... args);
 
     ~fifo_thpool();
+
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
@@ -36,7 +37,7 @@ private:
 
 // the constructor just launches some amount of workers
 inline fifo_thpool::fifo_thpool(size_t threads)
-    :   stop(false)
+    : stop(false)
 {
     for(size_t i = 0;i<threads;++i)
         workers.emplace_back( [this] {
@@ -61,14 +62,14 @@ inline fifo_thpool::fifo_thpool(size_t threads)
 
 // add new work item to the pool
 template<class F, class... Args>
-std::future<typename std::result_of<F(Args...)>::type>
+std::future<typename std::invoke_result<F, Args...>::type>
 fifo_thpool::enqueue(F&& f, Args&&... args) 
 {
-    using return_type = typename std::result_of<F(Args...)>::type;
+    using return_type = typename std::invoke_result<F, Args...>::type;
 
     auto task = std::make_shared< std::packaged_task<return_type()> >(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
+        std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+    );
 
     std::future<return_type> res = task->get_future();
     {
@@ -85,8 +86,7 @@ fifo_thpool::enqueue(F&& f, Args&&... args)
 }
 
 // the destructor joins all threads
-inline fifo_thpool::~fifo_thpool()
-{
+inline fifo_thpool::~fifo_thpool() {
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
