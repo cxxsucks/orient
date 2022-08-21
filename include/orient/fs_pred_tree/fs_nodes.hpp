@@ -437,7 +437,7 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    content_strstr_node(bool block, bool bin, bool icase)
+    content_strstr_node(bool block = false, bool bin = false, bool icase = false)
         : _blocked(block), _allow_binary(bin), _icase(icase) {}
 };
 
@@ -458,7 +458,7 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    content_regex_node(bool block, bool bin, bool icase)
+    content_regex_node(bool block = false, bool bin = false, bool icase = false)
         : _blocked(block), _allow_binary(bin), _icase(icase) {}
 };
 
@@ -497,6 +497,7 @@ class updir_node : public fs_mod_node {
     // Lock for the queue.
     std::mutex _last_done_mut;
 
+public:
     double cost() const noexcept override { return prev_cost / 8.0 + 2e-7; }
     fs_node* clone() const override {
         return new updir_node(*this);
@@ -504,6 +505,7 @@ class updir_node : public fs_mod_node {
 
     bool apply_blocked(fs_data_iter& it) override; 
 
+    updir_node() = default;
     updir_node(const updir_node& r);
     updir_node& operator=(const updir_node& r);
 };

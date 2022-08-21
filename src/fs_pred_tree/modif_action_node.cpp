@@ -124,6 +124,8 @@ bool del_node::next_param(sv_t param) {
     return false;
 }
 
+del_node::~del_node() noexcept {}
+
 tribool_bad exec_node::apply(fs_data_iter& it) {
     if (_stdin_confirm)
         return static_cast<tribool_bad>(apply_blocked(it));
