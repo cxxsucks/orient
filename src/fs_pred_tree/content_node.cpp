@@ -126,11 +126,11 @@ bool content_regex_node::apply_blocked(fs_data_iter& it) {
 bool content_regex_node::next_param(sv_t param) {
     if (_re != nullptr)
         return false;
-    if (param == NATIVE_PATH_SV("--ignore-case")) {
+    if (param == NATIVE_SV("--ignore-case")) {
         _icase = true;
-    } else if (param == NATIVE_PATH_SV("--blocked")) {
+    } else if (param == NATIVE_SV("--blocked")) {
         _blocked = true;
-    } else if (param == NATIVE_PATH_SV("--binary")) {
+    } else if (param == NATIVE_SV("--binary")) {
         _allow_binary = true;
     } else {
         int errcode; PCRE2_SIZE erroffset;
@@ -171,11 +171,11 @@ bool content_strstr_node::apply_blocked(fs_data_iter& it) {
 bool content_strstr_node::next_param(sv_t param) {
     if (!_pattern.empty())
         return false;
-    if (param == NATIVE_PATH_SV("--ignore-case")) {
+    if (param == NATIVE_SV("--ignore-case")) {
         _icase = true;
-    } else if (param == NATIVE_PATH_SV("--blocked")) {
+    } else if (param == NATIVE_SV("--blocked")) {
         _blocked = true;
-    } else if (param == NATIVE_PATH_SV("--binary")) {
+    } else if (param == NATIVE_SV("--binary")) {
         _allow_binary = true;
     } 
     else _pattern = param;

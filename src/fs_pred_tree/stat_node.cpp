@@ -114,7 +114,7 @@ num_node::num_node(stamp stm, compar cmp)
 
 bool num_node::apply_blocked(fs_data_iter& it) {
     if (_targ == ~uint64_t())
-        throw uninitialized_node(NATIVE_PATH_SV("-num"));
+        throw uninitialized_node(NATIVE_SV("-num"));
 
     switch(_stm) {
     case stamp::ATIME: 
@@ -140,8 +140,8 @@ bool num_node::next_param(sv_t param) {
         return false;
     // Throw at null argument like `find`
     if (param.empty())
-        throw invalid_param_name(NATIVE_PATH_SV("null parameter"), 
-                                 NATIVE_PATH_SV("-num"));
+        throw invalid_param_name(NATIVE_SV("null parameter"), 
+                                 NATIVE_SV("-num"));
 
     if (param.front() == '+') {
         param.remove_prefix(1);
@@ -151,8 +151,8 @@ bool num_node::next_param(sv_t param) {
         _comp = compar::LE;
     }
     if (param.empty())
-        throw invalid_param_name(NATIVE_PATH_SV("a single '+' or '-'"), 
-                                 NATIVE_PATH_SV("-num"));
+        throw invalid_param_name(NATIVE_SV("a single '+' or '-'"), 
+                                 NATIVE_SV("-num"));
 
     std::tie(_targ, _unit) = __num_consume(param);
     return true;
@@ -170,19 +170,19 @@ bool empty_node::apply_blocked(fs_data_iter& it) {
 
 bool access_node::apply_blocked(fs_data_iter& it) {
     if (_access_test_mode == 0)
-        throw uninitialized_node(NATIVE_PATH_SV("-access"));
+        throw uninitialized_node(NATIVE_SV("-access"));
     return ::access(it.path().c_str(), _access_test_mode) == 0;
 }
 
 bool access_node::next_param(sv_t param) {
-    if (param.substr(0, 2) == NATIVE_PATH_SV("--")) {
-        if (param == NATIVE_PATH_SV("--readable"))
+    if (param.substr(0, 2) == NATIVE_SV("--")) {
+        if (param == NATIVE_SV("--readable"))
             _access_test_mode |= R_OK;
-        else if (param == NATIVE_PATH_SV("--writable"))
+        else if (param == NATIVE_SV("--writable"))
             _access_test_mode |= W_OK;
-        else if (param == NATIVE_PATH_SV("--executable"))
+        else if (param == NATIVE_SV("--executable"))
             _access_test_mode |= X_OK;
-        else throw invalid_param_name(param, NATIVE_PATH_SV("-access"));
+        else throw invalid_param_name(param, NATIVE_SV("-access"));
         return true;
     }
     return false;
@@ -199,7 +199,7 @@ double perm_node::success_rate() const noexcept {
 
 bool perm_node::apply_blocked(fs_data_iter& it) {
     if (_targ == mode_t())
-        throw uninitialized_node(NATIVE_PATH_SV("-perm"));
+        throw uninitialized_node(NATIVE_SV("-perm"));
 
     // All perm bits and nothing else; -rwsrwsrwt
     mode_t perm_bits = it.mode() & 07777;

@@ -46,14 +46,14 @@ bool glob_node::next_param(sv_t param) {
     if (_pattern[0] != '\0')
         return false;
 
-    if (param.substr(0, 2) == NATIVE_PATH_SV("--")) {
-        if (param == NATIVE_PATH_SV("--full"))
+    if (param.substr(0, 2) == NATIVE_SV("--")) {
+        if (param == NATIVE_SV("--full"))
             _is_fullpath = true;
-        else if (param == NATIVE_PATH_SV("--ignore-case"))
+        else if (param == NATIVE_SV("--ignore-case"))
             _is_icase = true;
-        else if (param == NATIVE_PATH_SV("--readlink"))
+        else if (param == NATIVE_SV("--readlink"))
             _is_lname = true;
-        else throw invalid_param_name(param, NATIVE_PATH_SV("--name"));
+        else throw invalid_param_name(param, NATIVE_SV("--name"));
         return true;
     }
 
@@ -127,16 +127,16 @@ bool regex_node::next_param(sv_t param) {
     if (_re != nullptr)
         return false;
 
-    if (param.substr(0, 2) == NATIVE_PATH_SV("--")) {
-        if (param == NATIVE_PATH_SV("--full"))
+    if (param.substr(0, 2) == NATIVE_SV("--")) {
+        if (param == NATIVE_SV("--full"))
             _is_full = true;
-        else if (param == NATIVE_PATH_SV("--exact"))
+        else if (param == NATIVE_SV("--exact"))
             _is_exact = true;
-        else if (param == NATIVE_PATH_SV("--ignore-case"))
+        else if (param == NATIVE_SV("--ignore-case"))
             _is_icase = true;
-        else if (param == NATIVE_PATH_SV("--readlink"))
+        else if (param == NATIVE_SV("--readlink"))
             _is_lname = true;
-        else throw invalid_param_name(param, NATIVE_PATH_SV("--regex"));
+        else throw invalid_param_name(param, NATIVE_SV("--regex"));
         return true;
     }
 

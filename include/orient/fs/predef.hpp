@@ -6,7 +6,7 @@
 extern "C" {
 #if _WIN32
 #include <orient/dirent_win.h>
-#define FS_TEXT(str) L##str
+#define NATIVE_PATH(str) L##str
 // #define NATIVE_STDOUT std::wcout
 // #define NATIVE_STDERR std::wcerr
 #ifdef max
@@ -23,7 +23,7 @@ extern "C" {
 #define NATIVE_PATH(str) str
 #endif
 }
-#define NATIVE_PATH_SV(str) orie::sv_t(NATIVE_PATH(str))
+#define NATIVE_SV(str) orie::sv_t(NATIVE_PATH(str))
 
 #include <cstring>
 #include <cstdlib>

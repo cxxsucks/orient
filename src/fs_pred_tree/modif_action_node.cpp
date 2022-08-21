@@ -62,8 +62,8 @@ bool downdir_node::apply_blocked(fs_data_iter& it) {
 
 bool downdir_node::next_param(sv_t param) {
     if (param.empty())
-        throw invalid_param_name(NATIVE_PATH_SV("null parameter"), 
-                                 NATIVE_PATH_SV("-num"));
+        throw invalid_param_name(NATIVE_SV("null parameter"), 
+                                 NATIVE_SV("-num"));
 
     char flag = param.front();
     if (flag == '+' || flag == '-')
@@ -240,15 +240,15 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
 bool exec_node::next_param(sv_t param) {
     if (_parse_finished)
         return false;
-    else if (param == NATIVE_PATH_SV(";")) {
+    else if (param == NATIVE_SV(";")) {
         if (_exec_cmds.empty())
-            throw invalid_param_name(param, NATIVE_PATH_SV("--exec"));
+            throw invalid_param_name(param, NATIVE_SV("--exec"));
         _parse_finished = true;
         _name_min_len = _name_len_left = -1;
         return true;
-    } else if (param == NATIVE_PATH_SV("+")) {
+    } else if (param == NATIVE_SV("+")) {
         if (_exec_cmds.empty())
-            throw invalid_param_name(param, NATIVE_PATH_SV("--exec"));
+            throw invalid_param_name(param, NATIVE_SV("--exec"));
         _parse_finished = true;
         _name_min_len = _name_len_left = 16384;
         return true;

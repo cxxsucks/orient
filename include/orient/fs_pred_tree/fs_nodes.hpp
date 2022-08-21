@@ -17,23 +17,21 @@ using fs_node = node<fs_data_iter, sv_t>;
 using fs_mod_node = mod_base_node<fs_data_iter, sv_t>;
 
 /* Predicates that require no syscalls; info read directly from fs dump */
-// PRED: -name -iname -path -ipath -lname
+// PRED: -name -iname -path -ipath -lname -strstr -istrstr
 // ARG: --icase --readlink STR
 class glob_node;
-// PRED: -regex -iregex -bregex -ibregex ARG: --icase --full STR
+// PRED: -regex -iregex -bregex -ibregex 
+// ARG: --icase --full --readlink STR
 class regex_node;
 // PRED: -type
 // TODO: Currently only file, directory, link
 class type_node;
-// PRED: -prune
-struct prune_node;
 
 /* Predicates that require only one or two syscalls, 
  * doing no change to actual filesystem, including stat(2), access(2),
  * getpwnam(3), getgrnam(3) (which read /etc/passwd), getfilecon(8) */
-// PRED: -size -[amc][(time)(min)] -[ug]id -ino -depth
+// PRED: -size -[amc][(time)(min)] -[ug]id -ino
 // ALSO_COMARE_PRED: -[amc]newer -samefile
-// ARGS: --margin NUM -- [+-]NUM_OR_COMPARE_FILE[cbkMGT]
 class num_node;
 // PRED: -empty
 struct empty_node;
@@ -65,6 +63,8 @@ class print_node;
 class exec_node;
 // TODO: -delete
 class del_node;
+// PRED: -prune
+struct prune_node;
 
 /* Content Matching Predicates. They will be asynchorously
  * executed because of their "slow" nature, and thus invalidating -prune */

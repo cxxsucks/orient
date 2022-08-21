@@ -18,77 +18,77 @@ struct statNode : public ::testing::Test {
 
 TEST_F(statNode, glob) {
     glob_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("file?")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("file?")));
     EXPECT_EQ(31, _do_tests(matcher));
 
     matcher = glob_node();
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("*ymli*")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("*ymli*")));
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
 TEST_F(statNode, strstr) {
     strstr_node matcher;
     // Parsing Errors
-    ASSERT_THROW(matcher.next_param(NATIVE_PATH_SV("--foo")),
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("--foo")),
                  invalid_param_name);
     ASSERT_THROW(matcher.apply_blocked(__global_dummy_iter),
                  uninitialized_node);
 
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("file")));
-    EXPECT_FALSE(matcher.next_param(NATIVE_PATH_SV("file")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("file")));
+    EXPECT_FALSE(matcher.next_param(NATIVE_SV("file")));
     EXPECT_EQ(31, _do_tests(matcher));
 
     matcher = strstr_node();
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("ymli")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("ymli")));
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
 TEST_F(statNode, regex) {
     regex_node matcher;
     // Parsing Errors
-    ASSERT_THROW(matcher.next_param(NATIVE_PATH_SV("--foo")),
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("--foo")),
                  invalid_param_name);
-    ASSERT_THROW(matcher.next_param(NATIVE_PATH_SV("[")),
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("[")),
                  std::runtime_error);
     ASSERT_THROW(matcher.apply_blocked(__global_dummy_iter),
                  uninitialized_node);
 
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("file\\d")));
-    EXPECT_FALSE(matcher.next_param(NATIVE_PATH_SV("file\\d")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("file\\d")));
+    EXPECT_FALSE(matcher.next_param(NATIVE_SV("file\\d")));
     EXPECT_EQ(31, _do_tests(matcher));
 
     matcher = regex_node();
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV(".*ymli.*")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV(".*ymli.*")));
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
 TEST_F(statNode, icase) {
     glob_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--ignore-case")));
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--full")));
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("*DiR4*")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--ignore-case")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--full")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("*DiR4*")));
     EXPECT_EQ(32, _do_tests(matcher));
     matcher = glob_node(false, false, true);
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("fIlE?")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("fIlE?")));
     EXPECT_EQ(31, _do_tests(matcher));
 
     regex_node matcher2(false, false, false, true);
-    ASSERT_TRUE(matcher2.next_param(NATIVE_PATH_SV("DiR\\d")));
+    ASSERT_TRUE(matcher2.next_param(NATIVE_SV("DiR\\d")));
     EXPECT_EQ(31, _do_tests(matcher2));
     matcher2 = regex_node(true, false, false, true);
-    ASSERT_TRUE(matcher2.next_param(NATIVE_PATH_SV(".*DIr[0-4].*")));
+    ASSERT_TRUE(matcher2.next_param(NATIVE_SV(".*DIr[0-4].*")));
     EXPECT_EQ(59, _do_tests(matcher2));
 }
 
 TEST_F(statNode, fullpath) {
     strstr_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("--full")));
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("dir4")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--full")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("dir4")));
     EXPECT_EQ(32, _do_tests(matcher));
 
     regex_node matcher2;
-    ASSERT_TRUE(matcher2.next_param(NATIVE_PATH_SV("--full")));
-    ASSERT_TRUE(matcher2.next_param(NATIVE_PATH_SV(".*dir[0-4].*")));
+    ASSERT_TRUE(matcher2.next_param(NATIVE_SV("--full")));
+    ASSERT_TRUE(matcher2.next_param(NATIVE_SV(".*dir[0-4].*")));
     EXPECT_EQ(59, _do_tests(matcher2));
 }
 
@@ -98,9 +98,9 @@ TEST_F(statNode, lname) {
     // Also tests regex_node's exact matching (2nd param)
     regex_node regex_lname(false, true, true, false);
 
-    ASSERT_TRUE(str_lname.next_param(NATIVE_PATH_SV("file1")));
-    ASSERT_TRUE(glob_lname.next_param(NATIVE_PATH_SV("*file1")));
-    ASSERT_TRUE(regex_lname.next_param(NATIVE_PATH_SV(".*file1")));
+    ASSERT_TRUE(str_lname.next_param(NATIVE_SV("file1")));
+    ASSERT_TRUE(glob_lname.next_param(NATIVE_SV("*file1")));
+    ASSERT_TRUE(regex_lname.next_param(NATIVE_SV(".*file1")));
     // 2 symlinks
     EXPECT_EQ(2, _do_tests(str_lname));
     EXPECT_EQ(2, _do_tests(glob_lname));
@@ -109,19 +109,19 @@ TEST_F(statNode, lname) {
 
 TEST_F(statNode, type) {
     type_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_PATH_SV("f")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("f")));
     EXPECT_EQ(31, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("l")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("l")));
     EXPECT_EQ(2, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("d")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("d")));
     EXPECT_EQ(31, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("l,f")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("l,f")));
     EXPECT_EQ(33, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("l,d")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("l,d")));
     EXPECT_EQ(33, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("f,d")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("f,d")));
     EXPECT_EQ(62, _do_tests(matcher));
-    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_PATH_SV("f,l,d")));
+    ASSERT_TRUE((matcher = type_node()).next_param(NATIVE_SV("f,l,d")));
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
