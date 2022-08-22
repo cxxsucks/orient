@@ -1,6 +1,6 @@
 #include <orient/fs/dumper.hpp>
 #include <orient/util/fifo_thpool.hpp>
-#include <orient/util/stringconv_t.hpp>
+#include <orient/util/charconv_t.hpp>
 
 #include <algorithm>
 

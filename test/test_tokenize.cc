@@ -61,6 +61,15 @@ TEST(tokenize, backslash) {
     EXPECT_EQ(ans, __do_totok("a\" a\" \"b\\b\""));
 }
 
+TEST(tokenize, stdString) {
+    std::string_view tst = "1234567890\n"
+        "1234567890123456789012345678901\n";
+    EXPECT_EQ(std::make_pair(size_t(11), std::string("1234567890")),
+              orie::next_token(tst.data(), tst.size()));
+    tst.remove_prefix(10);
+    EXPECT_EQ(std::string("1234567890123456789012345678901"),
+              orie::next_token(tst.data(), tst.size()).second);
+}
 
 TEST(tokenize, buffer) {
     std::string_view str8 = "8InTotal '8InTotal' 8In'Total'",
@@ -78,14 +87,14 @@ TEST(tokenize, buffer) {
         EXPECT_EQ(buf[7], 'l');
         EXPECT_EQ(tok_sz, 8);
 
-        EXPECT_THROW(orie::next_token(
-            str9.data(), str9.size(), buf, 8
-        ), std::out_of_range);
+        std::tie(read_sz, tok_sz) = 
+            orie::next_token(str9.data(), str9.size(), buf, 8);
+        EXPECT_EQ(read_sz, ~size_t());
+        EXPECT_EQ(tok_sz, ~size_t());
         EXPECT_EQ(buf[8], 0x7f); // Must not write out of buffer
 
-        EXPECT_NO_THROW(std::tie(read_sz, tok_sz) = orie::next_token(
-            str9.data(), str9.size(), buf, 9
-        ));
+        std::tie(read_sz, tok_sz) =
+            orie::next_token( str9.data(), str9.size(), buf, 9);
         EXPECT_EQ(tok_sz, 9);
         str9.remove_prefix(read_sz);
     }

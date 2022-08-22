@@ -3,7 +3,7 @@
 #include <cstring>
 #include <cctype>
 #include <stdexcept>
-#include <type_traits>
+#include <string>
 
 namespace orie {
 
@@ -258,7 +258,7 @@ from_char_t(const char_t* beg, const char_t* const end, cal_t& res, unsigned bas
  * @param buf Buffer at least buf_size bytes long. No NULL is appended.
  * @return Length consumed in @c src and length written to @c buf.
  * @throw @c std::out_of_range when quoations do not bound
- * @throw @c std::out_of_bound when buffer is not large enough */
+ * @retval @c ~size_t(),~size_t() (second value) when buffer is not large enough */
 template<class char_t>
 std::pair<size_t, size_t>
 next_token(const char_t* src, size_t src_size,
@@ -292,7 +292,8 @@ next_token(const char_t* src, size_t src_size,
         if (src_at == src_size)
             break;
         else if (res_at >= buf_size)
-            throw std::out_of_range("Buffer exhausted");
+            return std::make_pair(~size_t(), ~size_t());
+            // throw std::out_of_range("Buffer exhausted");
 
         switch (src[src_at]) {
         case '\'': case '\"': case '`':
@@ -311,6 +312,47 @@ next_token(const char_t* src, size_t src_size,
     while (src_at < src_size && ::isspace(src[src_at]))
         src_at++; // rstrip
     return std::make_pair(src_at, res_at);
+}
+
+template<class char_t>
+std::pair<size_t, std::basic_string<char_t>>
+next_token(const char_t* src, size_t src_size) {
+    // 15 is the minimum of maximum small string optimization
+    // length in major implementations.
+    std::basic_string<char_t> res(15, char_t('\0'));
+    size_t src_at = next_token(src, src_size, res.data(), res.size()).first;
+    while (src_at == res.npos) {
+        res.assign(res.size() << 1, '\0');
+        src_at = next_token(src, src_size, res.data(), res.size()).first;
+    }
+
+    size_t res_len = res.find_last_not_of('\0');
+    if (res_len != res.npos)
+        res.erase(res_len + 1);
+    return std::make_pair(src_at, res);
+}
+
+//! @brief Split a std string by the C string provided by spl.
+//! @tparam container_t A container supporting `emplace_back` method 
+//! (like @c `std::vector` ).
+//! @return The container
+template <typename container_t, typename char_t = char>
+container_t str_split(const std::basic_string<char_t>& str,
+                      const char_t* spl) noexcept
+{
+    container_t res = container_t();
+    if (!spl || !spl[0] || str.empty())
+        return res;
+    size_t pos_before = 0, pos_after;
+    const char_t* const _data = str.c_str();
+    size_t splen = 0;
+    while (spl[++splen]);
+    while ((pos_after = str.find(spl, pos_before)) != str.npos) {
+        res.emplace_back(_data + pos_before, pos_after - pos_before);
+        pos_before = pos_after + splen;
+    }
+    res.emplace_back(_data + pos_before);
+    return res;
 }
 
 }
