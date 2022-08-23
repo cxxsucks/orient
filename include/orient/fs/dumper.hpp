@@ -24,6 +24,7 @@ public:
     string_type path(unsigned depth) const;
     const string_type& file_name() const noexcept { return filename; }
     virtual size_t n_bytes() const noexcept;
+    virtual void from_fs() {}
 
     virtual const std::vector<dir_dumper*>& sub_dirs(bool read_link) const noexcept;
     virtual const std::vector<file_dumper*>& sub_files(bool read_link) const noexcept;
@@ -74,7 +75,7 @@ class dir_dumper : public file_dumper {
 protected:
     void from_fs_impl(value_type*, value_type*) noexcept;
 public:
-    void from_fs();
+    void from_fs() override;
     void set_ignored(bool enabled = true) noexcept override {is_ignored = enabled;}
     bool ignored() const noexcept {return is_ignored;}
     file_dumper* update_link_node(dir_dumper* = nullptr, bool = false) override;
@@ -146,6 +147,22 @@ public:
     ~link_dumper() noexcept override = default;
 };
 
+#ifdef _WIN32
+// TODO: Handle drive letters
+struct fs_dumper : public dir_dumper {
+    // ...
+};
+#else
+struct fs_dumper : public dir_dumper {
+    fs_dumper() : dir_dumper("/", 0, nullptr) {}
+    // The "dumper" component is scheduled for a rework.
+    // This is what the new interface would look like:
+    /*dir_dumper&*/file_dumper& visit_dir(const str_t& path) {
+        return *visit_full(path, true);
+    }
+};
+#endif
+
 } // namespace dmp
-typedef dmp::dir_dumper dumper;
+typedef dmp::fs_dumper dumper;
 } // namespace orie

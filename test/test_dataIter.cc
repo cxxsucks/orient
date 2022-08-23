@@ -135,4 +135,10 @@ TEST_F(dataIter, visit) {
     EXPECT_EQ(_count_dataIt(it), 4);
     it = fs_data_iter(dat, (tmpPath / "nonExistent").c_str());
     EXPECT_EQ(it, it.end());
+    it = fs_data_iter(dat, (tmpPath / "fileA").c_str());
+    EXPECT_EQ(it, it.end());
+    it = fs_data_iter(nullptr, 0);
+    EXPECT_EQ(it, it.end());
+    it = fs_data_iter(nullptr, (tmpPath / "dirB").c_str());
+    EXPECT_EQ(it, it.end());
 }
