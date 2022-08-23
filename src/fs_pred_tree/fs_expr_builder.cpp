@@ -69,8 +69,12 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
     case 36: return new baduser_node(false);
 
     // content
-    case 37: return new content_strstr_node;
-    case 38: return new content_regex_node;
+    case 37: 
+        _has_async = true;
+        return new content_strstr_node;
+    case 38: 
+        _has_async = true;
+        return new content_regex_node;
 
     // action
     // 41~46 print_node 51 del_node not implemented
@@ -96,6 +100,7 @@ fs_node *fs_expr_builder::modifier_dispatch(orie::sv_t cmd) const {
 void fs_expr_builder::clear() noexcept {
     _base_ty::clear();
     _has_action = false;
+    _has_async = false;
 }
 
 }

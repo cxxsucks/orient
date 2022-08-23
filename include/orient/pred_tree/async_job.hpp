@@ -15,7 +15,7 @@ class async_job {
     std::atomic<size_t> _cnt_running;
     std::mutex _cnt_mut;
     bool _cancelled;
-    std::condition_variable _wait_cv;
+    std::condition_variable _wait_cv, _cancel_cv;
 
 public:
     template <typename callback_t>
@@ -45,11 +45,22 @@ public:
         }
     }
 
-    void join() {
-        std::unique_lock lck(_cnt_mut);
-        _wait_cv.wait(lck, [this] () { return _cnt_running == 0; });
+    void join() noexcept {
+        std::unique_lock __lck(_cnt_mut);
+        // Noexcept if pred is noexcept.
+        _wait_cv.wait(__lck, [this] () { return _cnt_running == 0; });
     }
-    void cancel() { _cancelled = true; }
+
+    void cancel() noexcept { _cancelled = true; }
+    template <class Rep, class Period> 
+    void cancel(const std::chrono::duration<Rep, Period>& timeout) noexcept {
+        std::thread([this, timeout] () {
+            std::mutex dummy_mut;
+            std::unique_lock dummy_lck(dummy_mut);
+            _cancel_cv.wait_for(dummy_lck, timeout);
+            _cancelled = true;
+        }).detach();
+    }
 
     async_job(iter_t begin, iter_t end, node<iter_t, sv_t>& expr)
         : _begin(begin), _end(end), _expression(expr)
@@ -61,7 +72,13 @@ public:
         : async_job(begin, end, expr) 
     { start<callback_t>(pool, callback, always_async_cb); }
 
-    ~async_job() { cancel(); join(); }
+    async_job(const async_job&) = delete;
+    async_job(async_job&&) = delete;
+    ~async_job() noexcept { 
+        _cancel_cv.notify_all();
+        _cancelled = true;
+        join(); 
+    }
 };
 
 }
