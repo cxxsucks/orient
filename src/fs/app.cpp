@@ -9,13 +9,15 @@ namespace orie {
 app& app::read_db(str_t path) {
     std::unique_lock __lck(_data_dumped_mut);
     _db_path = std::move(path);
-    std::fstream ifs(_db_path, std::ios_base::binary);
+    std::ifstream ifs(_db_path, std::ios_base::binary);
 
     // Check whether the file is a legit database for orient
     uint64_t magic_read = 0;
     ifs.read(reinterpret_cast<char*>(&magic_read), sizeof(uint64_t));
-    if (magic_read != magic_num)
-        return *this; // Stop reading if not
+    if (magic_read != magic_num) {
+        _conf_path_valid = false;
+        return *this; // Stop reading if magic number mismatch
+    }
 
     assert(ifs.tellg() == sizeof(uint64_t));
     size_t db_sz = ifs.seekg(0, std::ios_base::seekdir::end).tellg();
@@ -24,6 +26,7 @@ app& app::read_db(str_t path) {
     ifs.seekg(sizeof(uint64_t));
     ifs.read(reinterpret_cast<char*>(_data_dumped.get()), db_sz);
     _data_dumped[db_sz] = std::byte(0);
+    _conf_path_valid = true;
     return *this;
 }
 
@@ -34,8 +37,11 @@ app& app::update_db() {
     dump_worker.from_raw(_data_dumped.get());
 }
 
-    for (const str_t& p : _ignored_paths)
-        dump_worker.visit_dir(p).set_ignored(true);
+    for (const str_t& p : _ignored_paths) {
+        auto& to_dump = dump_worker.visit_dir(p);
+        to_dump.clear();
+        to_dump.set_ignored(true);
+    }
     // All root paths must be pruned along with ignored ones,
     // then sorted from the deepest to the shallowest, to prevent
     // rescanning if there are overlapping root paths.
@@ -56,10 +62,13 @@ app& app::update_db() {
 
     // And then into database file
     std::ofstream ofs(_db_path, std::ios_base::binary);
-    if (!ofs.is_open()) 
+    if (!ofs.is_open()) {
+        _conf_path_valid = false;
         return *this;
+    }
     ofs.write(reinterpret_cast<const char*>(&magic_num), sizeof(uint64_t));
     ofs.write(reinterpret_cast<const char*>(_data_dumped.get()), sz);
+    _conf_path_valid = ofs.good();
     return *this;
 }
 
@@ -196,6 +205,14 @@ app::app(app&& rhs)
     _root_paths = std::move(rhs._root_paths);
     _start_paths = std::move(rhs._start_paths);
     _data_dumped = std::move(rhs._data_dumped);
+}
+
+app& app::operator=(app&& r) {
+    if (this != &r) {
+        this->~app();
+        new (this) app(std::move(r));
+    }
+    return *this;
 }
 
 app app::os_default(fifo_thpool& pool) {

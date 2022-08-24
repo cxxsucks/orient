@@ -154,7 +154,7 @@ struct fs_dumper : public dir_dumper {
 };
 #else
 struct fs_dumper : public dir_dumper {
-    fs_dumper() : dir_dumper("/", 0, nullptr) {}
+    fs_dumper() : dir_dumper(NATIVE_PATH(""), 0, nullptr) {}
     // The "dumper" component is scheduled for a rework.
     // This is what the new interface would look like:
     /*dir_dumper&*/file_dumper& visit_dir(const str_t& path) {

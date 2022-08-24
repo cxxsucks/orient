@@ -104,7 +104,7 @@ public:
     //! @brief Move the iterator to the given path.
     //! @param start_path The path to move to. Must be an unvisited
     //! entry of the data being iterated.
-    fs_data_iter& visit(strview_type start_path);
+    fs_data_iter& change_root(strview_type start_path);
 
     // Get a non-recursive iterator over the parent directory of current entry.
     fs_data_iter current_dir_iter() const;

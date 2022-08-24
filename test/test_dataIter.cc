@@ -124,12 +124,12 @@ TEST_F(dataIter, stat) {
     EXPECT_GT(it->mtime(), orig);
 }
 
-TEST_F(dataIter, visit) {
+TEST_F(dataIter, changeRoot) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
     fs_data_iter it(dat);
-    it.visit((tmpPath / "dirB").c_str());
+    it.change_root((tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);
     it = fs_data_iter(dat, (tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);

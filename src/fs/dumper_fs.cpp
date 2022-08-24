@@ -69,7 +69,7 @@ updated:
 
 void dir_dumper::from_fs() {
     value_type* b = new value_type[32768];
-    string_type fullp = path(depth());
+    string_type fullp = path(~unsigned());
     if (fullp.empty() || fullp.back() != orie::seperator)
         fullp.push_back(orie::seperator);
     orie::strncpy(b, fullp.c_str(), 16384);
@@ -124,7 +124,7 @@ unsigned int file_dumper::depth(dir_dumper const *relative_to) const noexcept {
 file_dumper::string_type file_dumper::path(unsigned depth) const {
     if (!depth || !parent_dir)
         return filename;
-    return parent_dir->path(--depth) + filename;
+    return parent_dir->path(--depth) + seperator + filename;
 }
 
 file_dumper *dir_dumper::visit_one(const string_type &file_name, bool force) {

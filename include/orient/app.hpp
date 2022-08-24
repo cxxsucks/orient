@@ -65,7 +65,9 @@ public:
 
     app(fifo_thpool& pool);
     app(app&&);
+    app& operator=(app&&);
     app(const app&) = delete;
+    app& operator=(const app&) = delete;
     ~app() { 
         stop_auto_update(); 
         std::unique_lock __lck(_data_dumped_mut);

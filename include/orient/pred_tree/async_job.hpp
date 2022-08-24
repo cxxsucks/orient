@@ -55,10 +55,9 @@ public:
     template <class Rep, class Period> 
     void cancel(const std::chrono::duration<Rep, Period>& timeout) noexcept {
         std::thread([this, timeout] () {
-            std::mutex dummy_mut;
-            std::unique_lock dummy_lck(dummy_mut);
-            _cancel_cv.wait_for(dummy_lck, timeout);
-            _cancelled = true;
+            std::unique_lock __lck(_cnt_mut);
+            if (std::cv_status::timeout == _cancel_cv.wait_for(__lck, timeout))
+                _cancelled = true;
         }).detach();
     }
 
@@ -73,11 +72,14 @@ public:
     { start<callback_t>(pool, callback, always_async_cb); }
 
     async_job(const async_job&) = delete;
+    async_job& operator=(const async_job&) = delete;
     async_job(async_job&&) = delete;
+    async_job& operator=(async_job&&) = delete;
     ~async_job() noexcept { 
-        _cancel_cv.notify_all();
         _cancelled = true;
         join(); 
+        std::unique_lock __lck(_cnt_mut);
+        _cancel_cv.notify_all();
     }
 };
 

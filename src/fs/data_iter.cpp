@@ -82,7 +82,7 @@ fs_data_iter::fs_data_iter(const void* dat, size_t start)
 }
 
 fs_data_iter::fs_data_iter(const void* dat, strview_type st)
-    : fs_data_iter(dat, 0) { visit(st); }
+    : fs_data_iter(dat, 0) { change_root(st); }
 
 fs_data_iter::fs_data_iter(const fs_data_iter& rhs) 
     : cur_rec(rhs.cur_rec), sub_recs(rhs.sub_recs)
@@ -164,13 +164,15 @@ fs_data_iter& fs_data_iter::updir() {
     return *this;
 }
 
-fs_data_iter &fs_data_iter::visit(strview_type start_path) {
+fs_data_iter &fs_data_iter::change_root(strview_type start_path) {
     // Make sure neither has extra slash
     while (!start_path.empty() && start_path.back() == orie::seperator)
         start_path.remove_suffix(1);
     strview_type pref_view = strview_type(prefix);
     pref_view.remove_suffix(1);
 
+    if (pref_view == start_path)
+        return *this; // Current directory. Do not change.
     if (start_path.find(pref_view) != 0)
         return (*this = end());
     bool recur_old = (recur == has_recur_::enable);
