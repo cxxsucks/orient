@@ -1,4 +1,5 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
+#include <algorithm>
 extern "C" {
 #include <sys/wait.h>
 }

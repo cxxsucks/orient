@@ -8,7 +8,8 @@ namespace orie {
 
 app& app::read_db(str_t path) {
     std::unique_lock __lck(_data_dumped_mut);
-    _db_path = std::move(path);
+    if (!path.empty())
+        _db_path = std::move(path);
     std::ifstream ifs(_db_path, std::ios_base::binary);
 
     // Check whether the file is a legit database for orient
@@ -20,7 +21,7 @@ app& app::read_db(str_t path) {
     }
 
     assert(ifs.tellg() == sizeof(uint64_t));
-    size_t db_sz = ifs.seekg(0, std::ios_base::seekdir::end).tellg();
+    size_t db_sz = ifs.seekg(0, std::ios_base::end).tellg();
     db_sz -= sizeof(uint64_t);
     _data_dumped.reset(new std::byte[db_sz + 1]);
     ifs.seekg(sizeof(uint64_t));
@@ -167,15 +168,15 @@ app& app::read_conf(str_t path) {
 app& app::write_conf(str_t path) {
     if (!path.empty())
         _conf_path = std::move(path);
+    // Provide a default database name if not set, 
+    // before printing anything to conf file.
+    if (_db_path.empty())
+        _db_path = _conf_path + ".db";
     std::basic_ofstream<char_t> ofs(_conf_path);
     if (!ofs.is_open()) {
         _conf_path_valid = false;
         return *this;
     }
-    // Provide a default database name if not set, 
-    // before printing anything to conf file.
-    if (_db_path.empty())
-        _db_path = _conf_path + ".db";
 
 #ifdef _MSC_VER
     ofs.imbue(std::locale("en_US.UTF-8"));

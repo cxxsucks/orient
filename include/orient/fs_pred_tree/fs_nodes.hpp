@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <mutex>
+#include <array>
 
 extern "C" {
 #include <pcre2.h>
@@ -493,7 +494,7 @@ public:
 class updir_node : public fs_mod_node {
     // Circular array queue caching recently judged results
     std::array<std::pair<fs_data_record, bool>, 8> _last_done_q;
-    size_t _last_idx;
+    size_t _last_idx = 0;
     // Lock for the queue.
     std::mutex _last_done_mut;
 

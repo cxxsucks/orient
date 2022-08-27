@@ -9,8 +9,16 @@ struct fsExprBuilder : public testing::Test {
     size_t _do_tests(orie::pred_tree::fs_node& matcher) {
         fs_data_iter iter(info.dat.get());
         matcher.update_cost();
-        return std::count_if(iter, iter.end(), [&matcher] (auto& dat_it)
-                             { return matcher.apply_blocked(dat_it); });
+        size_t cnt = 0;
+        while (iter != iter.end())  {
+            if (matcher.apply_blocked(iter))
+                ++cnt;
+            ++iter;
+        }
+        return cnt;
+        // libstdc++ *copies* the iterator in count_if, which invalidates `prune`
+        // return std::count_if(iter, iter.end(), [&matcher] (auto& dat_it)
+        //                      { return matcher.apply_blocked(dat_it); });
     }
 };
 

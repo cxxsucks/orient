@@ -1,5 +1,6 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <orient/util/charconv_t.hpp>
+#include <algorithm>
 extern "C" {
 #include <pwd.h>
 #include <grp.h>
@@ -106,6 +107,7 @@ bool num_node::_num_apply(uint64_t n) const noexcept {
     case compar::GE: return n > _targ;
     case compar::LE: return n < _targ;
     }
+    std::terminate(); // Unreachable
 }
 
 num_node::num_node(stamp stm, compar cmp)

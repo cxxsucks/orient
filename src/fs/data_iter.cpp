@@ -1,6 +1,7 @@
 #include <orient/fs/data_iter.hpp>
 #include <stdexcept>
 #include <cstring>
+#include <algorithm>
 
 #define _category *reinterpret_cast<const category_tag*>(      \
         static_cast<const uint8_t*>(viewing) + cur_pos)

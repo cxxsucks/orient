@@ -56,6 +56,8 @@ public:
     void cancel(const std::chrono::duration<Rep, Period>& timeout) noexcept {
         std::thread([this, timeout] () {
             std::unique_lock __lck(_cnt_mut);
+            if (_cancelled)
+                return;
             if (std::cv_status::timeout == _cancel_cv.wait_for(__lck, timeout))
                 _cancelled = true;
         }).detach();
@@ -76,9 +78,11 @@ public:
     async_job(async_job&&) = delete;
     async_job& operator=(async_job&&) = delete;
     ~async_job() noexcept { 
+    {
+        std::lock_guard __lck(_cnt_mut);
         _cancelled = true;
+    }
         join(); 
-        std::unique_lock __lck(_cnt_mut);
         _cancel_cv.notify_all();
     }
 };
