@@ -33,6 +33,8 @@ protected:
     }
     void TearDown() override {
         std::filesystem::remove(temp_directory_path() / "testData.db");
+        std::filesystem::remove(temp_directory_path() / "testConf.txt");
+        std::filesystem::remove(temp_directory_path() / "testConf.db");
     }
 };
 
@@ -109,4 +111,24 @@ TEST_F(orieApp, readDb) {
     ).count();
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
     EXPECT_GT(nodb_cost, hasdb_cost * 2) << "Database is not fast enough";
+}
+
+TEST_F(orieApp, confFile) {
+    // Generate configuration
+    _app.add_ignored_path((info().tmpPath / "dir10").native())
+        .add_ignored_path((info().tmpPath / "dir11" / "dir10").native())
+        .update_db((info().tmpPath / "testConf.db").native())
+        .write_conf((info().tmpPath / "testConf.txt").native());
+    ASSERT_TRUE(_app) << "Write Configuration Failed.";
+    ASSERT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
+
+    // Consume generated configuration & database
+    _app = orie::app(_pool);
+    ASSERT_TRUE(_app.read_conf((info().tmpPath / "testConf.txt").native()))
+        << "Read Configuration Failed.";
+    ASSERT_TRUE(_app.read_db()) << "Read database failed";
+    _app.add_start_path(NATIVE_PATH("/"));
+    EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
+    ASSERT_TRUE(_app.update_db());
+    EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
 }

@@ -30,9 +30,9 @@ public:
     static app os_default(fifo_thpool& pool);
 
     // Set path to database and read from it
-    app& read_db(str_t path);
+    app& read_db(str_t path = str_t());
     // Scan filesystem, update database and write to the db file
-    app& update_db();
+    app& update_db(str_t path = str_t());
 
     // Auto updating
     template <class Rep, class Period>

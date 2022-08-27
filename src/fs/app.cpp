@@ -31,7 +31,9 @@ app& app::read_db(str_t path) {
     return *this;
 }
 
-app& app::update_db() {
+app& app::update_db(str_t path) {
+    if (!path.empty())
+        _db_path = std::move(path);
     dumper dump_worker;
 {   // Read and reuse the old dumped data
     std::shared_lock __lck(_data_dumped_mut);
