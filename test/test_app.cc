@@ -132,3 +132,50 @@ TEST_F(orieApp, confFile) {
     ASSERT_TRUE(_app.update_db());
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
 }
+
+#ifdef __unix
+TEST_F(orieApp, osDefault) {
+    // Erase existing config
+    std::filesystem::path conf_dir(::getenv("HOME"));
+    conf_dir = (conf_dir / ".config" / "orie");
+    std::filesystem::remove_all(conf_dir);
+    // Create config
+    _app = orie::app::os_default(_pool);
+    _app.update_db();
+    // Reset, then read the config (and database)
+    _app = orie::app::os_default(_pool);
+    _app.update_db().add_start_path(orie::str_t());
+    // database file and config file
+    EXPECT_LE(2, _do_tests(NATIVE_SV("-updir ( -name orie ) -a -name default.* "
+                                     "-a -perm 0600")));
+}
+#endif
+
+TEST_F(orieApp, main) {
+    auto conf_path = info().tmpPath / "mainConf.txt",
+         start_path = info().tmpPath / "dir10";
+    const char* args[] = {
+        NATIVE_PATH("a.out"), 
+        start_path.c_str(),
+        NATIVE_PATH("-conf"), conf_path.c_str(),
+        NATIVE_PATH("-updatedb"),
+        NATIVE_PATH("-name"), NATIVE_PATH("dir9")
+    };
+    // -conf accepts 1 argument
+    EXPECT_NE(0, orie::app::main(3, args));
+    // -conf file must be valid. 
+    // Before app::write_conf, the file does not exist
+    EXPECT_NE(0, orie::app::main(4, args));
+    _app.write_conf(conf_path.native());
+    // Database not initialized
+    EXPECT_NE(0, orie::app::main(4, args));
+    // Ok; just updatedb. No result
+    EXPECT_EQ(0, orie::app::main(5, args));
+    // Ok; updatedb and locate. Also no result because by default
+    // start from working dir, which is not /tmp
+    EXPECT_EQ(0, orie::app::main(6, args + 1));
+    // 4 results
+    EXPECT_EQ(0, orie::app::main(6, args + 1));
+    // Ok; start at dir10. Print 1 result
+    EXPECT_EQ(0, orie::app::main(7, args));
+}

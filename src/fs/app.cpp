@@ -1,5 +1,6 @@
 #include <orient/app.hpp>
 #include <orient/fs/dumper.hpp>
+#include <orient/fs_pred_tree/fs_expr_builder.hpp>
 #include <fstream>
 #include <algorithm>
 #include <cassert>
@@ -72,6 +73,7 @@ app& app::update_db(str_t path) {
     ofs.write(reinterpret_cast<const char*>(&magic_num), sizeof(uint64_t));
     ofs.write(reinterpret_cast<const char*>(_data_dumped.get()), sz);
     _conf_path_valid = ofs.good();
+    ::chmod(_db_path.c_str(), 0600);
     return *this;
 }
 
@@ -137,6 +139,8 @@ app& app::read_conf(str_t path) {
     str_t conf_cont;
     std::getline(ifs, conf_cont, '\0'); // TODO: Paths with '\0'?
     sv_t conf_sv(conf_cont);
+    _root_paths.clear();
+    _ignored_paths.clear();
 
     while (!conf_sv.empty()) {
         auto [cur_sz, cur_tok] =
@@ -218,22 +222,174 @@ app& app::operator=(app&& r) {
     return *this;
 }
 
+#ifdef __unix
 app app::os_default(fifo_thpool& pool) {
+    std::string conf_dir = ::getenv("HOME");
+    ::mkdir((conf_dir += "/.config").c_str(), 0755);
+    ::mkdir((conf_dir += "/orie").c_str(), 0700);
     app res(pool);
-    std::string _db_path = ::getenv("HOME");
-    ::mkdir((_db_path += "/.config").c_str(), 0755);
-    ::mkdir((_db_path += "/orie").c_str(), 0644);
-    _db_path += "/default.db";
+    // Use existing conf file when possible
+    if (res.read_conf(conf_dir + "/default.txt"))
+        return res;
 
+#ifdef MAC_OS_X_VERSION_10_0
+    res.read_db(conf_dir + "/default.db")
+       .add_root_path("")
+       .add_root_path("/usr")
+       .add_root_path("/Library")
+       .add_root_path("/Applications")
+       .add_root_path("/Users")
+       .add_root_path("/private")
+       .add_ignored_path("/System/Library")
+       .add_ignored_path("/Volumes")
+       .add_ignored_path("/System/Volumes/Data")
+       .add_ignored_path("/private/var/folders")
+       .add_ignored_path("/private/var/run")
+       .add_ignored_path("/private/var/tmp")
+       .add_ignored_path("/private/tmp")
+       .write_conf();
+
+#else // GNU/Linux
+    res.read_db(conf_dir + "/default.db")
+       .add_root_path("")
+       .add_root_path("/usr")
+       .add_root_path("/home")
+       .add_ignored_path("/proc")
+       .add_ignored_path("/run")
+       .add_ignored_path("/tmp")
+       .add_ignored_path("/var/tmp")
+       .write_conf();
+
+#endif
+    ::chmod((conf_dir + "/default.txt").c_str(), 0600);
     return res;
 }
 
-#ifdef MAC_OS_X_VERSION_10_0
+#else // Windows
+app app::os_default(fifo_thpool& pool) {
+    wchar_t pathBuf[256];
+    auto pathLen = ::GetEnvironmentVariableW(L"AppData", pathBuf, 230);
+    if (pathLen == 0 || pathLen >= 230) {
+        std::cerr << "Cannot find %AppData%; using D:\\.orie as database directory.";
+        ::wcscpy(pathBuf, L"D:");
+        pathLen = 2;
+    }
 
-#elif _WIN32
+    app res(pool);
+    std::wstring confDir = pathBuf;
+    if (res.read_conf(confDir + L"\\.orie\\default.txt"))
+        return res;
 
-#else
+    ::CreateDirectoryW((confDir += L"\\.orie").c_str(), nullptr);
+    res.read_db(confDir + L"default.db");
 
+    pathLen = ::GetEnvironmentVariableW(L"UserProfile", pathBuf, 255);
+    if (pathLen != 0 && pathLen < 255)
+        res.add_root_path(pathBuf);
+    pathLen = ::GetEnvironmentVariableW(L"TEMP", pathBuf, 255);
+    if (pathLen != 0 && pathLen < 255)
+        res.add_ignored_path(pathBuf);
+    res.add_ignored_path(L"C:\\Windows");
+       .add_ignored_path(L"C:\\Windows.old");
+
+    // Add a root for each drive and its "Program File" directory
+    for (wchar_t dri[4] = L"C:\\"; dri[0] <= L'Z'; ++dri[0]) {
+        if (::GetDriveTypeW(dri) != DRIVE_FIXED)
+            continue;
+        dri[2] = L'\0';
+        res.add_root_path(dri);
+        ::wcscpy(pathBuf, dri);
+        ::wcscat(pathBuf, L"\\Program Files");
+        DWORD ftyp = ::GetFileAttributesW(pathBuf);
+        if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
+            res.add_root_path(pathBuf);
+
+        ::wcscat(pathBuf, L" (x86)");
+        ftyp = ::GetFileAttributesW(pathBuf);
+        if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
+            res.add_root_path(pathBuf);
+        dri[2] = L'\\';
+    }
+    res.write_conf();
+    return res;
+}
 #endif
+
+int app::main(int exe_argc, const char_t* const* exe_argv) noexcept {
+try {
+    int expr_since = 1;
+    bool updatedb_flag = false, startpath_flag = false;
+    orie::fifo_thpool pool;
+    orie::app app(orie::app::os_default(pool));
+    while (expr_since < exe_argc) {
+        // -conf is the only global option implemented :(
+        // More would be added if a non-bloated argparser is found :(
+        // (No hashmap, set, string or vector; only string_view, array, ...)
+        if (NATIVE_SV("-conf") == exe_argv[expr_since]) {
+            if (expr_since + 1 == exe_argc || 
+                !app.read_conf(exe_argv[expr_since + 1])) {
+                orie::NATIVE_STDOUT << "Unable to read configuration.\n";
+                return 3;
+            } else {
+                expr_since += 2;
+                continue;
+            }
+        } else if (NATIVE_SV("-updatedb") == exe_argv[expr_since]) {
+            updatedb_flag = true;
+            ++expr_since;
+            continue;
+        }
+
+        orie::char_t realpath_buf[path_max] = {};
+        orie::realpath(exe_argv[expr_since], realpath_buf, path_max);
+        orie::stat_t stbuf;
+        // TODO: `find` accepts non-dirs, but orie::fs_data_iter
+        // forces the starting path to be a directory
+        if (0 != orie::stat(realpath_buf, &stbuf) || !S_ISDIR(stbuf.st_mode))
+            break;
+        app.add_start_path(realpath_buf);
+        startpath_flag = true;
+        ++expr_since;
+    }
+
+    orie::pred_tree::fs_expr_builder builder;
+    if (expr_since == exe_argc)
+        builder.build(updatedb_flag ? 
+            NATIVE_SV("-false") : NATIVE_SV("-true"));
+    else
+        builder.build(exe_argc - expr_since + 1, exe_argv + expr_since - 1);
+    bool has_action = builder.has_action();
+    auto callback = [has_action] (orie::fs_data_iter& it) {
+        static std::mutex out_mut;
+        if (!has_action) {
+            std::lock_guard __lck(out_mut);
+            orie::NATIVE_STDOUT << it.path() << '\n';
+        }
+    };
+
+    if (updatedb_flag)
+        app.update_db();
+    else app.read_db();
+    if (app._data_dumped == nullptr) {
+        NATIVE_STDERR << "Database not initialized. Please run with "
+                         "-updatedb first.\n";
+        return 4;
+    }
+    
+    if (!startpath_flag) {
+        char_t cwd_buf[path_max];
+        app.add_start_path(::getcwd(cwd_buf, path_max));
+    }
+    if (builder.has_async()) 
+        // TODO: Options to set the timeout field
+        app.run_pooled(*builder.get(), callback, std::chrono::hours(1));
+    else app.run(*builder.get(), callback);
+    
+} catch (std::exception& e) {
+    std::cerr << e.what() << '\n';
+    return 1;
+}
+    return 0;
+}
 
 }

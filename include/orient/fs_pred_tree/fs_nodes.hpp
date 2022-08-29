@@ -391,7 +391,7 @@ class baduser_node : public fs_node {
     bool _is_group;
     // Caching already queried ids in a circular queue
     std::array<std::pair<uid_t, bool>, 16> _recent_query;
-    size_t _last_at;
+    size_t _last_at = 0;
     // getpwuid(3) and getgrgid(3) are not thread-safe.
     std::mutex _getid_mut;
 
@@ -406,7 +406,14 @@ public:
 
     baduser_node(bool group) : _is_group(group) {
         // Fill all fields with -1 otherwise uid0 would be mapped to false
+        // `memset` also sets padding to -1, which libstdc++ complains.
+#ifndef _LIBCPP___AVAILABILITY
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
         ::memset(_recent_query.data(), -1, sizeof(_recent_query));
+#ifndef _LIBCPP___AVAILABILITY
+#pragma GCC diagnostic pop
+#endif
     }
     baduser_node(const baduser_node& r)
         : _is_group(r._is_group), _recent_query(r._recent_query)
