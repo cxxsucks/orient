@@ -30,13 +30,14 @@ ptrdiff_t fs_data_record::increment() noexcept {
         ++push_count;
     }
     
-    if (prev_cate == category_tag::link_tag) {
+    // No longer saves links' pointed-to positions
+    /* if (prev_cate == category_tag::link_tag) {
         auto linkto_len = *reinterpret_cast<const uint16_t*>(
             static_cast<const uint8_t*>(viewing) + cur_pos);
         cur_pos += (linkto_len * sizeof(char_type) + sizeof(uint16_t));
         // cur_pos += sizeof(uint16_t) + *reinterpret_cast<const uint16_t*>(
             // static_cast<const uint8_t*>(viewing) + cur_pos);
-    }
+    } */
 
     while (_category == category_tag::dir_pop_tag) {
         cur_pos += sizeof(char_type);

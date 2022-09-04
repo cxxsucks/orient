@@ -104,11 +104,12 @@ namespace orie {
     constexpr char_t pruned_path_str[] = NATIVE_PATH("pruned_paths");
     constexpr char_t db_path_str[] = NATIVE_PATH("database_path");
 
-    enum _category_tag : char_t {
+    enum category_tag : char_t {
         unknown_tag = 0,
         file_tag = 'f', dir_tag = 'd',
-        dir_pop_tag = 'p', link_tag = 'l', 
-        /*fifo_tag = 251, blk_tag = 250, sock_tag = 249*/
+        link_tag = 'l', char_tag = 'c',
+        fifo_tag = 'p', blk_tag = 'b', sock_tag = 's',
+        dir_pop_tag = '-'
     };
 
 #ifdef _WIN32

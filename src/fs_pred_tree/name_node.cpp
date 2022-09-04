@@ -181,7 +181,7 @@ bool type_node::next_param(sv_t param) {
         case file_tag:
         case dir_tag:
         case link_tag:
-            _permitted[i++] = static_cast<_category_tag>(ch);
+            _permitted[i++] = static_cast<category_tag>(ch);
             break;
         }
         if (i >= 8) break;

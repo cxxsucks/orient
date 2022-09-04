@@ -145,7 +145,7 @@ public:
 };
 
 class type_node : public fs_node {
-    std::array<orie::_category_tag, 8> _permitted;
+    std::array<orie::category_tag, 8> _permitted;
 
 public:
     double success_rate() const noexcept override;

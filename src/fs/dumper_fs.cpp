@@ -7,13 +7,38 @@
 namespace orie {
 namespace dmp {
 
-void dir_dumper::from_fs_impl(value_type* upPath, value_type* lnkBuf) noexcept {
+char_t dir_dumper::__handle_unknown_dtype(const char_t* path) noexcept {
+    orie::stat_t stbuf;
+    if (::stat(path, &stbuf) != 0)
+        // Cannot stat? Dump it as a regular file
+        return DT_REG;
+
+    if (S_ISREG(stbuf.st_mode))
+        return DT_REG;
+    if (S_ISDIR(stbuf.st_mode))
+        return DT_DIR;
+    if (S_ISLNK(stbuf.st_mode))
+        return DT_LNK;
+    if (S_ISFIFO(stbuf.st_mode))
+        return DT_FIFO;
+    if (S_ISCHR(stbuf.st_mode))
+        return DT_CHR;
+    if (S_ISSOCK(stbuf.st_mode))
+        return DT_SOCK;
+    if (S_ISBLK(stbuf.st_mode))
+        return DT_BLK;
+    // Should not reach here, but don't crash so easily.
+    NATIVE_STDERR << NATIVE_PATH("Unknown file type: ") << path << '\n';
+    return DT_REG;
+}
+
+void dir_dumper::from_fs_impl(str_t& path_slash) noexcept {
     orie::stat_t st;
     orie::dirent_t* ent;
     orie::dir_t* pd;
-    size_t lenOrig = orie::strlen(upPath);
+    size_t len_orig = path_slash.size();
 
-    if (orie::stat(upPath, &st) != 0)
+    if (orie::stat(path_slash.c_str(), &st) != 0)
         return clear();
     if (is_ignored)
         return;
@@ -21,63 +46,48 @@ void dir_dumper::from_fs_impl(value_type* upPath, value_type* lnkBuf) noexcept {
         goto updated;
 
     last_write = st.st_mtime;
-    clear(1);
-    if (!(pd = orie::opendir(upPath)))
+    clear(1); // Clear all donon-dir files
+    if (!(pd = orie::opendir(path_slash.c_str())))
         return;
     while ((ent = orie::readdir(pd))) {
         if (orie::strcmp(NATIVE_PATH("."), ent->d_name) == 0 ||
                 orie::strcmp(NATIVE_PATH(".."), ent->d_name) == 0)
             continue;
-        if (ent->d_type != DT_DIR && ent->d_type != DT_LNK) {
-            add_file(ent->d_name);
-            continue;
+        if (ent->d_type == DT_UNKNOWN) {
+            path_slash += ent->d_name;
+            ent->d_type = __handle_unknown_dtype(path_slash.c_str());
+            path_slash.erase(len_orig);
         }
 
-        if (ent->d_type == DT_DIR) {
-            add_dir(ent->d_name, 0)->valid = true;
-        } else if (ent->d_type == DT_LNK) {
-#ifdef __unix
-            auto fd = ::open(upPath, O_DIRECTORY | O_RDONLY);
-            if (fd < 0) continue;
-            ssize_t len = ::readlinkat(fd, ent->d_name, lnkBuf, 16384);
-            if (len > 0) {
-                lnkBuf[len] = '\0';
-                add_link(ent->d_name, lnkBuf);
-            }
-            upPath[lenOrig] = '\0';
-            ::close(fd);
-#else
-            static_cast<void>(lnkBuf);
-            add_link(ent->d_name, strview_type());
-#endif // !_WIN32
-        }
+        if (ent->d_type != DT_DIR) 
+            add_file(ent->d_name, ent->d_type);
+        else
+            visit_child_dir(ent->d_name)->valid = true;
     }
     orie::closedir(pd);
     clear(8);
+
 updated:
-    static constexpr value_type sepArr[2] = {
-        orie::seperator, '\0'
-    };
     std::for_each(my_dirs.begin(), my_dirs.end(),
-        [upPath, lnkBuf, lenOrig] (dir_dumper* b) {
-            orie::strncat(upPath, b->filename.c_str(), 16384 - lenOrig);
-            orie::strncat(upPath, sepArr, 16384 - lenOrig - b->filename.size());
-            b->from_fs_impl(upPath, lnkBuf);
-            upPath[lenOrig] = '\0';
+        [&path_slash, len_orig] (dir_dumper* b) {
+            (path_slash += seperator) += b->filename;
+            b->from_fs_impl(path_slash);
+            path_slash.erase(len_orig);
         });
 }
 
 void dir_dumper::from_fs() {
-    value_type* b = new value_type[32768];
+    // value_type* b = new value_type[32768];
     string_type fullp = path(~unsigned());
     if (fullp.empty() || fullp.back() != orie::seperator)
         fullp.push_back(orie::seperator);
-    orie::strncpy(b, fullp.c_str(), 16384);
-    from_fs_impl(b, b + 16384);
-    delete []b;
+    from_fs_impl(fullp);
+    // orie::strncpy(b, fullp.c_str(), 16384);
+    // from_fs_impl(b, b + 16384);
+    // delete []b;
 }
 
-dir_dumper *file_dumper::parent(unsigned depth) const noexcept {
+dir_dumper *dir_dumper::parent(unsigned depth) const noexcept {
     dir_dumper* res = parent_dir;
 
     while (--depth && res->parent_dir)
@@ -85,35 +95,9 @@ dir_dumper *file_dumper::parent(unsigned depth) const noexcept {
     return res;
 }
 
-const std::vector<dir_dumper*> &file_dumper::sub_dirs(bool) const noexcept {
-    static std::vector<dir_dumper*> dummy;
-    dummy.clear();
-    return dummy;
-}
-
-const std::vector<file_dumper*> &file_dumper::sub_files(bool) const noexcept {
-    static std::vector<file_dumper*> dummy;
-    dummy.clear();
-    return dummy;
-}
-
-const std::vector<dir_dumper*> &link_dumper::sub_dirs(bool read_link) const noexcept {
-    if (!read_link || !link_to) {
-        return file_dumper::sub_dirs(false);
-    }
-    return link_to->sub_dirs(false);
-}
-
-const std::vector<file_dumper*> &link_dumper::sub_files(bool read_link) const noexcept {
-    if (!read_link || !link_to) {
-        return file_dumper::sub_files(false);
-    }
-    return link_to->sub_files(false);
-}
-
-unsigned int file_dumper::depth(dir_dumper const *relative_to) const noexcept {
+unsigned int dir_dumper::depth(dir_dumper const *relative_to) const noexcept {
     unsigned res = 0;
-    const file_dumper* cur = this;
+    const dir_dumper* cur = this;
     while (cur != relative_to && cur->parent_dir)
         res++, cur = cur->parent_dir;
     if (cur != relative_to && relative_to)
@@ -121,13 +105,13 @@ unsigned int file_dumper::depth(dir_dumper const *relative_to) const noexcept {
     return res;
 }
 
-file_dumper::string_type file_dumper::path(unsigned depth) const {
+file_dumper::string_type dir_dumper::path(unsigned depth) const {
     if (!depth || !parent_dir)
         return filename;
     return parent_dir->path(--depth) + seperator + filename;
 }
 
-file_dumper *dir_dumper::visit_one(const string_type &file_name, bool force) {
+dir_dumper *dir_dumper::visit_child_dir(const string_type &file_name) {
     if (file_name.empty() || file_name == NATIVE_PATH("."))
         return this;
     else if (file_name == NATIVE_PATH(".."))
@@ -136,109 +120,43 @@ file_dumper *dir_dumper::visit_one(const string_type &file_name, bool force) {
         [&file_name](const dir_dumper* p) {return p && p->filename == file_name; });
     if (diter != my_dirs.cend())
         return *diter;
-    auto fiter = std::find_if(my_files.cbegin(), my_files.cend(),
-        [&file_name](const file_dumper* p) {return p && p->filename == file_name; });
-    if (fiter != my_files.cend())
-        return *fiter;
-    if (!force)
-        return nullptr;
+    // auto fiter = std::find_if(my_files.cbegin(), my_files.cend(),
+    //     [&file_name](const file_dumper* p) {return p && p->filename == file_name; });
+    // if (fiter != my_files.cend())
+    //     return *fiter;
+
     return new dir_dumper(file_name, time_t(), this);
     // return my_dirs.back();
 }
 
-file_dumper *dir_dumper::visit_relative(const string_type &rela_path, bool force) {
+dir_dumper *dir_dumper::visit_relative_dir(const string_type &rela_path) {
     constexpr static value_type separr[2] = {orie::seperator};
     auto cont = orie::str_split<std::vector<string_type>, value_type>(rela_path, separr);
-    file_dumper* visiting = this;
+    dir_dumper* visiting = this;
 
     for (const string_type& name : cont)
-        if (!(visiting = visiting->visit_one(name, force)))
+        if (!(visiting = visiting->visit_child_dir(name)))
             return nullptr;
     return visiting;
 }
 
-file_dumper *dir_dumper::visit_full(const string_type& full_path, bool force) {
+dir_dumper *dir_dumper::visit_dir(const string_type& full_path) {
     string_type my_path = path(~unsigned());
     if (full_path.find(my_path) != 0)
         return nullptr;
-    return visit_relative(full_path.substr(my_path.size()), force);
-}
-
-file_dumper *link_dumper::visit_one(const string_type &file_name, bool force) {
-    if (!link_to)
-        update_link_node();
-    if (link_to)
-        return link_to->visit_one(file_name, force);
-    return nullptr;
-}
-
-file_dumper *link_dumper::visit_relative(const string_type &rela_path, bool force) {
-    if (!link_to)
-        update_link_node();
-    if (link_to)
-        return link_to->visit_relative(rela_path, force);
-    return nullptr;
-}
-
-file_dumper *link_dumper::visit_full(const file_dumper::string_type &full_path, bool force) {
-    string_type my_path = path(~unsigned());
-    if (full_path.find(my_path) != 0)
-        return nullptr;
-    return visit_relative(full_path.substr(my_path.size()), force);
+    return visit_relative_dir(full_path.substr(my_path.size()));
 }
 
 // TODO: check repeat
-file_dumper* dir_dumper::add_file(const strview_type& name) {
-    return new file_dumper(string_type(name), this);
-}
-
-dir_dumper *dir_dumper::add_dir(const strview_type &name, time_t t) {
-    auto dIter = std::find_if(my_dirs.cbegin(), my_dirs.cend(),
-        [&name](const dir_dumper* d) {return d->filename == name;});
-    if (dIter == my_dirs.cend())
-        return new dir_dumper(string_type(name), t, this);
-    return *dIter;
-}
-// TODO: check repeat
-link_dumper *dir_dumper::add_link(const strview_type &name,
-    const strview_type &link_to) {
-    return new link_dumper(string_type(name), string_type(link_to), this);
-}
-
-file_dumper *link_dumper::add_file(const strview_type &name) {
-    if (!link_to)
-        update_link_node();
-    if (link_to)
-        return link_to->add_file(name);
-    return nullptr;
-}
-
-dir_dumper *link_dumper::add_dir(const strview_type &name, time_t t) {
-    if (!link_to)
-        update_link_node();
-    if (link_to)
-        return link_to->add_dir(name, t);
-    return nullptr;
-}
-
-link_dumper *link_dumper::add_link(const strview_type &name,
-    const strview_type &link_name) {
-    if (!link_to)
-        update_link_node();
-    if (link_to)
-        return link_to->add_link(name, link_name);
-    return nullptr;
+file_dumper* dir_dumper::add_file(const strview_type& name, char_t dtype) {
+    my_files.push_back(new file_dumper(string_type(name), dtype));
+    return my_files.back();
 }
 
 bool dir_dumper::up_to_date(time_t t) const noexcept {
     if (is_ignored)
         return true;
     else return t == last_write;
-}
-
-bool link_dumper::up_to_date(time_t t) const noexcept {
-    if (!link_to) return false;
-    return link_to->up_to_date(t);
 }
 
 }
