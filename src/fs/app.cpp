@@ -49,11 +49,13 @@ app& app::update_db(str_t path) {
     // All root paths must be pruned along with ignored ones,
     // then sorted from the deepest to the shallowest, to prevent
     // rescanning if there are overlapping root paths.
-    std::sort(_root_paths.begin(), _root_paths.end(),
-              [] (const str_t& a, const str_t& b) {return a.size() > b.size();});
-    for (const str_t& p : _root_paths) {
-        auto& to_dump = dump_worker.visit_dir(p);
-        to_dump.from_fs();
+    std::sort(_root_paths.begin(), _root_paths.end(), 
+        [] (const auto& a, const auto& b) {
+            return a.first.size() > b.first.size();
+    });
+    for (const auto& p : _root_paths) {
+        auto& to_dump = dump_worker.visit_dir(p.first);
+        to_dump.from_fs(p.second);
         to_dump.set_ignored(true);
     }
 
@@ -93,8 +95,8 @@ app& app::add_ignored_path(str_t path) {
     _ignored_paths.push_back(std::move(path));
     return *this;
 }
-app& app::add_root_path(str_t path) {
-    _root_paths.push_back(std::move(path));
+app& app::add_root_path(str_t path, bool concur) {
+    _root_paths.emplace_back(std::move(path), concur);
     return *this;
 }
 app& app::add_start_path(str_t path) {
@@ -111,7 +113,8 @@ app& app::erase_ignored_path(const str_t& path) {
 }
 app& app::erase_root_path(const str_t& path) {
     _root_paths.erase(
-        std::remove(_root_paths.begin(), _root_paths.end(), path),
+        std::remove_if(_root_paths.begin(), _root_paths.end(), 
+            [&path] (const auto& p) {return p.first == path;}),
         _root_paths.end()
     );
     return *this;
@@ -160,7 +163,14 @@ app& app::read_conf(str_t path) {
             std::tie(cur_sz, cur_tok) =
                 orie::next_token(conf_sv.data(), conf_sv.size());
             conf_sv.remove_prefix(cur_sz);
-            _root_paths.emplace_back(std::move(cur_tok));
+            _root_paths.emplace_back(std::move(cur_tok), false);
+            std::tie(cur_sz, cur_tok) =
+                orie::next_token(conf_sv.data(), conf_sv.size());
+            // SSD field is optional
+            if (cur_tok == NATIVE_PATH("SSD")) {
+                conf_sv.remove_prefix(cur_sz);
+                _root_paths.back().second = true;
+            }
         } // Ignore all others
     }
 
@@ -188,8 +198,11 @@ app& app::write_conf(str_t path) {
     ofs.imbue(std::locale("en_US.UTF-8"));
 #endif
     ofs << NATIVE_PATH("DB_PATH `") << _db_path << char_t('`');
-    for (const auto& p : _root_paths)
-        ofs << NATIVE_PATH("\nROOT `") << p << char_t('`');
+    for (const auto& p : _root_paths) {
+        ofs << NATIVE_PATH("\nROOT `") << p.first << char_t('`');
+        if (p.second)
+            ofs << NATIVE_PATH(" SSD");
+    }
     for (const auto& p : _ignored_paths)
         ofs << NATIVE_PATH("\nIGNORED `") << p << char_t('`');
     ofs.put(char_t('\n'));
@@ -234,12 +247,12 @@ app app::os_default(fifo_thpool& pool) {
 
 #ifdef MAC_OS_X_VERSION_10_0
     res.read_db(conf_dir + "/default.db")
-       .add_root_path("")
-       .add_root_path("/usr")
-       .add_root_path("/Library")
-       .add_root_path("/Applications")
-       .add_root_path("/Users")
-       .add_root_path("/private")
+       .add_root_path("", true)
+       .add_root_path("/usr", true)
+       .add_root_path("/Library", true)
+       .add_root_path("/Applications, true")
+       .add_root_path("/Users", true)
+       .add_root_path("/private", true)
        .add_ignored_path("/System/Library")
        .add_ignored_path("/Volumes")
        .add_ignored_path("/System/Volumes/Data")
@@ -251,9 +264,9 @@ app app::os_default(fifo_thpool& pool) {
 
 #else // GNU/Linux
     res.read_db(conf_dir + "/default.db")
-       .add_root_path("")
-       .add_root_path("/usr")
-       .add_root_path("/home")
+       .add_root_path("", true)
+       .add_root_path("/usr", true)
+       .add_root_path("/home", true)
        .add_ignored_path("/proc")
        .add_ignored_path("/run")
        .add_ignored_path("/tmp")

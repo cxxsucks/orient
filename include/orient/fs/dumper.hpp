@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <string_view>
+#include <atomic>
 
 #ifndef TEST_FRIENDS
 #define TEST_FRIENDS
@@ -51,13 +52,13 @@ private:
     string_type filename;
     dir_dumper* parent_dir;
 
-    void from_fs_impl(str_t& up_path) noexcept;
+    void from_fs_impl(str_t& up_path, std::atomic<ptrdiff_t>& idle) noexcept;
     // readdir(3) suggests that all apps shall handle DT_UNKNOWN when iterating dirs
     // Handling DT_UNKNOWN is NOT TESTED! Won't be called on most fs.
     static char_t __handle_unknown_dtype(const char_t* fullpath) noexcept;
 
 public:
-    void from_fs();
+    void from_fs(bool multithreaded = false);
     void set_ignored(bool enabled = true) noexcept  {is_ignored = enabled;}
     bool ignored() const noexcept {return is_ignored;}
     // 1 files 2 directories 3 all

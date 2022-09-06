@@ -3,6 +3,8 @@
 #include <orient/util/charconv_t.hpp>
 
 #include <algorithm>
+#include <thread>
+#include <atomic>
 
 namespace orie {
 namespace dmp {
@@ -32,7 +34,9 @@ char_t dir_dumper::__handle_unknown_dtype(const char_t* path) noexcept {
     return DT_REG;
 }
 
-void dir_dumper::from_fs_impl(str_t& path_slash) noexcept {
+void dir_dumper::from_fs_impl(str_t& path_slash,
+                              std::atomic<ptrdiff_t>& idle) noexcept 
+{
     orie::stat_t st;
     orie::dirent_t* ent;
     orie::dir_t* pd;
@@ -68,20 +72,33 @@ void dir_dumper::from_fs_impl(str_t& path_slash) noexcept {
     clear(8);
 
 updated:
-    std::for_each(my_dirs.begin(), my_dirs.end(),
-        [&path_slash, len_orig] (dir_dumper* b) {
-            (path_slash += seperator) += b->filename;
-            b->from_fs_impl(path_slash);
-            path_slash.erase(len_orig);
-        });
+    std::vector<std::thread> workers;
+    for (dir_dumper* b : my_dirs) {
+        (path_slash += seperator) += b->filename;
+        if (idle > 0) {
+            workers.emplace_back([b, path_slash, &idle] () {
+                --idle;
+                str_t path_cpy(path_slash);
+                b->from_fs_impl(path_cpy, idle);
+                ++idle;
+            });
+        } else {
+            b->from_fs_impl(path_slash, idle);
+        }
+        path_slash.erase(len_orig);
+    }
+    for (auto& j : workers)
+        j.join();
 }
 
-void dir_dumper::from_fs() {
+void dir_dumper::from_fs(bool multithreaded) {
     // value_type* b = new value_type[32768];
     string_type fullp = path(~unsigned());
     if (fullp.empty() || fullp.back() != orie::seperator)
         fullp.push_back(orie::seperator);
-    from_fs_impl(fullp);
+    std::atomic<ptrdiff_t> th_cnt = multithreaded ? 
+        std::thread::hardware_concurrency() : 0;
+    from_fs_impl(fullp, th_cnt);
     // orie::strncpy(b, fullp.c_str(), 16384);
     // from_fs_impl(b, b + 16384);
     // delete []b;

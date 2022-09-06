@@ -136,9 +136,12 @@ TEST_F(orieApp, confFile) {
 #ifdef __unix
 TEST_F(orieApp, osDefault) {
     // Erase existing config
+    std::cout << "Regenerating filesystem database.\n May take longer than "
+              << "usual if a HDD is mounted, but not under /mnt or /run" << std::endl;
     std::filesystem::path conf_dir(::getenv("HOME"));
     conf_dir = (conf_dir / ".config" / "orie");
-    std::filesystem::remove_all(conf_dir);
+    std::filesystem::remove(conf_dir / "default.txt");
+    std::filesystem::remove(conf_dir / "default.db");
     // Create config
     _app = orie::app::os_default(_pool);
     _app.update_db();

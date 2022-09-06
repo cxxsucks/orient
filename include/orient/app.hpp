@@ -14,14 +14,14 @@ class app {
 
     str_t _conf_path, _db_path;
     std::vector<str_t> _ignored_paths,
-                       _root_paths,
                        _start_paths;
+    std::vector<std::pair<str_t, bool>> _root_paths;
     std::unique_ptr<std::byte[]> _data_dumped;
 
     fifo_thpool& _pool;
+    std::unique_ptr<std::thread> _auto_update_thread;
     std::shared_mutex _data_dumped_mut;
     std::condition_variable _auto_update_cv;
-    std::unique_ptr<std::thread> _auto_update_thread;
 
 public:
     // Magic number of database file. 32bit and 64bit versions are different.
@@ -45,7 +45,7 @@ public:
     // THREAD UNSAFE
     app& add_ignored_path(str_t path);
     app& erase_ignored_path(const str_t& path);
-    app& add_root_path(str_t path);
+    app& add_root_path(str_t path, bool multithreaded = false);
     app& erase_root_path(const str_t& path);
     app& add_start_path(str_t path);
     app& erase_start_path(const str_t& path);
