@@ -281,7 +281,7 @@ public:
         return new exec_node(*this);
     }
 
-    tribool_bad apply(fs_data_iter& it) override;
+    // tribool_bad apply(fs_data_iter& it) override;
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
@@ -407,11 +407,12 @@ public:
     baduser_node(bool group) : _is_group(group) {
         // Fill all fields with -1 otherwise uid0 would be mapped to false
         // `memset` also sets padding to -1, which libstdc++ complains.
-#ifndef _LIBCPP___AVAILABILITY
+#ifdef __GNUC_STDC_INLINE__
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
         ::memset(_recent_query.data(), -1, sizeof(_recent_query));
-#ifndef _LIBCPP___AVAILABILITY
+#ifdef __GNUC_STDC_INLINE__
 #pragma GCC diagnostic pop
 #endif
     }

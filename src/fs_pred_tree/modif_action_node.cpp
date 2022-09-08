@@ -127,18 +127,18 @@ bool del_node::next_param(sv_t param) {
 
 del_node::~del_node() noexcept {}
 
-tribool_bad exec_node::apply(fs_data_iter& it) {
-    if (_stdin_confirm)
-        return static_cast<tribool_bad>(apply_blocked(it));
-    return tribool_bad::Uncertain;
-}
+// tribool_bad exec_node::apply(fs_data_iter& it) {
+//     if (_stdin_confirm)
+//         return static_cast<tribool_bad>(apply_blocked(it));
+//     return tribool_bad::Uncertain;
+// }
 
 // This implementation sacrificed performance (when constructing cmdline)
 // for clarity and better concurrency, as an entire copy of command line
-// is alloced and copied.
+// is allocated and copied.
 bool exec_node::apply_blocked(fs_data_iter& it) {
     if (!_parse_finished)
-        throw uninitialized_node("--exec");
+        throw uninitialized_node(NATIVE_SV("--exec"));
     std::vector<str_t> argvstr_to_exec;
 {
     std::lock_guard __lk(_names_mut);
@@ -151,15 +151,20 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
 
     argvstr_to_exec.reserve(_exec_cmds.size() + _names_to_pass.size());
     for (const str_t& cmdarg : _exec_cmds) {
-        if (cmdarg != NATIVE_PATH("{}")) {
+        if (cmdarg.find(NATIVE_PATH("{}")) == sv_t::npos) {
             argvstr_to_exec.push_back(cmdarg);
             continue;
         }
 
         // Substitute the "{}" with all filenames ready to pass.
-        // There may be multiple "{}"s, so cannot use std::move here.
-        for (const str_t& filename : _names_to_pass)
-            argvstr_to_exec.push_back(filename);
+        for (const str_t& filename : _names_to_pass) {
+            str_t replaced = cmdarg;
+            size_t pos;
+            while ((pos = replaced.find("{}")) != str_t::npos)
+                replaced.replace(pos, 2, filename);
+            // There may be multiple "{}"s
+            argvstr_to_exec.push_back(replaced);
+        }
     }
     // Cleanup; ready to fork and exec
     _name_len_left = _name_min_len;
@@ -199,6 +204,7 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
         if (::toupper(c) != 'Y')
             return false;
     }
+
     // Actual fork-and-exec
     pid_t child = ::fork();
     switch (child) {
