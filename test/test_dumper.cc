@@ -39,9 +39,9 @@ struct dumperFiles : public ::testing::Test {
         if (diter != dmp->my_dirs.cend())
             return orie::dir_tag;
         auto fiter = std::find_if(dmp->my_files.cbegin(), dmp->my_files.cend(),
-            [&file_name](const file_dumper* p) {return p && p->filename == file_name; });
+            [&file_name](const file_dumper& p) {return p.filename == file_name; });
         if (fiter != dmp->my_files.cend())
-            return (*fiter)->category;
+            return fiter->category;
         return orie::unknown_tag;
     }
 

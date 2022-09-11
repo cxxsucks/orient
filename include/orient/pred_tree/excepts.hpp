@@ -114,7 +114,15 @@ class uninitialized_node : public invalid_node_arg {
 
 public:
     uninitialized_node(std::string_view param) : invalid_node_arg("") {
+#ifdef __GNUC_STDC_INLINE__
+#pragma GCC diagnostic push
+// GCC warns that `msg` is larger than `param.size()`, which is intended.
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
         orie::strncat(msg, param.data(), std::min(size_t(30), param.size()));
+#ifdef __GNUC_STDC_INLINE__
+#pragma GCC diagnostic pop
+#endif
     }
 
     const char* what() const noexcept override { return msg; }

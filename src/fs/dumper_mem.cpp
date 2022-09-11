@@ -19,11 +19,12 @@ file_dumper::file_dumper(const string_type& fname, char_t dtype) : filename(fnam
         category = category_tag::sock_tag; return;
     case DT_CHR:
         category = category_tag::char_tag; return;
-    default:
-        category = category_tag::file_tag;
+    case DT_REG:
+        category = category_tag::file_tag; return;
     }
     // Should not reach, but don't crash because of this
     // std::terminate()
+    category = category_tag::file_tag;
 }
 
 dir_dumper::dir_dumper(const string_type& fname, time_t write, dir_dumper* parent)
@@ -113,8 +114,7 @@ const void* dir_dumper::from_raw(const void* src) noexcept {
         case category_tag::fifo_tag:
         case category_tag::link_tag:
         case category_tag::sock_tag:
-            my_files.push_back(new file_dumper());
-            src = my_files.back()->from_raw(src);
+            src = my_files.emplace_back().from_raw(src);
             break;
         case category_tag::dir_tag:
             src = (new dir_dumper(string_type(), time_t(), this))->from_raw(src); 
@@ -158,8 +158,8 @@ void* dir_dumper::to_raw(void* dst) const noexcept {
 
     for (const dir_dumper* pdir : my_dirs)
         dst = pdir->to_raw(dst);
-    for (const file_dumper* file : my_files)
-        dst = file->to_raw(dst);
+    for (const file_dumper& file : my_files)
+        dst = file.to_raw(dst);
     *reinterpret_cast<value_type*>(dst) = orie::dir_pop_tag;
     return reinterpret_cast<value_type*>(dst) + 1;
 }
@@ -175,8 +175,8 @@ size_t dir_dumper::n_bytes() const noexcept {
                  + sizeof(time_t) + sizeof(value_type);
     for (const dir_dumper* pdir : my_dirs)
         res += pdir->n_bytes();
-    for (const file_dumper* file : my_files)
-        res += file->n_bytes();
+    for (const file_dumper& file : my_files)
+        res += file.n_bytes();
     return res;
 }
 

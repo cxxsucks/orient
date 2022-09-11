@@ -46,7 +46,7 @@ private:
     bool valid = false;
     bool is_ignored = false;
     time_t last_write;
-    std::vector<file_dumper*> my_files;
+    std::vector<file_dumper> my_files;
     std::vector<dir_dumper*> my_dirs;
     size_t old_size = 0;
     string_type filename;
@@ -67,7 +67,6 @@ public:
     bool up_to_date(time_t t) const noexcept;
     time_t last_write_time() const noexcept {return last_write;}
 
-    file_dumper* add_file(const strview_type& name, char_t dtype_field);
     dir_dumper* visit_relative_dir(const string_type& rela_path);
     dir_dumper* visit_child_dir(const string_type& file_name);
     dir_dumper* visit_dir(const string_type& file_name);

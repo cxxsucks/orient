@@ -64,7 +64,7 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
         }
 
         if (ent->d_type != DT_DIR) 
-            add_file(ent->d_name, ent->d_type);
+            my_files.emplace_back(string_type(ent->d_name), ent->d_type);
         else
             visit_child_dir(ent->d_name)->valid = true;
     }
@@ -162,12 +162,6 @@ dir_dumper *dir_dumper::visit_dir(const string_type& full_path) {
     if (full_path.find(my_path) != 0)
         return nullptr;
     return visit_relative_dir(full_path.substr(my_path.size()));
-}
-
-// TODO: check repeat
-file_dumper* dir_dumper::add_file(const strview_type& name, char_t dtype) {
-    my_files.push_back(new file_dumper(string_type(name), dtype));
-    return my_files.back();
 }
 
 bool dir_dumper::up_to_date(time_t t) const noexcept {
