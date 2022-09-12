@@ -91,3 +91,17 @@ TEST_F(actionNode, execSubdir) {
     // Output 2 lines
     EXPECT_EQ(2, _do_tests(matcher));
 }
+
+TEST_F(actionNode, delNode) {
+    regex_node matcher;
+    del_node del;
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV(".*[01]")));
+    EXPECT_FALSE(del.next_param(NATIVE_SV("fooBar")));
+    auto cond = matcher & del;
+    ASSERT_EQ(24, _do_tests(cond));
+
+    info.refreshDat();
+    EXPECT_EQ(0, _do_tests(matcher));
+    auto no = ~matcher;
+    EXPECT_EQ(7, _do_tests(no));
+}

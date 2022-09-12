@@ -304,8 +304,9 @@ public:
  */
 class del_node : public fs_node {
     // Saves the directories "ready" to be deleted
-    std::vector<fs_data_iter> _todel_dirs_stack;
+    std::vector<str_t> _todel_dirs_stack;
     std::mutex _todel_mut;
+    bool _dry_run = false;
 
 public:
     double success_rate() const noexcept override { return 0.8; }

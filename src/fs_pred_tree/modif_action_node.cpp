@@ -118,20 +118,51 @@ bool print_node::next_param(sv_t param) {
 }
 
 bool del_node::apply_blocked(fs_data_iter& it) {
-    return false;
+    // When iterator has left the directory whose name stored at the stack top,
+    // all its contents are iterated, and rmdir(2) is safe to be called on it.
+    while (!_todel_dirs_stack.empty() && (
+        // !it.path().starts_with(_todel_dirs_stack.back()))
+           it.path().size() < _todel_dirs_stack.back().size() ||
+           ::memcmp(it.path().data(), _todel_dirs_stack.back().data(), 
+                    _todel_dirs_stack.back().size()) != 0))
+    {
+        if (_dry_run)
+            NATIVE_STDOUT << NATIVE_PATH("DELETE: ") 
+                          << _todel_dirs_stack.back()
+                          << NATIVE_PATH('\n');
+        else
+            ::rmdir(_todel_dirs_stack.back().c_str());
+        _todel_dirs_stack.pop_back();
+    }
+
+    if (it.file_type() == category_tag::dir_tag) {
+        _todel_dirs_stack.push_back(it.path());
+        return true;
+    }
+
+    // Is not a directory, unlink it.
+    bool ret = true;
+    if (_dry_run)
+        NATIVE_STDOUT << NATIVE_PATH("DELETE: ") << it.path()
+                      << NATIVE_PATH('\n');
+    else 
+        ret = 0 == ::unlink(it.path().c_str());
+
+    return ret;
 }
 
 bool del_node::next_param(sv_t param) {
+    if (param == NATIVE_SV("--dryrun")) {
+        _dry_run = true;
+        return true;
+    }
     return false;
 }
 
-del_node::~del_node() noexcept {}
-
-// tribool_bad exec_node::apply(fs_data_iter& it) {
-//     if (_stdin_confirm)
-//         return static_cast<tribool_bad>(apply_blocked(it));
-//     return tribool_bad::Uncertain;
-// }
+del_node::~del_node() noexcept {
+    for (const str_t& path : _todel_dirs_stack) 
+        ::rmdir(path.c_str());
+}
 
 // This implementation sacrificed performance (when constructing cmdline)
 // for clarity and better concurrency, as an entire copy of command line
@@ -217,10 +248,17 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
             // TODO: Error checking
             ::dup2(::open("/dev/null", O_RDONLY), 0); 
         if (_from_subdir && it != it.end())
-            ::chdir(it.parent_path().c_str());
+            if (0 != ::chdir(it.parent_path().c_str())) {
+                ::perror("chdir");
+                return false;
+            }
+
         // Why is `argv` not const in `exec**`?
         ::execvp(argv_to_exec[0], const_cast<char*const*>(argv_to_exec.get()));
-        ::write(pipe_fds[1], &errno, sizeof(int));
+        if (-1 == ::write(pipe_fds[1], &errno, sizeof(int))) {
+            ::perror("write");
+            ::_exit(1);
+        }
         ::_exit(0);
 
     default: {
