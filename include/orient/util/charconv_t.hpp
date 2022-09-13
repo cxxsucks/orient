@@ -9,10 +9,10 @@ namespace orie {
 
 /** @brief Copy at most nmemb null-terminated characters of arbitrary type to dest
  * @tparam des_t a type assignable from type @c src_t
- * @param [out] dest at least nmemb pre-allocated buffer
+ * @param [out] dest at least @p nmemb @em +1 bytes pre-allocated buffer
  * @param [in] src string of any length. Can be nullptr, in which case
  * nothing is copied
- * @param nmemb Maximum characters copied
+ * @param nmemb Maximum characters copied, @em not including terminating NULL.
  * @return dest */
 template<class des_t, class src_t, typename = std::enable_if_t<
     std::is_assignable_v<des_t&, src_t> > >
@@ -29,11 +29,17 @@ des_t* strncpy(des_t* dest, const src_t* src, size_t nmemb)
 
 template<> inline
 char* strncpy<char, char>(char* d, const char* s, size_t n) noexcept {
-    return ::strncpy(d,s,n);
+    size_t size_cp = ::strnlen(s, n);
+    ::memcpy(d, s, size_cp);
+    d[size_cp] = '\0';
+    return d;
 }
 template<> inline
 wchar_t* strncpy<wchar_t, wchar_t>(wchar_t* d, const wchar_t* s, size_t n) noexcept {
-    return ::wcsncpy(d,s,n);
+    size_t size_cp = ::wcsnlen(s, n);
+    ::memcpy(d, s, size_cp * sizeof(wchar_t));
+    d[size_cp] = L'\0';
+    return d;
 }
 
 /** @brief Copy null-terminated string of arbitrary type to dest

@@ -42,9 +42,14 @@ app& app::update_db(str_t path) {
 }
 
     for (const str_t& p : _ignored_paths) {
-        auto& to_dump = dump_worker.visit_dir(p);
-        to_dump.clear();
-        to_dump.set_ignored(true);
+        auto* to_dump = dump_worker.visit_dir(p);
+        if (!to_dump) {
+            NATIVE_STDERR << NATIVE_PATH("Invalid pruned path:")
+                << p << NATIVE_PATH('\n');
+            continue;
+        }
+        to_dump->clear();
+        to_dump->set_ignored(true);
     }
     // All root paths must be pruned along with ignored ones,
     // then sorted from the deepest to the shallowest, to prevent
@@ -54,9 +59,14 @@ app& app::update_db(str_t path) {
             return a.first.size() > b.first.size();
     });
     for (const auto& p : _root_paths) {
-        auto& to_dump = dump_worker.visit_dir(p.first);
-        to_dump.from_fs(p.second);
-        to_dump.set_ignored(true);
+        auto* to_dump = dump_worker.visit_dir(p.first);
+        if (!to_dump) {
+            NATIVE_STDERR << NATIVE_PATH("Invalid root path:")
+                << p.first << NATIVE_PATH('\n');
+            continue;
+        }
+        to_dump->from_fs(p.second);
+        to_dump->set_ignored(true);
     }
 
     // Write updated data back to `data_dumped`

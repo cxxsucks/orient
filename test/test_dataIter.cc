@@ -82,7 +82,7 @@ TEST_F(dataIter, updir) {
 
             auto tmp = it; tmp.updir();
             EXPECT_EQ(tmp.record().file_name_view(), NATIVE_PATH("dirA"));
-            EXPECT_EQ(tmp.parent_path(), tmpPath.native() + orie::seperator);
+            EXPECT_EQ(tmp.parent_path(), tmpPath.native() + orie::separator);
         }
 
         if (it.record().file_name_view() == NATIVE_PATH("fileBAA")) {

@@ -18,8 +18,8 @@ public:
     using category_tag = orie::category_tag;
     using strview_type = std::basic_string_view<char_type>;
 private:
-    const void* viewing;
-    size_t cur_pos;
+    const void* _viewing;
+    size_t _cur_pos;
 
 public:
     //! @brief Move to the next entry 
@@ -43,19 +43,19 @@ public:
     time_t dir_mtime() const noexcept;
 
     // Get internal position.
-    size_t pos() const noexcept {return cur_pos;}
+    size_t pos() const noexcept {return _cur_pos;}
     // Compare equality of two records.
     bool operator==(const fs_data_record& rhs) const noexcept {
-        return rhs.viewing == viewing && rhs.cur_pos == cur_pos;
+        return rhs._viewing == _viewing && rhs._cur_pos == _cur_pos;
     }
     // Compare inequality of two records.
     bool operator!=(const fs_data_record& rhs) const noexcept {
-        return rhs.viewing != viewing || rhs.cur_pos != cur_pos;
+        return rhs._viewing != _viewing || rhs._cur_pos != _cur_pos;
     }
 
     // Construct a record. This simply assigns the two parameters
     fs_data_record(const void* view = nullptr, size_t start_at = 0) noexcept
-        : viewing(view), cur_pos(start_at) {}
+        : _viewing(view), _cur_pos(start_at) {}
     ~fs_data_record() noexcept = default;
 };
 
@@ -86,14 +86,14 @@ private:
         enable, all_disable, temp_disable 
     };
 
-    fs_data_record cur_rec;
-    std::vector<fs_data_record> sub_recs;
-    ptrdiff_t push_count;
-    string_type prefix;
-    has_recur_ recur;
+    fs_data_record _cur_record;
+    std::vector<fs_data_record> _sub_recs;
+    ptrdiff_t _push_count;
+    string_type _prefix;
+    has_recur_ _recur;
 
-    mutable std::optional<string_type> opt_fullpath;
-    mutable std::optional<orie::stat_t> opt_stat;
+    mutable std::optional<string_type> _opt_fullpath;
+    mutable std::optional<orie::stat_t> _opt_stat;
 
     int _fetch_stat() const noexcept;
 public:
@@ -116,13 +116,13 @@ public:
 
     // Set whether the iterator recursively delves into child directories. 
     void set_recursive(bool enable) noexcept {
-        recur = enable ? has_recur_::enable : has_recur_::all_disable;
+        _recur = enable ? has_recur_::enable : has_recur_::all_disable;
     }
     // Skip traversal into current directory. Has no effect if current entry is
     // not a directory.
     void disable_pending_recursion(bool enable = true) noexcept {
-        if (recur != has_recur_::all_disable && file_type() == orie::dir_tag)
-            recur = enable ? has_recur_::temp_disable : has_recur_::enable;
+        if (_recur != has_recur_::all_disable && file_type() == orie::dir_tag)
+            _recur = enable ? has_recur_::temp_disable : has_recur_::enable;
     }
 
     //! @brief Get a reference to current full path string.
@@ -134,7 +134,7 @@ public:
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
-    const string_type& parent_path() const noexcept {return prefix;}
+    const string_type& parent_path() const noexcept {return _prefix;}
     //! @brief Whether the directory is empty. @c true for non-dirs;
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     bool empty_dir() const noexcept;
@@ -164,7 +164,7 @@ public:
     size_t depth() const noexcept;
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()
-    category_tag file_type() const noexcept { return cur_rec.file_type(); }
+    category_tag file_type() const noexcept { return _cur_record.file_type(); }
 
     // Simply return a copy of *this.
     fs_data_iter begin() const {return *this;}

@@ -44,12 +44,12 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
 
     if (orie::stat(path_slash.c_str(), &st) != 0)
         return clear();
-    if (is_ignored)
+    if (_is_ignored)
         return;
     if (up_to_date(st.st_mtime))
         goto updated;
 
-    last_write = st.st_mtime;
+    _last_write = st.st_mtime;
     clear(1); // Clear all donon-dir files
     if (!(pd = orie::opendir(path_slash.c_str())))
         return;
@@ -64,17 +64,17 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
         }
 
         if (ent->d_type != DT_DIR) 
-            my_files.emplace_back(string_type(ent->d_name), ent->d_type);
+            _sub_files.emplace_back(string_type(ent->d_name), ent->d_type);
         else
-            visit_child_dir(ent->d_name)->valid = true;
+            visit_child_dir(ent->d_name)->_valid = true;
     }
     orie::closedir(pd);
     clear(8);
 
 updated:
     std::vector<std::thread> workers;
-    for (dir_dumper* b : my_dirs) {
-        (path_slash += seperator) += b->filename;
+    for (dir_dumper* b : _sub_dirs) {
+        (path_slash += separator) += b->_filename;
         if (idle > 0) {
             workers.emplace_back([b, path_slash, &idle] () {
                 --idle;
@@ -94,8 +94,8 @@ updated:
 void dir_dumper::from_fs(bool multithreaded) {
     // value_type* b = new value_type[32768];
     string_type fullp = path(~unsigned());
-    if (fullp.empty() || fullp.back() != orie::seperator)
-        fullp.push_back(orie::seperator);
+    if (fullp.empty() || fullp.back() != orie::separator)
+        fullp.push_back(orie::separator);
     std::atomic<ptrdiff_t> th_cnt = multithreaded ? 
         std::thread::hardware_concurrency() : 0;
     from_fs_impl(fullp, th_cnt);
@@ -105,37 +105,37 @@ void dir_dumper::from_fs(bool multithreaded) {
 }
 
 dir_dumper *dir_dumper::parent(unsigned depth) const noexcept {
-    dir_dumper* res = parent_dir;
+    dir_dumper* res = _parent_dir;
 
-    while (--depth && res->parent_dir)
-        res = res->parent_dir;
+    while (--depth && res->_parent_dir)
+        res = res->_parent_dir;
     return res;
 }
 
 unsigned int dir_dumper::depth(dir_dumper const *relative_to) const noexcept {
     unsigned res = 0;
     const dir_dumper* cur = this;
-    while (cur != relative_to && cur->parent_dir)
-        res++, cur = cur->parent_dir;
+    while (cur != relative_to && cur->_parent_dir)
+        res++, cur = cur->_parent_dir;
     if (cur != relative_to && relative_to)
         return ~unsigned();
     return res;
 }
 
 file_dumper::string_type dir_dumper::path(unsigned depth) const {
-    if (!depth || !parent_dir)
-        return filename;
-    return parent_dir->path(--depth) + seperator + filename;
+    if (!depth || !_parent_dir)
+        return _filename;
+    return _parent_dir->path(--depth) + separator + _filename;
 }
 
 dir_dumper *dir_dumper::visit_child_dir(const string_type &file_name) {
     if (file_name.empty() || file_name == NATIVE_PATH("."))
         return this;
     else if (file_name == NATIVE_PATH(".."))
-        return parent_dir;
-    auto diter = std::find_if(my_dirs.cbegin(), my_dirs.cend(),
-        [&file_name](const dir_dumper* p) {return p && p->filename == file_name; });
-    if (diter != my_dirs.cend())
+        return _parent_dir;
+    auto diter = std::find_if(_sub_dirs.cbegin(), _sub_dirs.cend(),
+        [&file_name](const dir_dumper* p) {return p && p->_filename == file_name; });
+    if (diter != _sub_dirs.cend())
         return *diter;
     // auto fiter = std::find_if(my_files.cbegin(), my_files.cend(),
     //     [&file_name](const file_dumper* p) {return p && p->filename == file_name; });
@@ -147,7 +147,7 @@ dir_dumper *dir_dumper::visit_child_dir(const string_type &file_name) {
 }
 
 dir_dumper *dir_dumper::visit_relative_dir(const string_type &rela_path) {
-    constexpr static value_type separr[2] = {orie::seperator};
+    constexpr static value_type separr[2] = {orie::separator};
     auto cont = orie::str_split<std::vector<string_type>, value_type>(rela_path, separr);
     dir_dumper* visiting = this;
 
@@ -165,9 +165,9 @@ dir_dumper *dir_dumper::visit_dir(const string_type& full_path) {
 }
 
 bool dir_dumper::up_to_date(time_t t) const noexcept {
-    if (is_ignored)
+    if (_is_ignored)
         return true;
-    else return t == last_write;
+    else return t == _last_write;
 }
 
 }

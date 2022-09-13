@@ -34,14 +34,14 @@ struct dumperFiles : public ::testing::Test {
     }
 
     orie::category_tag fileCateg(const orie::str_t& file_name) {
-        auto diter = std::find_if(dmp->my_dirs.cbegin(), dmp->my_dirs.cend(),
-            [&file_name](const dir_dumper* p) {return p && p->filename == file_name; });
-        if (diter != dmp->my_dirs.cend())
+        auto diter = std::find_if(dmp->_sub_dirs.cbegin(), dmp->_sub_dirs.cend(),
+            [&file_name](const dir_dumper* p) {return p && p->_filename == file_name; });
+        if (diter != dmp->_sub_dirs.cend())
             return orie::dir_tag;
-        auto fiter = std::find_if(dmp->my_files.cbegin(), dmp->my_files.cend(),
-            [&file_name](const file_dumper& p) {return p.filename == file_name; });
-        if (fiter != dmp->my_files.cend())
-            return fiter->category;
+        auto fiter = std::find_if(dmp->_sub_files.cbegin(), dmp->_sub_files.cend(),
+            [&file_name](const file_dumper& p) {return p._filename == file_name; });
+        if (fiter != dmp->_sub_files.cend())
+            return fiter->_category;
         return orie::unknown_tag;
     }
 

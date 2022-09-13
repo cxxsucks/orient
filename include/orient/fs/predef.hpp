@@ -41,7 +41,7 @@ namespace orie {
     using str_t = std::wstring;
     using char_t = wchar_t;
 
-    constexpr char_t seperator = L'\\';
+    constexpr char_t separator = L'\\';
     constexpr char_t reverse_sep = L'/';
     constexpr size_t path_max = 2048;
 
@@ -58,7 +58,7 @@ namespace orie {
     using sv_t = std::string_view;
     using str_t = std::string;
     using char_t = char;
-    constexpr char_t seperator = '/';
+    constexpr char_t separator = '/';
     constexpr char_t reverse_sep = '\\';
     constexpr size_t path_max = PATH_MAX;
 
@@ -147,7 +147,7 @@ namespace orie {
         DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv, nullptr);
         if (saved > _buf_len)
             return nullptr;
-        if (resolv[saved - 1] == orie::seperator)
+        if (resolv[saved - 1] == orie::separator)
             resolv[saved - 1] = '\0';
         return resolv;
     }

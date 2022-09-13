@@ -81,10 +81,10 @@ uint64_t num_node::__path_to_num(sv_t path) const noexcept {
     case stamp::GID: return stbuf.st_ino;
     case stamp::INODE: return stbuf.st_ino; 
     case stamp::DEPTH:
-        return std::count(path.begin(), path.end(), orie::seperator);
+        return std::count(path.begin(), path.end(), orie::separator);
         // size_t cnt = 0; 
         // for (const char_t c : path)
-        //     if (c == orie::seperator)
+        //     if (c == orie::separator)
         //         ++cnt;
         // return cnt;
     case stamp::SIZE:
