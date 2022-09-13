@@ -77,12 +77,20 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
         return new content_regex_node;
 
     // action
-    // 41~46 print_node 51 del_node not implemented
+    case 41: return new print_node(true, '\n');
+    case 42: throw std::logic_error("-printf is not implemented :(");
+    case 43: return new print_node(true, '\0');
+    case 44: return new print_node(false, '\n');
+    case 45: throw std::logic_error("-fprintf is not implemented :(");
+    case 46: return new print_node(false, '\0');
     case 47: return new exec_node(true, false);
     case 48: return new exec_node(true, true);
     case 49: return new exec_node(false, false);
     case 50: return new exec_node(false, true);
+    case 51: return new del_node;
     case 52: return new prune_node;
+    case 53: throw std::logic_error("-ls is not implemented :(");
+    case 54: throw std::logic_error("-fls is not implemented :(");
     }
     return nullptr;
 }

@@ -223,9 +223,9 @@ struct prune_node : public fs_node {
 
 class print_node : public fs_node {
     // Stream for -fprint
-    std::shared_ptr<std::basic_ofstream<char_t>> _ofs;
-    // Output mutex
-    std::mutex _out_mut;
+    std::shared_ptr<std::basic_ostream<char_t>> _ofs;
+    // FIXME: Over-locking; use shared_ptr<pair<ostream, mutex> instead
+    static std::mutex _out_mut;
     // Format string
     str_t _format;
 
@@ -241,15 +241,12 @@ public:
     bool next_param(sv_t param) override;
 
     // Ctor used in -print -print0 -fprint -fprint0
-    // Set _format to "%p" + split, _ofs to nullptr
+    // Set _format to "%p" + split
     // Dest file is set by next_param.
-    print_node(char_t split) : _format(str_t(NATIVE_PATH("%p")) + split) {}
+    print_node(bool std_out, char_t split);
     // Ctor used in -printf -fprintf
     // Dest file AND format are set by next_param.
-    print_node() = default;
-    print_node(const print_node& r) 
-        : _ofs(r._ofs), _format(r._format) {}
-    print_node& operator=(const print_node& r);
+    print_node(bool std_out);
 };
 
 class exec_node : public fs_node {

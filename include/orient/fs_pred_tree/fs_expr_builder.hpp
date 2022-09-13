@@ -26,11 +26,12 @@ class fs_expr_builder : public builder<fs_data_iter, sv_t>
         NATIVE_SV("-nogroup"),  NATIVE_SV("-nouser"),   // 35 36
         NATIVE_SV("-content-strstr"),   NATIVE_SV("-content-regex"),          // 37 38
         NATIVE_SV("-updir"),    NATIVE_SV("-downdir"),  // 39 40
-        NATIVE_SV("-print"),    NATIVE_SV("-printf"),   NATIVE_SV("-ls"),     // 41 42 43
-        NATIVE_SV("-fprint"),   NATIVE_SV("-fprintf"),  NATIVE_SV("-fls"),    // 44 45 46
+        NATIVE_SV("-print"),    NATIVE_SV("-printf"),   NATIVE_SV("-print0"), // 41 42 43
+        NATIVE_SV("-fprint"),   NATIVE_SV("-fprintf"),  NATIVE_SV("-fprint0"),// 44 45 46
         NATIVE_SV("-ok"),       NATIVE_SV("-okdir"),    // 47 48
         NATIVE_SV("-exec"),     NATIVE_SV("-execdir"),  // 49 50
         NATIVE_SV("-delete"),   NATIVE_SV("-prune"),    // 51 52
+        NATIVE_SV("-ls"),       NATIVE_SV("-fls"),      // 53 54
     };
 
     static constexpr size_t _at_builtin_cmds(sv_t sv);

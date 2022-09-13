@@ -105,3 +105,28 @@ TEST_F(actionNode, delNode) {
     auto no = ~matcher;
     EXPECT_EQ(7, _do_tests(no));
 }
+
+TEST_F(actionNode, fprint0) {
+    print_node print(false, '\0'); // -fprint0
+    orie::str_t out_path = (info.tmpPath / "a.out").native();
+    ASSERT_TRUE(print.next_param(out_path));
+    EXPECT_FALSE(print.next_param(NATIVE_SV("fooBar")));
+    EXPECT_EQ(31, _do_tests(print));
+
+    // Close the printing stream by resetting the node
+    print = print_node(false, '\n');  
+    ::chmod(out_path.c_str(), 0444); // -r--r--r--
+    ASSERT_THROW(print.next_param(out_path), std::runtime_error);
+    ASSERT_THROW(_do_tests(print), uninitialized_node); // No file opened
+
+    // There should be 31 null separators in output file
+    orie::str_t out_content;
+    std::getline(std::basic_ifstream<orie::char_t>(
+        out_path, std::ios_base::binary
+    ), out_content);
+    EXPECT_EQ(31, std::count(out_content.begin(), out_content.end(), '\0'));
+
+    // FIXME: no write error when write to file fails
+    // ASSERT_TRUE(print.next_param("/dev/full"));
+    // EXPECT_EQ(0, _do_tests(print));
+}

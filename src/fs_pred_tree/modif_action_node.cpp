@@ -109,11 +109,43 @@ bool updir_node::apply_blocked(fs_data_iter& it) {
     return ret;
 }
 
+std::mutex print_node::_out_mut = std::mutex();
+print_node::print_node(bool std_out, char_t split) 
+    : _format(str_t(NATIVE_PATH("%p")) + split) 
+{
+    if (std_out)
+        _ofs.reset(&NATIVE_STDOUT, [](auto*){});
+}
+
+print_node::print_node(bool std_out) {
+    if (std_out)
+        _ofs.reset(&NATIVE_STDOUT, [](auto*){});
+}
+
 bool print_node::apply_blocked(fs_data_iter& it) {
-    return false;
+    if (_ofs == nullptr)
+        throw uninitialized_node(NATIVE_SV("-fprint missing filename"));
+    if (_format.empty())
+        throw uninitialized_node(NATIVE_SV("-printf missing format"));
+    // TODO: -printf and -fprintf
+    std::lock_guard __lck(_out_mut);
+    *_ofs << it.path() << _format.back();
+    return _ofs->good();
 }
 
 bool print_node::next_param(sv_t param) {
+    if (_ofs == nullptr) {
+        _ofs.reset(new std::basic_ofstream<char_t>(str_t(param)));
+        if (!_ofs->good()) {
+            _ofs.reset();
+            throw std::runtime_error(NATIVE_PATH("Open failed: ") + str_t(param));
+        }
+        return true;
+    }
+    if (_format.empty()) {
+        _format = param;
+        return true;
+    }
     return false;
 }
 
@@ -331,13 +363,13 @@ exec_node& exec_node::operator=(const exec_node& r) {
     return *this;
 }
 
-print_node& print_node::operator=(const print_node& r) {
+/* print_node& print_node::operator=(const print_node& r) {
     if (this != &r) {
         this->~print_node();
         new (this) print_node(r);
     }
     return *this;
-}
+} */
 
 updir_node::updir_node(const updir_node &r)
     : _last_done_q(r._last_done_q), _last_idx(r._last_idx) {}
