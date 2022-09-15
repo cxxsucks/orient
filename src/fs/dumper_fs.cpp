@@ -1,10 +1,9 @@
 #include <orient/fs/dumper.hpp>
 #include <orient/util/fifo_thpool.hpp>
 #include <orient/util/charconv_t.hpp>
+#include <orient/util/fifo_thpool.hpp>
 
 #include <algorithm>
-#include <thread>
-#include <atomic>
 
 namespace orie {
 namespace dmp {
@@ -35,7 +34,7 @@ char_t dir_dumper::__handle_unknown_dtype(const char_t* path) noexcept {
 }
 
 void dir_dumper::from_fs_impl(str_t& path_slash,
-                              std::atomic<ptrdiff_t>& idle) noexcept 
+    std::atomic<ptrdiff_t>& idle, fifo_thpool& pool) noexcept 
 {
     orie::stat_t st;
     orie::dirent_t* ent;
@@ -72,36 +71,33 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
     clear(8);
 
 updated:
-    std::vector<std::thread> workers;
     for (dir_dumper* b : _sub_dirs) {
         (path_slash += separator) += b->_filename;
         if (idle > 0) {
-            workers.emplace_back([b, path_slash, &idle] () {
-                --idle;
+            --idle;
+            pool.enqueue([b, path_slash, &idle, &pool] () {
                 str_t path_cpy(path_slash);
-                b->from_fs_impl(path_cpy, idle);
+                b->from_fs_impl(path_cpy, idle, pool);
                 ++idle;
             });
         } else {
-            b->from_fs_impl(path_slash, idle);
+            b->from_fs_impl(path_slash, idle, pool);
         }
         path_slash.erase(len_orig);
     }
-    for (auto& j : workers)
-        j.join();
 }
 
-void dir_dumper::from_fs(bool multithreaded) {
-    // value_type* b = new value_type[32768];
+void dir_dumper::from_fs(fifo_thpool& pool, bool multithreaded) {
     string_type fullp = path(~unsigned());
     if (fullp.empty() || fullp.back() != orie::separator)
         fullp.push_back(orie::separator);
-    std::atomic<ptrdiff_t> th_cnt = multithreaded ? 
-        std::thread::hardware_concurrency() : 0;
-    from_fs_impl(fullp, th_cnt);
-    // orie::strncpy(b, fullp.c_str(), 16384);
-    // from_fs_impl(b, b + 16384);
-    // delete []b;
+    std::atomic<ptrdiff_t> idle = multithreaded ?  pool.n_workers() : 0;
+    ptrdiff_t thread_cnt = idle;
+    from_fs_impl(fullp, idle, pool);
+    // Since the time dumping filesystem is measured in seconds,
+    // actively polling once per 10ms is acceptable
+    while (idle != thread_cnt)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 }
 
 dir_dumper *dir_dumper::parent(unsigned depth) const noexcept {

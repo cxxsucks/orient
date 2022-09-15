@@ -6,6 +6,7 @@
 
 #include <orient/fs/dumper.hpp>
 #include <orient/fs/data_iter.hpp>
+#include <orient/util/fifo_thpool.hpp>
 
 using namespace std::filesystem;
 using namespace orie::dmp;
@@ -15,6 +16,7 @@ using orie::fs_data_iter;
 #define sleep(sec) Sleep(sec * 1000)
 #endif
 
+inline orie::fifo_thpool __dummy_pool(0);
 struct ABunchOfDirs {
     path tmpPath;
     std::unique_ptr<dir_dumper> dmp = nullptr;
@@ -47,7 +49,7 @@ struct ABunchOfDirs {
     void refreshDat() {
         dat.reset();
         dmp.reset(new dir_dumper(tmpPath.native(), 0, nullptr));
-        dmp->from_fs();
+        dmp->from_fs(__dummy_pool);
         if (dmp->n_bytes() > 20) {
             dat.reset(new int8_t[dmp->n_bytes() + 1]);
             dat[dmp->n_bytes()] = 0;

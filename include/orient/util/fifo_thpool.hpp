@@ -21,6 +21,8 @@ public:
 	std::future<typename std::invoke_result<F, Args...>::type> 
 	enqueue(F&& f, Args&&... args);
 
+    size_t n_workers() const noexcept { return workers.size(); }
+
     ~fifo_thpool();
 
 private:

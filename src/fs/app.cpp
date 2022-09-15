@@ -65,7 +65,7 @@ app& app::update_db(str_t path) {
                 << p.first << NATIVE_PATH('\n');
             continue;
         }
-        to_dump->from_fs(p.second);
+        to_dump->from_fs(_pool, p.second);
         to_dump->set_ignored(true);
     }
 

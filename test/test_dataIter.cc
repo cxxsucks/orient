@@ -3,6 +3,7 @@
 #include <fstream>
 #include <orient/fs/dumper.hpp>
 #include <orient/fs/data_iter.hpp>
+#include <orient/util/fifo_thpool.hpp>
 
 using namespace std::filesystem;
 using orie::dmp::dir_dumper;
@@ -12,11 +13,11 @@ using orie::fs_data_iter;
 #define sleep(sec) Sleep(sec * 1000)
 #endif
 
+inline orie::fifo_thpool __dummy_pool(0);
 struct dataIter : public ::testing::Test {
     path tmpPath;
     dir_dumper* dmp = nullptr;
     int8_t* dat = nullptr;
-
     bool ok = true;
 
     dataIter() {
@@ -36,7 +37,7 @@ struct dataIter : public ::testing::Test {
 
         if (ok) {
             dmp = new dir_dumper(tmpPath.native(), 0, nullptr);
-            dmp->from_fs();
+            dmp->from_fs(__dummy_pool);
             if (dmp->n_bytes() > 20) {
                 dat = new int8_t[dmp->n_bytes() + 1];
                 dat[dmp->n_bytes()] = 0;

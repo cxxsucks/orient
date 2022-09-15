@@ -10,8 +10,9 @@
 #endif
 
 namespace orie {
-namespace dmp {
+class fifo_thpool;
 
+namespace dmp {
 class dir_dumper;
 
 struct file_dumper {
@@ -52,13 +53,14 @@ private:
     string_type _filename;
     dir_dumper* _parent_dir;
 
-    void from_fs_impl(str_t& up_path, std::atomic<ptrdiff_t>& idle) noexcept;
+    void from_fs_impl(str_t& up_path, std::atomic<ptrdiff_t>& idle,
+                      fifo_thpool& pool) noexcept;
     // readdir(3) suggests that all apps shall handle DT_UNKNOWN when iterating dirs
     // Handling DT_UNKNOWN is NOT TESTED! Won't be called on most fs.
     static char_t __handle_unknown_dtype(const char_t* fullpath) noexcept;
 
 public:
-    void from_fs(bool multithreaded = false);
+    void from_fs(fifo_thpool& pool, bool multithreaded = false);
     void set_ignored(bool enabled = true) noexcept  {_is_ignored = enabled;}
     bool ignored() const noexcept {return _is_ignored;}
     // 1 files 2 directories 3 all
