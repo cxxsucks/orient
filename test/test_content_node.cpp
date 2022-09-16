@@ -16,7 +16,7 @@ struct contentNode : public ::testing::Test {
 
         async_job<fs_data_iter, orie::sv_t> job(
             iter, iter.end(), matcher, pool,
-            [&res] (fs_data_iter&) { ++res; }, false
+            [&res] (fs_data_iter&) { ++res; }
         );
         job.join();
         return res;

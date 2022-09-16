@@ -16,7 +16,7 @@ class app {
     std::vector<str_t> _ignored_paths,
                        _start_paths;
     std::vector<std::pair<str_t, bool>> _root_paths;
-    std::unique_ptr<std::byte[]> _data_dumped;
+    std::shared_ptr<std::byte[]> _data_dumped;
 
     fifo_thpool& _pool;
     std::unique_ptr<std::thread> _auto_update_thread;
@@ -68,12 +68,24 @@ public:
     // Returns whether the config path is valid
     operator bool() const noexcept { return _conf_path_valid; }
 
+    // To keep jobs safe after updatedb, which resets dumped data in
+    // app class, shared pointer to originally dumped data is stored
+    // along with the job itself.
+    typedef std::vector<std::pair<
+        std::shared_ptr<std::byte[]>, 
+        // Use unique_ptr simply because async_job is not movable
+        std::unique_ptr<pred_tree::async_job<fs_data_iter, sv_t>>
+    >> job_list;
+    template <class callback_t>
+    void run(fsearch_expr& expr, callback_t callback);
+    template <class callback_t> 
+    job_list get_jobs(fsearch_expr& expr, callback_t callback,
+                      int min_result_sync = 2147483647,
+                      int min_result_async = 2147483647);
     template <class callback_t, class Rep, class Period> 
     void run_pooled(fsearch_expr& expr, callback_t callback,
                     const std::chrono::duration<Rep, Period>& timeout = 
                     std::chrono::hours(1));
-    template <class callback_t>
-    void run(fsearch_expr& expr, callback_t callback);
 
     app(fifo_thpool& pool);
     app(app&&);
@@ -98,14 +110,14 @@ void app::run(fsearch_expr& expr, cb_t callback) {
     }
 }
 
-template <class callback_t, class Rep, class Period> 
-void app::run_pooled(fsearch_expr& expr, callback_t callback,
-                     const std::chrono::duration<Rep, Period>& timeout)
+template <class callback_t> 
+app::job_list app::get_jobs(fsearch_expr& expr, callback_t callback,
+                            int min_sync, int min_async) 
 {
-    std::vector<
-        std::unique_ptr< pred_tree::async_job<fs_data_iter, sv_t>>
-    > jobs;
+    job_list jobs;
     jobs.reserve(_start_paths.size());
+    // A lock must be introduced or an updatedb may alter data_dumped between
+    // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
     std::shared_lock __lck(_data_dumped_mut);
 
     // Construct jobs
@@ -114,14 +126,25 @@ void app::run_pooled(fsearch_expr& expr, callback_t callback,
         if (it == it.end()) // Invalid starting path
             continue;
 
-        jobs.emplace_back(std::make_unique<pred_tree::async_job<fs_data_iter, sv_t>>(
-            it, it.end(), expr, _pool, callback, false
-        ))->cancel(timeout);
-        // Would quickly finish after timeout reached
+        jobs.emplace_back(
+            _data_dumped, // std::shared_ptr is internally thread safe
+            std::make_unique<pred_tree::async_job<fs_data_iter, sv_t>>(
+                it, it.end(), expr, _pool, callback, min_sync, min_async)
+        );
     }
+    return jobs;
+}
 
+template <class callback_t, class Rep, class Period> 
+void app::run_pooled(fsearch_expr& expr, callback_t callback,
+                     const std::chrono::duration<Rep, Period>& timeout)
+{
+    job_list jobs = get_jobs(expr, callback);
+    // Would quickly finish after timeout reached
     for (auto& j : jobs)
-        j->join();
+        j.second->cancel(timeout);
+    for (auto& j : jobs)
+        j.second->join();
 }
 
 template <class Rep, class Period>
