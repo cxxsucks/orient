@@ -21,7 +21,7 @@ class app {
     fifo_thpool& _pool;
     std::unique_ptr<std::thread> _auto_update_thread;
     std::shared_mutex _data_dumped_mut;
-    std::condition_variable _auto_update_cv;
+    std::condition_variable_any _auto_update_cv;
 
 public:
     // Magic number of database file. 32bit and 64bit versions are different.
@@ -39,16 +39,27 @@ public:
     template <class Rep, class Period>
     app& start_auto_update(
         const std::chrono::duration<Rep, Period>& interval);
+    // CANNOT BE CALLED SIMUTANEOUSLY ON MULTIPLE THREADS!
     app& stop_auto_update();
 
-    // Set pruned paths, i.e., paths that are skipped
-    // THREAD UNSAFE
+    // Set pruned paths, i.e., paths that are skipped; thread safe
     app& add_ignored_path(str_t path);
     app& erase_ignored_path(const str_t& path);
     app& add_root_path(str_t path, bool multithreaded = false);
     app& erase_root_path(const str_t& path);
     app& add_start_path(str_t path);
     app& erase_start_path(const str_t& path);
+
+    // Getters
+    const str_t& db_path() const noexcept { return _db_path; }
+    const str_t& conf_path() const noexcept { return _conf_path; }
+
+    const std::vector<str_t>& 
+    ignored_paths() const noexcept { return _ignored_paths; }
+    const std::vector<str_t>& 
+    start_paths() const noexcept { return _start_paths; }
+    const std::vector<std::pair<str_t, bool>>&
+    root_paths() const noexcept { return _root_paths; }
 
     // Read or write config files. Use the most recently passed
     // parameter if it is empty. THREAD UNSAFE
@@ -69,14 +80,12 @@ public:
     app& operator=(app&&);
     app(const app&) = delete;
     app& operator=(const app&) = delete;
-    ~app() { 
-        stop_auto_update(); 
-        std::unique_lock __lck(_data_dumped_mut);
-    }
+    ~app();
 };
 
 template <class cb_t>
 void app::run(fsearch_expr& expr, cb_t callback) {
+    std::shared_lock __lck(_data_dumped_mut);
     for (sv_t p : _start_paths) {
         fs_data_iter it(_data_dumped.get(), p);
         if (it == it.end())
@@ -126,10 +135,11 @@ app& app::start_auto_update(
 
     _auto_update_thread.reset(new std::thread( [this, interval] () {
         while (!_auto_update_stopped) {
+            read_conf();
             update_db();
             std::unique_lock __lck(_data_dumped_mut);
-            if (!_auto_update_stopped)
-                _auto_update_cv.wait_for(__lck, interval);
+            _auto_update_cv.wait_for(__lck, interval, 
+                [this] () {return _auto_update_stopped;});
         }
     }));
     return *this;

@@ -133,6 +133,19 @@ TEST_F(orieApp, confFile) {
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
 }
 
+TEST_F(orieApp, autoUpdate) {
+    _app.start_auto_update(std::chrono::milliseconds(80));
+    std::ofstream(info().tmpPath / "testConf.txt") << "aaa";
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    ASSERT_EQ(1, _do_tests(NATIVE_SV("-name testConf.txt")));
+
+    // Corner case: stop immediately after start
+    // No deadlock or segfault shall happen
+    _app.stop_auto_update()
+        .start_auto_update(std::chrono::hours(9999))
+        .stop_auto_update();
+}
+
 #ifdef __unix
 TEST_F(orieApp, osDefault) {
     // Erase existing config
