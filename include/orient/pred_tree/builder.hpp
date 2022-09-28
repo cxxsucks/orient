@@ -75,6 +75,7 @@ public:
         par_lvl = 0;
         delete adding; adding = nullptr;
         next_is_bridge = false;
+        last_is_par_enter = false;
     }
 
     builder() noexcept = default;
@@ -89,6 +90,8 @@ public:
 // It will be asserted multiple times
 private:
     bool next_is_bridge = false;
+    // For empty parentheses detection
+    bool last_is_par_enter = false;
     uint32_t par_lvl = 0;
     node_type* adding = nullptr;
     node_hint adding_hint;
@@ -157,6 +160,7 @@ private:
         // Ex: ... -a ( ... ) ... Ex2: ( ... ) ...
         if (!_place_bridge_fallback()) 
             throw missing_bridge(sv_t(lpar_cstr));
+        last_is_par_enter = true;
         ++par_lvl; 
     }
 
@@ -167,7 +171,7 @@ private:
         if (par_lvl == ~uint32_t()) // -1
 			throw orie::pred_tree::parentheses_mismatch(false);
         // ERROR empty pair: ... ( ) ...
-        if (!bridge_stack.empty() && (bridge_stack.back().second >> 32) <= par_lvl)
+        if (last_is_par_enter)
 			throw orie::pred_tree::empty_parentheses();
         // ERROR: ... ( ... -a ) ... ERROR: ... ( ... -a ! ) ...
         // ERROR(bridge fallback implicitly added): ... ( ... ! ) ...
@@ -185,6 +189,7 @@ private:
     void _place_adding(sv_t param) {
         if (adding == nullptr)
             return;
+        last_is_par_enter = false;
 
         switch (adding_hint) {
         case node_hint::MODIFIER:

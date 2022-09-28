@@ -18,7 +18,12 @@ class app {
     std::vector<std::pair<str_t, bool>> _root_paths;
     std::shared_ptr<std::byte[]> _data_dumped;
 
+public:
+    // Since _pool is a reference which cannot be modified to point to
+    // another object, instead of a getter, it is made public.
     fifo_thpool& _pool;
+
+private:
     std::unique_ptr<std::thread> _auto_update_thread;
     std::shared_mutex _data_dumped_mut;
     std::condition_variable_any _auto_update_cv;

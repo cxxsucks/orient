@@ -24,13 +24,15 @@ TEST(builder, pred) {
         *cmd2[] = {"", "(", "-true", ")"},
         *cmd3[] = {"", "-true", "-or", "-false"},
         // Test 4 is the first 7 args of Test 5
-        *cmd45[] = {"", "-true", "-a", "(", "-false", "-o", "-true", ")", "-and", "-false"};
+        *cmd45[] = {"", "-true", "-a", "(", "-false", "-o", "-true", ")", "-and", "-false"},
+        *cmd6[] = {"", "-true", "-a", "(", "-true", ")"};
 
     __do_test(2, cmd1, true);
     __do_test(4, cmd2, true);
     __do_test(4, cmd3, true);
     __do_test(8, cmd45, true);
     __do_test(10, cmd45, false);
+    __do_test(6, cmd6, true);
 }
 
 TEST(builder, modifier) {

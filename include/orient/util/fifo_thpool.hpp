@@ -15,8 +15,7 @@ namespace orie {
 class fifo_thpool {
 public:
     fifo_thpool(size_t);
-	fifo_thpool() 
-        : fifo_thpool(std::max(8u, std::thread::hardware_concurrency())) {}
+	fifo_thpool() : fifo_thpool(std::thread::hardware_concurrency()) {}
 
     template<class F, class... Args>
 	std::future<typename std::invoke_result<F, Args...>::type> 
