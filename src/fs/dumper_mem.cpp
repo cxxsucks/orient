@@ -70,6 +70,7 @@ const void* file_dumper::from_raw(const void* src) noexcept {
     category_tag tag = *reinterpret_cast<const category_tag*>(src);
     switch (tag) {
     case category_tag::blk_tag:
+    case category_tag::char_tag:
     case category_tag::fifo_tag:
     case category_tag::file_tag:
     case category_tag::link_tag:
@@ -106,11 +107,12 @@ const void* dir_dumper::from_raw(const void* src) noexcept {
     src = reinterpret_cast<const time_t*>(src) + 1;
     
     tag = *reinterpret_cast<const category_tag*>(src);
-    while (src && tag != orie::dir_pop_tag) {
+    while (tag != orie::dir_pop_tag) {
         switch (tag) {
         default: return nullptr;
         case category_tag::file_tag:  
         case category_tag::blk_tag:
+        case category_tag::char_tag:
         case category_tag::fifo_tag:
         case category_tag::link_tag:
         case category_tag::sock_tag:
@@ -120,7 +122,10 @@ const void* dir_dumper::from_raw(const void* src) noexcept {
             src = (new dir_dumper(string_type(), time_t(), this))->from_raw(src); 
             break;
         }
-        tag = *reinterpret_cast<const category_tag*>(src);
+        if (src)
+            tag = *reinterpret_cast<const category_tag*>(src);
+        else 
+            return nullptr;
     }
     return src ? reinterpret_cast<const category_tag*>(src) + 1 : nullptr;
 }

@@ -38,25 +38,26 @@ public:
                 // Async execution paused; stash the iterator
                 std::lock_guard __lck(_stash_mut);
                 _stashed_async_iters.emplace_back(std::move(it));
-                return;
-            }
-            if (_expression.apply_blocked(it)) {
+            } else if (_expression.apply_blocked(it)) {
                 --_async_result_left;
-                callback(it);
+                if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
+                    callback(true, it);
+                else callback(it);
             }
 
             _cnt_mut.lock();
             --_cnt_running;
             _cnt_mut.unlock();
             _wait_cv.notify_all();
-        }; 
+        }; // End of local function pool_job
 
         _cancelled = false;
         _async_result_left = min_result_async;
     {   // First resume stashed jobs
         std::lock_guard __lck(_stash_mut);
+        _cnt_running += _stashed_async_iters.size();
         for (iter_t& it : _stashed_async_iters)
-            pool_job(std::move(it));
+            pool.enqueue(pool_job, std::move(it));
         _stashed_async_iters.clear();
     }
 
@@ -68,7 +69,9 @@ public:
                 pool.enqueue(pool_job, _begin);
             } else if (res == tribool_bad::True) {
                 // TODO: Async callback?
-                callback(_begin);
+                if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
+                    callback(false, _begin);
+                else callback(_begin);
                 --min_result_sync;
             }
             ++_begin;
