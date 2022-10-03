@@ -129,17 +129,17 @@ TEST_F(statNode, time) {
     // All files to be matched are created within 1 minute
     num_node matcher(num_node::stamp::AMIN);
     // Parse Errors
-    ASSERT_THROW(matcher.next_param("1a"), not_a_number);
-    ASSERT_THROW(matcher.next_param("+"), invalid_param_name);
-    ASSERT_TRUE(matcher.next_param("-1"));
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("1a")), not_a_number);
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("+")), invalid_param_name);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("-1")));
     EXPECT_EQ(64, _do_tests(matcher));
 
     matcher = num_node(num_node::stamp::MMIN);
-    ASSERT_TRUE(matcher.next_param("+0"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("+0")));
     EXPECT_EQ(0, _do_tests(matcher));
 
     matcher = num_node(num_node::stamp::CMIN);
-    ASSERT_TRUE(matcher.next_param("0"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("0")));
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
@@ -149,15 +149,19 @@ TEST_F(statNode, size) {
     info.refreshDat();
 
     num_node matcher(num_node::stamp::SIZE);
-    ASSERT_TRUE(matcher.next_param("68k"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("68k")));
     EXPECT_EQ(1, _do_tests(matcher));
 
     matcher = num_node(num_node::stamp::SIZE);
-    ASSERT_TRUE(matcher.next_param("+60k"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("136")));
     EXPECT_EQ(1, _do_tests(matcher));
 
     matcher = num_node(num_node::stamp::SIZE);
-    ASSERT_TRUE(matcher.next_param("-68k"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("+60k")));
+    EXPECT_EQ(1, _do_tests(matcher));
+
+    matcher = num_node(num_node::stamp::SIZE);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("-68k")));
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
@@ -216,9 +220,9 @@ TEST_F(statNode, perm) {
     EXPECT_EQ(31, _do_tests(x));
 
     perm_node exact, any, all;
-    ASSERT_TRUE(exact.next_param("u+rw,g+r,o+r"));
-    ASSERT_TRUE(any.next_param("/go+w,")); 
-    ASSERT_TRUE(all.next_param("-0555"));
+    ASSERT_TRUE(exact.next_param(NATIVE_SV("u+rw,g+r,o+r")));
+    ASSERT_TRUE(any.next_param(NATIVE_SV("/go+w,"))); 
+    ASSERT_TRUE(all.next_param(NATIVE_SV("-0555")));
     EXPECT_EQ(33, _do_tests(exact)); // All files and links to file
     EXPECT_EQ(0, _do_tests(any));  // No writable files
     EXPECT_EQ(31, _do_tests(all)); // Everyone has rx, match dirs

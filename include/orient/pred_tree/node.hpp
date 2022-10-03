@@ -187,10 +187,6 @@ public:
     double cost() const noexcept override { return prev_cost; }
     double success_rate() const noexcept override { return prev_cost; }
 
-    tribool_bad apply(iter_t& it) override {
-        return prev ? prev->apply(it) : false;
-    }
-
     // Update the child's cost, then cache the result (plus some penalty).
     void update_cost() noexcept override {
         if (prev)

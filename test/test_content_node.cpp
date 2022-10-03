@@ -42,24 +42,24 @@ struct contentNode : public ::testing::Test {
 TEST_F(contentNode, blockedStrstr) {
     // No bin, no icase
     content_strstr_node matcher(true, false, false);
-    ASSERT_TRUE(matcher.next_param("Hello\nWorld"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("Hello\nWorld")));
     EXPECT_EQ(-2, _do_tests(matcher));
 
     // bin, icase
     matcher = content_strstr_node(true, true, true);
-    ASSERT_TRUE(matcher.next_param("hElLo\nWoRlD"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("hElLo\nWoRlD")));
     EXPECT_EQ(-3, _do_tests(matcher));
 }
 
 TEST_F(contentNode, blockedRegex) {
     // No bin, icase
     content_regex_node matcher(true, false, true);
-    ASSERT_TRUE(matcher.next_param("He.lO"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("He.lO")));
     EXPECT_EQ(-2, _do_tests(matcher));
 
     // bin, no icase
     matcher = content_regex_node(true, true, true);
-    ASSERT_TRUE(matcher.next_param("z{5001}"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("z{5001}")));
     EXPECT_EQ(-1, _do_tests(matcher));
 }
 
@@ -67,23 +67,23 @@ TEST_F(contentNode, blockedRegex) {
 TEST_F(contentNode, strstr) {
     // No bin, no icase
     content_strstr_node matcher(false, false, false);
-    ASSERT_TRUE(matcher.next_param("Hello\nWorld"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("Hello\nWorld")));
     EXPECT_EQ(2, _do_tests(matcher));
 
     // bin, icase
     matcher = content_strstr_node(false, true, true);
-    ASSERT_TRUE(matcher.next_param("hElLo\nWoRlD"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("hElLo\nWoRlD")));
     EXPECT_EQ(3, _do_tests(matcher));
 }
 
 TEST_F(contentNode, regex) {
     // No bin, icase
     content_regex_node matcher(false, false, true);
-    ASSERT_TRUE(matcher.next_param("He.lO"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("He.lO")));
     EXPECT_EQ(2, _do_tests(matcher));
 
     // bin, no icase
     matcher = content_regex_node(false, true, true);
-    ASSERT_TRUE(matcher.next_param("z{5001}"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("z{5001}")));
     EXPECT_EQ(1, _do_tests(matcher));
 }

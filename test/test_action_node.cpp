@@ -32,7 +32,7 @@ struct actionNode : public ::testing::Test {
 
 TEST_F(actionNode, execGrep) {
     type_node matcher;
-    ASSERT_TRUE(matcher.next_param("f"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("f")));
     exec_node exec(false, false);
     EXPECT_TRUE(exec.next_param(NATIVE_SV("grep")));
     EXPECT_TRUE(exec.next_param(NATIVE_SV("-lIi")));
@@ -46,7 +46,7 @@ TEST_F(actionNode, execGrep) {
 
 TEST_F(actionNode, execMultiBracket) {
     strstr_node matcher;
-    ASSERT_TRUE(matcher.next_param("file0"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("file0")));
     exec_node exec(false, false);
     EXPECT_TRUE(exec.next_param(NATIVE_SV("cp")));
     EXPECT_TRUE(exec.next_param(NATIVE_SV("{}")));
@@ -64,7 +64,7 @@ TEST_F(actionNode, execMultiBracket) {
 TEST_F(actionNode, execPlus) {
     // TODO: reliant on reading stdout
     type_node matcher;
-    ASSERT_TRUE(matcher.next_param("f"));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("f")));
     exec_node exec(false, false);
     EXPECT_TRUE(exec.next_param(NATIVE_SV("grep")));
     EXPECT_TRUE(exec.next_param(NATIVE_SV("-lIi")));

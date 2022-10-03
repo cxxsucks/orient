@@ -24,6 +24,7 @@ num_node::__num_consume(sv_t numstr) const {
         // Permit a unit succeeding the number for -size
             (__end != __numend + 1 || stamp::SIZE != _stm))
             throw not_a_number(numstr);
+        numstr = sv_t(__numend, __end - __numend);
     }
 
     // Number done, now the unit
