@@ -105,16 +105,28 @@ app& app::stop_auto_update() {
 }
 
 app& app::add_ignored_path(str_t path) {
+    if (path.empty())
+        path = separator;
+    else if (path.front() != separator)
+        path = separator + path;
     std::unique_lock __lck(_member_mut);
     _ignored_paths.push_back(std::move(path));
     return *this;
 }
 app& app::add_root_path(str_t path, bool concur) {
+    if (path.empty())
+        path = separator;
+    else if (path.front() != separator)
+        path = separator + path;
     std::unique_lock __lck(_member_mut);
     _root_paths.emplace_back(std::move(path), concur);
     return *this;
 }
 app& app::add_start_path(str_t path) {
+    if (path.empty())
+        path = separator;
+    else if (path.front() != separator)
+        path = separator + path;
     std::unique_lock __lck(_member_mut);
     _start_paths.push_back(std::move(path));
     return *this;
@@ -292,7 +304,7 @@ app app::os_default(fifo_thpool& pool) {
 
 #else // GNU/Linux
     res.read_db(conf_dir + "/default.db")
-       .add_root_path("", true)
+       .add_root_path("/", true)
        .add_root_path("/usr", true)
        .add_root_path("/home", true)
        .add_ignored_path("/proc")
