@@ -8,7 +8,7 @@
 namespace orie {
 
 app& app::read_db(str_t path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     if (!path.empty())
         _db_path = std::move(path);
     std::ifstream ifs(_db_path, std::ios_base::binary);
@@ -33,11 +33,11 @@ app& app::read_db(str_t path) {
 }
 
 app& app::update_db(str_t path) {
-    if (!path.empty())
-        _db_path = std::move(path);
     dumper dump_worker;
-{   // Read and reuse the old dumped data
-    std::shared_lock __lck(_data_dumped_mut);
+{   if (!path.empty())
+        _db_path = std::move(path);
+    // Read and reuse the old dumped data
+    std::shared_lock __lck(_member_mut);
     dump_worker.from_raw(_data_dumped.get());
 
     for (const str_t& p : _ignored_paths) {
@@ -70,7 +70,7 @@ app& app::update_db(str_t path) {
 }
 
     // Write updated data back to `data_dumped`
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     size_t sz = dump_worker.n_bytes();
     _data_dumped.reset(new std::byte[sz + 1]);
     dump_worker.to_raw(_data_dumped.get());
@@ -92,7 +92,7 @@ app& app::update_db(str_t path) {
 app& app::stop_auto_update() {
     if (_auto_update_thread != nullptr) {
     {
-        std::unique_lock __lck(_data_dumped_mut);
+        std::unique_lock __lck(_member_mut);
         _auto_update_stopped = true;
     }
         // In the worst case, update starts right before notification
@@ -105,23 +105,23 @@ app& app::stop_auto_update() {
 }
 
 app& app::add_ignored_path(str_t path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _ignored_paths.push_back(std::move(path));
     return *this;
 }
 app& app::add_root_path(str_t path, bool concur) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _root_paths.emplace_back(std::move(path), concur);
     return *this;
 }
 app& app::add_start_path(str_t path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _start_paths.push_back(std::move(path));
     return *this;
 }
 
 app& app::erase_ignored_path(const str_t& path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _ignored_paths.erase(
         std::remove(_ignored_paths.begin(), _ignored_paths.end(), path),
         _ignored_paths.end()
@@ -129,7 +129,7 @@ app& app::erase_ignored_path(const str_t& path) {
     return *this;
 }
 app& app::erase_root_path(const str_t& path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _root_paths.erase(
         std::remove_if(_root_paths.begin(), _root_paths.end(), 
             [&path] (const auto& p) {return p.first == path;}),
@@ -138,7 +138,7 @@ app& app::erase_root_path(const str_t& path) {
     return *this;
 }
 app& app::erase_start_path(const str_t& path) {
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     _start_paths.erase(
         std::remove(_start_paths.begin(), _start_paths.end(), path),
         _start_paths.end()
@@ -149,7 +149,7 @@ app& app::erase_start_path(const str_t& path) {
 app& app::read_conf(str_t path) {
     // Members are modified across the function, therefore
     // the lock applies from start to finish
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
     if (!path.empty())
         _conf_path = std::move(path);
     std::basic_ifstream<char_t> ifs(_conf_path);
@@ -238,7 +238,7 @@ app::app(app&& rhs)
 {
     rhs.stop_auto_update();
     // Wait all rhs's jobs to finish
-    std::unique_lock __lck(rhs._data_dumped_mut);
+    std::unique_lock __lck(rhs._member_mut);
     
     // Move as usual
     _conf_path = std::move(rhs._conf_path);
@@ -260,7 +260,7 @@ app& app::operator=(app&& r) {
 app::~app() { 
     stop_auto_update(); 
     // Wait for other jobs to finish
-    std::unique_lock __lck(_data_dumped_mut);
+    std::unique_lock __lck(_member_mut);
 }
 
 #ifdef __unix

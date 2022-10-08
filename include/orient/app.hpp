@@ -25,7 +25,8 @@ public:
 
 private:
     std::unique_ptr<std::thread> _auto_update_thread;
-    std::shared_mutex _data_dumped_mut;
+    // Mutex of all members, mainly for "_data_dumped"
+    std::shared_mutex _member_mut;
     std::condition_variable_any _auto_update_cv;
 
 public:
@@ -39,6 +40,11 @@ public:
     app& read_db(str_t path = str_t());
     // Scan filesystem, update database and write to the db file
     app& update_db(str_t path = str_t());
+    app& set_db_path(str_t path) {
+        std::unique_lock __lck(_member_mut);
+        _db_path = path;
+        return *this;
+    }
 
     // Auto updating
     template <class Rep, class Period>
@@ -102,7 +108,7 @@ public:
 
 template <class cb_t>
 void app::run(fsearch_expr& expr, cb_t callback) {
-    std::shared_lock __lck(_data_dumped_mut);
+    std::shared_lock __lck(_member_mut);
     for (sv_t p : _start_paths) {
         fs_data_iter it(_data_dumped.get(), p);
         if (it == it.end())
@@ -123,7 +129,7 @@ app::job_list app::get_jobs(fsearch_expr& expr, callback_t callback,
     jobs.reserve(_start_paths.size());
     // A lock must be introduced or an updatedb may alter data_dumped between
     // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
-    std::shared_lock __lck(_data_dumped_mut);
+    std::shared_lock __lck(_member_mut);
 
     // Construct jobs
     for (sv_t p : _start_paths) {
@@ -165,7 +171,7 @@ app& app::start_auto_update(
         while (!_auto_update_stopped) {
             read_conf();
             update_db();
-            std::unique_lock __lck(_data_dumped_mut);
+            std::unique_lock __lck(_member_mut);
             _auto_update_cv.wait_for(__lck, interval, 
                 [this] () {return _auto_update_stopped;});
         }
