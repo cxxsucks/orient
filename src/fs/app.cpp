@@ -290,7 +290,7 @@ app app::os_default(fifo_thpool& pool) {
        .add_root_path("", true)
        .add_root_path("/usr", true)
        .add_root_path("/Library", true)
-       .add_root_path("/Applications, true")
+       .add_root_path("/Applications", true)
        .add_root_path("/Users", true)
        .add_root_path("/private", true)
        .add_ignored_path("/System/Library")
