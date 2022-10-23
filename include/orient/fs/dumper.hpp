@@ -83,6 +83,7 @@ public:
  * @note Written data can be read with from_raw(void*) */
     void* to_raw(void* raw_dst) const noexcept ;
 
+    const str_t& filename() const noexcept { return _filename; }
     dir_dumper* parent(unsigned depth = 1) const noexcept;
     unsigned depth(const dir_dumper* relative_to = nullptr) const noexcept;
     string_type path(unsigned depth) const;
@@ -97,11 +98,21 @@ public:
 };
 
 #ifdef _WIN32
-// TODO: Handle drive letters
-struct fs_dumper : public dir_dumper {
-    // ...
+/** @class fs_dumper
+ * @brief Special handler of Windows drive letters by creating a "fake"
+ * root directory whose children are drives. 
+ * @note Because of this, all Windows paths are prepended with an extra '\\'. */
+class fs_dumper {
+    std::vector<dir_dumper> _drives;
+
+public:
+    size_t n_bytes() const noexcept;
+    const void* from_raw(const void* raw_src) noexcept;
+    void* to_raw(void* raw_dst) const noexcept;
+    dir_dumper* visit_dir(const str_t& file_name);
 };
-#else
+
+#else // Not Windows. Filesystem root is a normal directory.
 typedef dir_dumper fs_dumper;
 #endif
 

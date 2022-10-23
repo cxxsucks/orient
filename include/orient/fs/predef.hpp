@@ -5,7 +5,7 @@
 
 extern "C" {
 #if _WIN32
-#include <orient/dirent_win.h>
+#include <orient/util/dirent_win.h>
 #define NATIVE_PATH(str) L##str
 // #define NATIVE_STDOUT std::wcout
 // #define NATIVE_STDERR std::wcerr
@@ -112,17 +112,24 @@ namespace orie {
         dir_pop_tag = '-'
     };
 
+// Syscall Wrappers. 
+// In orient's context, Windows paths may start with a redundant '\\'
+// which is dropped when invoking the "syscall".
 #ifdef _WIN32
     //! Get file attributes for @c path and put them in @c buf
     inline int stat(const char_t* path, stat_t* buf) {
+        while (*path == separator)
+            ++path;
         return ::_wstat(path, buf);
     }
 
     //! @brief Open a directory stream.
-    //! @param path The directory to be opened.
+    //! @param path The directory to be opened, with an optional starting '\\'
     //! @return A dir stream on the directory
     //! @retval NULL if it could not be opened.
     inline dir_t* opendir(const char_t* path) {
+        while (*path == separator)
+            ++path;
         return ::wopendir(path);
     }
 
@@ -137,22 +144,28 @@ namespace orie {
         return ::wclosedir(d);
     }
 
-    //! @brief Get the absolute name of @p src.
+    //! @brief Get the absolute name of @p src, with an optional starting '\\'.
     //! @param [out] resolv Non-null buffer holding resolved path.
+    //! A redundant '\\' will be placed in @p resolv[0]
     //! @return @p resolv
-    inline char_t* realpath(const char_t* src,
+    char_t* realpath(const char_t* src,
                             char_t* resolv, size_t buf_len) 
     {
-        DWORD _buf_len = static_cast<DWORD>(buf_len);
-        DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv, nullptr);
+        // -1 for the '\\' in output
+        DWORD _buf_len = static_cast<DWORD>(buf_len) - 1;
+        while (*src == separator)
+            ++src;
+        DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv + 1, nullptr);
         if (saved > _buf_len)
             return nullptr;
-        if (resolv[saved - 1] == orie::separator)
-            resolv[saved - 1] = '\0';
+        // Strip '\\'s at the end of resolved path
+        if (resolv[saved] == orie::separator)
+            resolv[saved] = '\0';
+        resolv[0] = separator;
         return resolv;
     }
 
-#else
+#else // Not Windows. Then these functions are just wrappers.
     //! Get file attributes for @c path and put them in @c buf
     inline int stat(const char_t* path, stat_t* buf) {
         return ::stat(path, buf);

@@ -225,21 +225,7 @@ int fs_data_iter::_fetch_stat() const noexcept {
     if (_opt_stat.has_value())
         return _opt_stat.value().st_size == ~::off_t() ? -10 : 0;
     _opt_stat.emplace();
-    int ret_stat;
-    /* if (_category == category_tag::link_tag && read_link) {
-        const uint16_t* plink_len = reinterpret_cast<const uint16_t*>(
-            _name_begin + _name_len);
-        const char_type* plink_name_begin =
-            reinterpret_cast<const char_type*>(plink_len + 1);
-        char_type *plink_name_end = 
-            const_cast<char_type*>(plink_name_begin + *plink_len);
-        
-        char_type tmp_end = *plink_name_end;
-        *plink_name_end = 0;
-        ret_stat = ::stat(plink_name_begin, &opt_stat.value());
-        *plink_name_end = tmp_end;
-    } else */ 
-    ret_stat = orie::stat(path().c_str(), &_opt_stat.value());
+    int ret_stat = orie::stat(path().c_str(), &_opt_stat.value());
 
     if (ret_stat != 0)
         ::memset(&_opt_stat.value(), 0xff, sizeof(struct stat));

@@ -50,8 +50,9 @@ app& app::update_db(str_t path) {
         to_dump->clear();
         to_dump->set_ignored(true);
     }
+
     // All root paths must be pruned along with ignored ones,
-    // then sorted from the deepest to the shallowest, to prevent
+    // Sort root paths from the deepest to the shallowest, preventing
     // rescanning if there are overlapping root paths.
     std::sort(_root_paths.begin(), _root_paths.end(), 
         [] (const auto& a, const auto& b) {
@@ -135,7 +136,8 @@ app& app::add_start_path(str_t path) {
 app& app::erase_ignored_path(const str_t& path) {
     std::unique_lock __lck(_member_mut);
     _ignored_paths.erase(
-        std::remove(_ignored_paths.begin(), _ignored_paths.end(), path),
+        std::remove_if(_ignored_paths.begin(), _ignored_paths.end(), 
+            [&path] (const str_t& p) {return p == path || p.c_str() + 1 == path;}),
         _ignored_paths.end()
     );
     return *this;
@@ -144,7 +146,9 @@ app& app::erase_root_path(const str_t& path) {
     std::unique_lock __lck(_member_mut);
     _root_paths.erase(
         std::remove_if(_root_paths.begin(), _root_paths.end(), 
-            [&path] (const auto& p) {return p.first == path;}),
+            [&path] (const auto& p) {
+                return p.first == path || p.first.c_str() + 1 == path;
+            }),
         _root_paths.end()
     );
     return *this;
@@ -152,7 +156,8 @@ app& app::erase_root_path(const str_t& path) {
 app& app::erase_start_path(const str_t& path) {
     std::unique_lock __lck(_member_mut);
     _start_paths.erase(
-        std::remove(_start_paths.begin(), _start_paths.end(), path),
+        std::remove_if(_start_paths.begin(), _start_paths.end(), 
+            [&path] (const str_t& p) {return p == path || p.c_str() + 1 == path;}),
         _start_paths.end()
     );
     return *this;
