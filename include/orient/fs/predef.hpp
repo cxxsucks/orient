@@ -20,6 +20,7 @@ extern "C" {
 #include <fcntl.h>
 #include <unistd.h>
 #include <limits.h>
+#include <fnmatch.h>
 #define NATIVE_PATH(str) str
 #endif
 }
@@ -34,7 +35,7 @@ namespace orie {
     #define PCRE2_CODE_UNIT_WIDTH 16
     using dir_t = ::_WDIR;
     using dirent_t = ::_wdirent;
-    typedef struct _stat stat_t; // using does not work on MSVC :(
+    typedef struct _wstat stat_t; // using does not work on MSVC :(
 
     using fs_char_traits = std::char_traits<char>;
     using sv_t = std::wstring_view;
@@ -46,7 +47,10 @@ namespace orie {
     constexpr size_t path_max = 2048;
 
     inline std::wostream& NATIVE_STDOUT = std::wcout;
-    inline std::wostream& NATIVE_STDOUT = std::wcerr;
+    inline std::wostream& NATIVE_STDERR = std::wcerr;
+
+// For _waccess
+    enum { R_OK = 4, W_OK = 2, X_OK = 1 };
 
 #else 
     #define PCRE2_CODE_UNIT_WIDTH 8
@@ -88,7 +92,7 @@ namespace orie {
             }
             return 0;
         }
-        static const char_t* find(const char* s, size_t n, char a) {
+        static const char_t* find(const char_t* s, size_t n, char a) {
             auto const ua(to_upper(a));
             while (n-- != 0) {
                 if (to_upper(*s) == ua)
@@ -147,8 +151,9 @@ namespace orie {
     //! @brief Get the absolute name of @p src, with an optional starting '\\'.
     //! @param [out] resolv Non-null buffer holding resolved path.
     //! A redundant '\\' will be placed in @p resolv[0]
-    //! @return @p resolv
-    char_t* realpath(const char_t* src,
+    //! @return Size written to @p resolv not including '\0'
+    //! @retval -1 Failure or buffer too small
+    inline ssize_t realpath(const char_t* src,
                             char_t* resolv, size_t buf_len) 
     {
         // -1 for the '\\' in output
@@ -156,13 +161,20 @@ namespace orie {
         while (*src == separator)
             ++src;
         DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv + 1, nullptr);
-        if (saved > _buf_len)
-            return nullptr;
-        // Strip '\\'s at the end of resolved path
+        if (saved > _buf_len || saved == 0)
+            return -1;
+        // On success it does not
+        // Strip '\\' at the end of resolved path
         if (resolv[saved] == orie::separator)
-            resolv[saved] = '\0';
+            resolv[saved--] = '\0';
         resolv[0] = separator;
-        return resolv;
+        return saved; 
+    }
+
+    //! @brief Unix fnmatch(3) and Windows PathMatchSpecW wrapper.
+    inline bool glob_match(const char_t* needle, const char_t* haystack, bool) {
+        return *haystack == separator ? ::PathMatchSpecW(haystack + 1, needle)
+                                      : ::PathMatchSpecW(haystack, needle);
     }
 
 #else // Not Windows. Then these functions are just wrappers.
@@ -190,19 +202,30 @@ namespace orie {
         return ::closedir(d);
     }
 
-    //! @brief Get the absolute name of @p src.
+    //! @brief Get the absolute name of @p src, but return path length.
     //! @param [out] resolv Non-null buffer holding resolved path.
-    //! @return @p resolv
-    inline char_t* realpath(const char_t* src,
+    //! @param buf_len Length of @p resolv including '\0'
+    //! @return Size written ro @p resolv not including '\0'
+    //! @retval ~size_t() on fail
+    inline ssize_t realpath(const char_t* src,
                             char_t* resolv, size_t buf_len) 
     {
-        if (buf_len >= PATH_MAX - 2)
-            return ::realpath(src, resolv);
-        char tmp_dest[PATH_MAX];
-        if (::realpath(src, tmp_dest) == nullptr)
-            return nullptr;
-        ::strncpy(resolv, tmp_dest, buf_len);
-        return resolv;
+        if (buf_len >= PATH_MAX) {
+            if (::realpath(src, resolv))
+                return -1;
+        } else {
+            char tmp_dest[PATH_MAX];
+            if (::realpath(src, tmp_dest) == nullptr)
+                return -1;
+            // -1 because buf_len includes NULL
+            strncpy(resolv, tmp_dest, buf_len - 1);
+            resolv[buf_len - 1] = '\0';
+        }
+        return ::strlen(resolv);
+    }
+
+    inline bool glob_match(const char_t* needle, const char_t* haystack, bool icase) {
+        return ::fnmatch(needle, haystack, icase ? FNM_CASEFOLD : 0) == 0;
     }
 #endif
 };

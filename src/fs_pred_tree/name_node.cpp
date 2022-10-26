@@ -1,7 +1,5 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
-extern "C" {
-#include <fnmatch.h>
-}
+#include <orient/fs/predef.hpp>
 
 namespace orie {
 namespace pred_tree {
@@ -12,32 +10,33 @@ glob_node::glob_node(bool full, bool lname, bool icase)
 
 bool glob_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
-        throw orie::pred_tree::uninitialized_node("--name");
+        throw orie::pred_tree::uninitialized_node(NATIVE_SV("--name"));
     if (_is_lname && it.file_type() != link_tag)
         return false; // Not a link 
 
-    if (_is_fullpath && !_is_lname) {
+    if (_is_fullpath && !_is_lname) 
         // FNM_CASEFOLD is a GNU extension :(
-        return ::fnmatch(_pattern.data(), it.path().c_str(),
-                         _is_icase ? FNM_CASEFOLD : 0) == 0;
-    }
+        return orie::glob_match(_pattern.data(), it.path().c_str(), _is_icase);
 
     if (_is_lname) {
-        char_t linkat_path[path_max] = "";
-        ssize_t re_len = ::readlink(it.path().c_str(), linkat_path,
-                                    path_max - 1);
+        char_t linkat_path[path_max] = {};
+#ifdef _WIN32
+        ssize_t re_len = orie::realpath(it.path().c_str(),
+                                        linkat_path, path_max);
+#else
+        // readlink(2) is what find(1) uses
+        ssize_t re_len = ::readlink(it.path().c_str(), linkat_path, path_max);
+#endif
         if (re_len <= 0)
             return true;
-        return ::fnmatch(_pattern.data(), linkat_path,
-                         _is_icase ? FNM_CASEFOLD : 0) == 0;
+        return orie::glob_match(_pattern.data(), linkat_path, _is_icase);
     } else {
         // Strings matched by fnmatch(3) must be NULL-terminated
         char_t name_buf[path_max];
         sv_t name_sv = it.basename().substr(0, path_max - 1);
         ::memcpy(name_buf, name_sv.data(), name_sv.size());
         name_buf[name_sv.size()] = '\0';
-        return ::fnmatch(_pattern.data(), name_buf,
-                         _is_icase ? FNM_CASEFOLD : 0) == 0;
+        return orie::glob_match(_pattern.data(), name_buf, _is_icase);
     }
     std::terminate(); // Unreachable
 }
@@ -68,7 +67,7 @@ bool glob_node::next_param(sv_t param) {
 
 bool strstr_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
-        throw orie::pred_tree::uninitialized_node("--name");
+        throw orie::pred_tree::uninitialized_node(NATIVE_SV("--name"));
     if (_is_lname && it.file_type() != link_tag)
         return false; // Not a symlink 
 
@@ -76,8 +75,12 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
     sv_t haystack;
     char_t linkat_path[path_max];
     if (_is_lname) {
-        ssize_t re_len = ::readlink(it.path().c_str(), linkat_path,
-                                    path_max - 1);
+#ifdef _WIN32
+        ssize_t re_len = orie::realpath(it.path().c_str(),
+                                        linkat_path, path_max);
+#else
+        ssize_t re_len = ::readlink(it.path().c_str(), linkat_path, path_max);
+#endif
         if (re_len <= 0)
             return true;
         haystack = sv_t(linkat_path, re_len);
@@ -95,11 +98,11 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
 
 bool regex_node::apply_blocked(fs_data_iter& it) {
     if (_re == nullptr)
-        throw uninitialized_node("--regex");
+        throw uninitialized_node(NATIVE_SV("--regex"));
     if (_is_lname && it.file_type() != link_tag)
         return false; // Not a link 
 
-    PCRE2_SPTR re_ptr; PCRE2_SIZE re_len;
+    PCRE2_SPTR re_ptr; ssize_t re_len;
     char_t linkat_path[path_max];
     if (!_is_full && !_is_lname) {
         // Just match basename
@@ -111,13 +114,18 @@ bool regex_node::apply_blocked(fs_data_iter& it) {
         re_len = it.path().size();
     } else {
         re_ptr = reinterpret_cast<PCRE2_SPTR>(linkat_path);
+#ifdef _WIN32
+        re_len = orie::realpath(it.path().c_str(),
+                                linkat_path, path_max);
+#else
         re_len = ::readlink(it.path().c_str(), linkat_path, path_max);
+#endif
         if (re_len <= 0)
             return true;
     }
 
     return 0 < pcre2_match(
-        _re.get(), re_ptr, re_len, 0,
+        _re.get(), re_ptr, static_cast<size_t>(re_len), 0,
         _is_exact ? PCRE2_ANCHORED | PCRE2_ENDANCHORED : 0,
         _match_dat.get(), nullptr
     );

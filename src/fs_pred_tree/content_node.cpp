@@ -111,7 +111,7 @@ tribool_bad content_regex_node::apply(fs_data_iter& it) {
     if (_blocked)
         return apply_blocked(it);
     if (_re == nullptr)
-        throw uninitialized_node("-content-regex");
+        throw uninitialized_node(NATIVE_SV("-content-regex"));
     return tribool_bad::Uncertain;
 }
 
@@ -119,7 +119,7 @@ bool content_regex_node::apply_blocked(fs_data_iter& it) {
     if (it.file_type() != file_tag)
         return false;
     if (_re == nullptr)
-        throw uninitialized_node("-content-regex");
+        throw uninitialized_node(NATIVE_SV("-content-regex"));
     return _do_match(it, sv_t(), _icase, _allow_binary, _re.get());
 }
 
@@ -156,7 +156,7 @@ tribool_bad content_strstr_node::apply(fs_data_iter& it) {
     if (_blocked)
         return apply_blocked(it);
     if (_pattern.empty())
-        throw uninitialized_node("-content-strstr");
+        throw uninitialized_node(NATIVE_SV("-content-strstr"));
     return tribool_bad::Uncertain;
 }
 
@@ -164,7 +164,7 @@ bool content_strstr_node::apply_blocked(fs_data_iter& it) {
     if (it.file_type() != file_tag)
         return false;
     if (_pattern.empty())
-        throw uninitialized_node("-content-strstr");
+        throw uninitialized_node(NATIVE_SV("-content-strstr"));
     return _do_match(it, _pattern, _icase, _allow_binary, nullptr);
 }
 

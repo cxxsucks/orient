@@ -75,8 +75,9 @@ class not_a_number : public invalid_node_arg {
     char msg[64] = "Not a valid number: ";
 
 public:
-    not_a_number(std::string_view param) : invalid_node_arg("") {
-        orie::strncat(msg, param.data(), std::min(size_t(40), param.size()));
+    template <typename sv_t>
+    not_a_number(sv_t param) : invalid_node_arg("") {
+        orie::strncat(msg, param.data(), param.size() > 40 ? 40 : param.size());
     }
 
     const char* what() const noexcept override { return msg; }
@@ -103,7 +104,7 @@ class already_initialized_node : public invalid_node_arg {
 
 public:
     already_initialized_node(std::string_view param) : invalid_node_arg("") {
-        orie::strncat(msg, param.data(), std::min(size_t(30), param.size()));
+        orie::strncat(msg, param.data(), param.size() > 40 ? 40 : param.size());
     }
 
     const char* what() const noexcept override { return msg; }
@@ -113,13 +114,14 @@ class uninitialized_node : public invalid_node_arg {
     char msg[64] = "Node is not initialized: ";
 
 public:
-    uninitialized_node(std::string_view param) : invalid_node_arg("") {
+    template <typename sv_t>
+    uninitialized_node(sv_t param) : invalid_node_arg("") {
 #ifdef __GNUC_STDC_INLINE__
 #pragma GCC diagnostic push
 // GCC warns that `msg` is larger than `param.size()`, which is intended.
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
 #endif
-        orie::strncat(msg, param.data(), std::min(size_t(30), param.size()));
+        orie::strncat(msg, param.data(), param.size() > 30 ? 30 : param.size());
 #ifdef __GNUC_STDC_INLINE__
 #pragma GCC diagnostic pop
 #endif
