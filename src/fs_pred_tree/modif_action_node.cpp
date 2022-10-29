@@ -163,7 +163,11 @@ bool del_node::apply_blocked(fs_data_iter& it) {
                           << _todel_dirs_stack.back()
                           << NATIVE_PATH('\n');
         else
+#ifdef _WIN32
+            ::RemoveDirectoryW(it.path().c_str());
+#else
             ::rmdir(_todel_dirs_stack.back().c_str());
+#endif
         _todel_dirs_stack.pop_back();
     }
 
@@ -178,7 +182,11 @@ bool del_node::apply_blocked(fs_data_iter& it) {
         NATIVE_STDOUT << NATIVE_PATH("DELETE: ") << it.path()
                       << NATIVE_PATH('\n');
     else 
+#ifdef _WIN32
+        ret = 0 != ::DeleteFileW(it.path().c_str());
+#else
         ret = 0 == ::unlink(it.path().c_str());
+#endif
 
     return ret;
 }
@@ -193,7 +201,11 @@ bool del_node::next_param(sv_t param) {
 
 del_node::~del_node() noexcept {
     for (const str_t& path : _todel_dirs_stack) 
+#ifdef _WIN32
+        ::RemoveDirectoryW(path.c_str());
+#else
         ::rmdir(path.c_str());
+#endif
 }
 
 // This implementation sacrificed performance (when constructing cmdline)
@@ -223,7 +235,7 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
         for (const str_t& filename : _names_to_pass) {
             str_t replaced = cmdarg;
             size_t pos;
-            while ((pos = replaced.find("{}")) != str_t::npos)
+            while ((pos = replaced.find(NATIVE_PATH("{}"))) != str_t::npos)
                 replaced.replace(pos, 2, filename);
             // There may be multiple "{}"s
             argvstr_to_exec.push_back(replaced);
@@ -232,8 +244,22 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
     // Cleanup; ready to fork and exec
     _name_len_left = _name_min_len;
     _names_to_pass.clear();
-} // Mutex of original name vector unlocked, permitting concurrent fork-exec
+} // Mutex of original name vector unlocked since they are no longer used
 
+    // Confirm from stdin if running `-ok -okdir`
+    if (_stdin_confirm) {
+        NATIVE_STDERR << NATIVE_PATH("< ")
+            << argvstr_to_exec.front() << NATIVE_PATH(" ... ")
+            << (it == it.end() ? NATIVE_PATH("") : it.path())
+            << NATIVE_PATH(" > ? ");
+        char c = std::cin ? std::cin.get() : 'N';
+        while (std::cin && std::cin.get() != '\n')
+            ;
+        if (::toupper(c) != 'Y')
+            return false;
+    }
+
+#ifndef _WIN32 // Unix fork-exec
     // Construct the pointer to cstrings to pass into `execvp`
     std::unique_ptr<const char*[]> argv_to_exec(
         new const char*[argvstr_to_exec.size() + 1]
@@ -253,19 +279,6 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
                      ::fcntl(pipe_fds[1], F_GETFD) | FD_CLOEXEC)) {
         ::perror("fcntl");
         return false;
-    }
-
-    // Confirm from stdin if running `-ok -okdir`
-    if (_stdin_confirm) {
-        NATIVE_STDERR << NATIVE_PATH("< ")
-            << argvstr_to_exec.front() << NATIVE_PATH(" ... ")
-            << (it == it.end() ? "" : it.path())
-            << NATIVE_PATH(" > ? ");
-        char c = std::cin ? std::cin.get() : 'N';
-        while (std::cin && std::cin.get() != '\n')
-            ;
-        if (::toupper(c) != 'Y')
-            return false;
     }
 
     // Actual fork-and-exec
@@ -314,6 +327,42 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
     }
     }
     std::terminate(); // Unreachable
+
+#else // Win32 CreateProcessW (no fork so cannot use _execvp)
+    std::wstring cmdline_str;
+    // FIXME: MSDN says CreateProcessW modifies cmdline without saying how,
+    // so we reserve a very large string for the function's pleasure.
+    cmdline_str.reserve(4096);
+    // FIXME: CreateProcessW for some reason accepts all cmdline as one string.
+    // All cmdline in `argvstr_to_exec` containing whilespaces will break, 
+    // even if they were quoted.
+    for (std::wstring& arg : argvstr_to_exec)
+        (cmdline_str += std::move(arg)).push_back(L' ');
+
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    ZeroMemory(&pi, sizeof(pi));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    si.hStdError = ::GetStdHandle(STD_ERROR_HANDLE);
+    // Redirect "nul" to stdin if `_stdin_confirm` is set
+    if (_stdin_confirm) {
+        si.hStdInput = ::CreateFileW(
+            L"nul", GENERIC_READ, FILE_SHARE_READ, nullptr,
+            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    } 
+    else si.hStdInput = ::GetStdHandle(STD_INPUT_HANDLE);
+
+    cmdline_str.reserve(cmdline_str.size() + 100);
+    LPDWORD exit_code;
+    return ::CreateProcessW(nullptr, cmdline_str.data(), nullptr, nullptr, true,
+                            NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)
+        && ::WaitForSingleObject(pi.hProcess, INFINITE) 
+        && ::GetExitCodeProcess(pi.hProcess, exit_code) 
+        && *exit_code == 0;
+#endif
 }
 
 bool exec_node::next_param(sv_t param) {

@@ -5,10 +5,6 @@
 #include <string_view>
 #include <atomic>
 
-#ifndef TEST_FRIENDS
-#define TEST_FRIENDS
-#endif
-
 namespace orie {
 class fifo_thpool;
 
