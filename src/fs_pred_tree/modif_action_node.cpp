@@ -135,10 +135,20 @@ bool print_node::apply_blocked(fs_data_iter& it) {
 
 bool print_node::next_param(sv_t param) {
     if (_ofs == nullptr) {
+#if !defined(_WIN32) || defined(_MSC_VER)
         _ofs.reset(new std::basic_ofstream<char_t>(str_t(param)));
+#else
+        _ofs.reset(new std::basic_ofstream<char_t>(orie::xxstrcpy(param)));
+#endif
         if (!_ofs->good()) {
             _ofs.reset();
+#if !defined(_WIN32) || defined(_MSC_VER)
             throw std::runtime_error(NATIVE_PATH("Open failed: ") + str_t(param));
+#else
+            throw std::runtime_error(orie::xxstrcpy(sv_t(
+                NATIVE_PATH("Open failed: ") + str_t(param)
+            )));
+#endif
         }
         return true;
     }
@@ -357,11 +367,16 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
 
     cmdline_str.reserve(cmdline_str.size() + 100);
     LPDWORD exit_code;
-    return ::CreateProcessW(nullptr, cmdline_str.data(), nullptr, nullptr, true,
-                            NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)
-        && ::WaitForSingleObject(pi.hProcess, INFINITE) 
-        && ::GetExitCodeProcess(pi.hProcess, exit_code) 
-        && *exit_code == 0;
+    bool ret = ::CreateProcessW(nullptr, cmdline_str.data(), nullptr, nullptr, true,
+                                NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)
+            && ::WaitForSingleObject(pi.hProcess, INFINITE) 
+            && ::GetExitCodeProcess(pi.hProcess, exit_code) 
+            && *exit_code == 0;
+    ::CloseHandle(pi.hProcess);
+    ::CloseHandle(pi.hThread);
+    if (_stdin_confirm)
+        ::CloseHandle(si.hStdInput);
+    return ret;
 #endif
 }
 

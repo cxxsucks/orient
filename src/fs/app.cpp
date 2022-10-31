@@ -11,7 +11,12 @@ app& app::read_db(str_t path) {
     std::unique_lock __lck(_member_mut);
     if (!path.empty())
         _db_path = std::move(path);
+// Only MSVC provides std::fstream ctor accepting wchar
+#if !defined(_WIN32) || defined(_MSC_VER)
     std::ifstream ifs(_db_path, std::ios_base::binary);
+#else
+    std::ifstream ifs(orie::xxstrcpy(sv_t(_db_path)), std::ios_base::binary);
+#endif // !_WIN32 || _MSC_VER
 
     // Check whether the file is a legit database for orient
     uint64_t magic_read = 0;
@@ -78,7 +83,11 @@ app& app::update_db(str_t path) {
     _data_dumped[sz] = std::byte(0);
 
     // And then into database file
+#if !defined(_WIN32) || defined(_MSC_VER)
     std::ofstream ofs(_db_path, std::ios_base::binary);
+#else
+    std::ofstream ofs(orie::xxstrcpy(sv_t(_db_path)), std::ios_base::binary);
+#endif
     if (!ofs.is_open()) {
         _conf_path_valid = false;
         return *this;
@@ -86,7 +95,9 @@ app& app::update_db(str_t path) {
     ofs.write(reinterpret_cast<const char*>(&magic_num), sizeof(uint64_t));
     ofs.write(reinterpret_cast<const char*>(_data_dumped.get()), sz);
     _conf_path_valid = ofs.good();
+#ifndef _WIN32
     ::chmod(_db_path.c_str(), 0600);
+#endif
     return *this;
 }
 
@@ -169,7 +180,11 @@ app& app::read_conf(str_t path) {
     std::unique_lock __lck(_member_mut);
     if (!path.empty())
         _conf_path = std::move(path);
+#if !defined(_WIN32) || defined(_MSC_VER)
     std::basic_ifstream<char_t> ifs(_conf_path);
+#else
+    std::basic_ifstream<char_t> ifs(orie::xxstrcpy(sv_t(_conf_path)));
+#endif
     if (!ifs.is_open()) {
         _conf_path_valid = false;
         return *this;
@@ -179,7 +194,7 @@ app& app::read_conf(str_t path) {
     ifs.imbue(std::locale("en_US.UTF-8"));
 #endif
     str_t conf_cont;
-    std::getline(ifs, conf_cont, '\0'); // TODO: Paths with '\0'?
+    std::getline(ifs, conf_cont, NATIVE_PATH('\0')); // TODO: Paths with '\0'?
     sv_t conf_sv(conf_cont);
     _root_paths.clear();
     _ignored_paths.clear();
@@ -215,7 +230,7 @@ app& app::read_conf(str_t path) {
 
     // Provide a default database name if there isn't one in conf file
     if (_db_path.empty())
-        _db_path = _conf_path + ".db";
+        _db_path = _conf_path + NATIVE_PATH(".db");
     _conf_path_valid = true;
     return *this;
 }
@@ -226,8 +241,12 @@ app& app::write_conf(str_t path) {
     // Provide a default database name if not set, 
     // before printing anything to conf file.
     if (_db_path.empty())
-        _db_path = _conf_path + ".db";
+        _db_path = _conf_path + NATIVE_PATH(".db");
+#if !defined(_WIN32) || defined(_MSC_VER)
     std::basic_ofstream<char_t> ofs(_conf_path);
+#else
+    std::basic_ofstream<char_t> ofs(orie::xxstrcpy(sv_t(_conf_path)));
+#endif
     if (!ofs.is_open()) {
         _conf_path_valid = false;
         return *this;
@@ -280,7 +299,7 @@ app::~app() {
     std::unique_lock __lck(_member_mut);
 }
 
-#ifdef __unix
+#ifndef _WIN32
 app app::os_default(fifo_thpool& pool) {
     std::string conf_dir = ::getenv("HOME");
     ::mkdir((conf_dir += "/.config").c_str(), 0755);
@@ -347,7 +366,7 @@ app app::os_default(fifo_thpool& pool) {
     pathLen = ::GetEnvironmentVariableW(L"TEMP", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
         res.add_ignored_path(pathBuf);
-    res.add_ignored_path(L"C:\\Windows");
+    res.add_ignored_path(L"C:\\Windows")
        .add_ignored_path(L"C:\\Windows.old");
 
     // Add a root for each drive and its "Program File" directory
@@ -436,7 +455,13 @@ try {
     
     if (!startpath_flag) {
         char_t cwd_buf[path_max];
+#ifdef _WIN32
+        // TODO: cwd is longer than path_max
+        ::GetCurrentDirectoryW(path_max, cwd_buf);
+        app.add_start_path(cwd_buf);
+#else
         app.add_start_path(::getcwd(cwd_buf, path_max));
+#endif
     }
     if (builder.has_async()) 
         // TODO: Options to set the timeout field

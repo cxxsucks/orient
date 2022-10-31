@@ -152,6 +152,18 @@ template <> inline
 int strcmp<wchar_t, wchar_t>(const wchar_t* src1, const wchar_t* src2) noexcept {
     return ::wcscmp(src1, src2);
 }
+
+// Get a naive copy of a std::basic_string of another char type.
+// No custom trait/allocator :(
+template <class src_t, class des_t = char>
+std::basic_string<des_t> xxstrcpy(std::basic_string_view<src_t> src) {
+    std::basic_string<des_t> res;
+    res.reserve(src.size());
+    for (src_t ch : src)
+        res.push_back(static_cast<des_t>(ch));
+    return res;
+}
+
 /** @brief Convert a number to string
  * @tparam cal_t an arithmetic type. Either integers or floating points
  * @param [out] buf pre-allocated buffer to which the converted string write.

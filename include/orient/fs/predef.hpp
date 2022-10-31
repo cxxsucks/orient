@@ -35,7 +35,7 @@ namespace orie {
     #define PCRE2_CODE_UNIT_WIDTH 16
     using dir_t = ::_WDIR;
     using dirent_t = ::_wdirent;
-    typedef struct _wstat stat_t; // using does not work on MSVC :(
+    typedef struct _stat stat_t; // using does not work on MSVC :(
 
     using fs_char_traits = std::char_traits<char>;
     using sv_t = std::wstring_view;
