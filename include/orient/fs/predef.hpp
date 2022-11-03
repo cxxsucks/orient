@@ -7,8 +7,6 @@ extern "C" {
 #if _WIN32
 #include <orient/util/dirent_win.h>
 #define NATIVE_PATH(str) L##str
-// #define NATIVE_STDOUT std::wcout
-// #define NATIVE_STDERR std::wcerr
 #ifdef max
 #undef max
 #undef min

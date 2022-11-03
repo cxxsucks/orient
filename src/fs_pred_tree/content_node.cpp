@@ -6,12 +6,14 @@ extern "C" {
 
 namespace orie {
 
+#ifndef _WIN32
 struct _dummy_unique_fd {
     int _fd;
     operator int() const noexcept { return _fd; }
     _dummy_unique_fd(int fd) noexcept : _fd(fd) {}
     ~_dummy_unique_fd() noexcept { if (_fd > 0) ::close(_fd); }
 };
+#endif
 
 // Search for a regex or substring in a file. Optimal when:
 // 1. mmap(2) is slower than a read(2) but faster than 2 reads.
@@ -25,6 +27,8 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
         re_needle != nullptr ? pcre2_match_data_create(8, nullptr) : nullptr,
         &pcre2_match_data_free
     );
+
+    // Two local functions, the same across Unix and Windows
     auto _do_regex_match = 
     [&match_dat] (sv_t haystack, pcre2_code* re) noexcept {
         return 0 < pcre2_match(
@@ -43,6 +47,41 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
         else return haystack.find(needle) != sv_t::npos;
     };
 
+#ifdef _WIN32
+    // Read files with std::wifstream, which handles utf-8 gracefully.
+    // TODO: i18n support is $hit on Win$hit 💩!!!
+#ifdef _MSC_VER
+    auto& to_open = it.path();
+    ifs.imbue(std::locale("en_US.utf8")); // utf8 only :(
+#else
+    auto to_open = orie::xxstrcpy(sv_t(it.path())); // ansi only :(
+#endif
+
+    // Judge binary
+    if (!allow_binary) {
+        char read_buf[4096];
+        ::memset(read_buf, -1, 4096); // Fill the buffer with non-NULLs
+        std::ifstream bin_ifs(to_open, std::ios_base::binary);
+        bin_ifs.read(read_buf, 4096); // `read` does not place NULL
+        if (std::char_traits<char>::find(read_buf, bin_ifs.tellg(), '\0'))
+            return false;
+    }
+
+    // Caveat: may have to open the file twice. Also `std::`s are slow :(
+    std::unique_ptr<wchar_t[]> read_buf(new wchar_t[16384 + 256]);
+    ::memset(read_buf.get(), 0, 16640);
+    std::wifstream ifs(to_open);
+    ifs.read(read_buf.get(), 256);
+    do { // At least match once
+        ifs.read(read_buf.get() + 256, 16384);
+        if (re_needle ? _do_regex_match(sv_t(read_buf.get(), 16640), re_needle)
+                      : _do_strstr_match(sv_t(read_buf.get(), 16640), str_needle, icase))
+            return true;
+        ::memcpy(read_buf.get(), read_buf.get() + 16384, 256 * sizeof(wchar_t));
+    } while (ifs.good());
+    return false;
+
+#else // Unix content match: read and mmap
     _dummy_unique_fd fd = ::open(it.path().c_str(), O_RDONLY);
     if (fd <= 0)
         return false;
@@ -101,6 +140,7 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
             return true;
     }
     return false;
+#endif
 }
 
 namespace pred_tree {
@@ -135,7 +175,8 @@ bool content_regex_node::next_param(sv_t param) {
     } else {
         int errcode; PCRE2_SIZE erroffset;
         _re.reset(pcre2_compile(
-            reinterpret_cast<PCRE2_SPTR8>(param.data()), param.size(),
+            // char to uint8 on Unix, wchar_t to uint16 on Windows
+            reinterpret_cast<PCRE2_SPTR>(param.data()), param.size(),
             _icase ? PCRE2_CASELESS : 0,
             &errcode, &erroffset, nullptr
         ), pcre2_code_free);
