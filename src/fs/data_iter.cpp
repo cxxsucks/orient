@@ -22,23 +22,17 @@ fs_data_record::strview_type fs_data_record::file_name_view() const noexcept {
 
 ptrdiff_t fs_data_record::increment() noexcept {
     category_tag prev_cate = _category;
-    _cur_pos += (_name_len + 1) * sizeof(char_type) + sizeof(uint16_t);
+    _cur_pos += sizeof(char_t) + _name_len * sizeof(char_t) +
+                sizeof(uint16_t); // Tag, name and name length
     ptrdiff_t push_count = 0;
 
     if (prev_cate == category_tag::dir_tag) {
         _cur_pos += sizeof(time_t);
         ++push_count;
     }
-    
-    // No longer saves links' pointed-to positions
-    /* if (prev_cate == category_tag::link_tag) {
-        auto linkto_len = *reinterpret_cast<const uint16_t*>(
-            static_cast<const uint8_t*>(viewing) + cur_pos);
-        cur_pos += (linkto_len * sizeof(char_type) + sizeof(uint16_t));
-        // cur_pos += sizeof(uint16_t) + *reinterpret_cast<const uint16_t*>(
-            // static_cast<const uint8_t*>(viewing) + cur_pos);
-    } */
 
+    // Use while loop in case of multiple dir exit
+    // One possible situation is multiple layers of empty dirs.
     while (_category == category_tag::dir_pop_tag) {
         _cur_pos += sizeof(char_type);
         --push_count;
@@ -277,10 +271,12 @@ mode_t fs_data_iter::mode() const noexcept {
     return _opt_stat.value().st_mode;
 }
 
+#ifndef _WIN32
 blksize_t fs_data_iter::io_block_size() const noexcept {
     _fetch_stat();
     return _opt_stat.value().st_blksize;
 }
+#endif // !_WIN32
 
 size_t fs_data_iter::depth() const noexcept {
     // size_t cnt = 0;

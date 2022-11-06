@@ -1,8 +1,11 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <cassert>
+
+#ifndef _WIN32
 extern "C" {
 #include <sys/mman.h>
 }
+#endif
 
 namespace orie {
 
@@ -51,8 +54,7 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
     // Read files with std::wifstream, which handles utf-8 gracefully.
     // TODO: i18n support is $hit on Win$hit 💩!!!
 #ifdef _MSC_VER
-    auto& to_open = it.path();
-    ifs.imbue(std::locale("en_US.utf8")); // utf8 only :(
+    auto& to_open = it.path(); // utf8 only :(
 #else
     auto to_open = orie::xxstrcpy(sv_t(it.path())); // ansi only :(
 #endif
@@ -71,6 +73,9 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
     std::unique_ptr<wchar_t[]> read_buf(new wchar_t[16384 + 256]);
     ::memset(read_buf.get(), 0, 16640);
     std::wifstream ifs(to_open);
+#ifdef _MSC_VER
+    ifs.imbue(std::locale("en_US.utf8"));
+#endif
     ifs.read(read_buf.get(), 256);
     do { // At least match once
         ifs.read(read_buf.get() + 256, 16384);
@@ -182,10 +187,14 @@ bool content_regex_node::next_param(sv_t param) {
         ), pcre2_code_free);
 
         if (_re == nullptr) {
-            // Locked to char8 as std::exception only accepts char8
-            PCRE2_UCHAR8 errbuf[128];
-            pcre2_get_error_message_8(errcode, errbuf, 128);
-            throw std::runtime_error(reinterpret_cast<char*>(errbuf));
+            PCRE2_UCHAR errbuf[128];
+            int msg_len = pcre2_get_error_message(errcode, errbuf, 128);
+            if constexpr (sizeof(PCRE2_UCHAR) == 1)
+                throw std::runtime_error(reinterpret_cast<char*>(errbuf));
+            else
+                throw std::runtime_error(orie::xxstrcpy(
+                    std::basic_string_view(errbuf, msg_len)
+                ));
         }
     }
     return true;

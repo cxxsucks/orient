@@ -1,8 +1,10 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <algorithm>
+#ifndef _WIN32
 extern "C" {
 #include <sys/wait.h>
 }
+#endif
 
 namespace orie {
 namespace pred_tree {
@@ -142,7 +144,7 @@ bool print_node::next_param(sv_t param) {
 #endif
         if (!_ofs->good()) {
             _ofs.reset();
-#if !defined(_WIN32) || defined(_MSC_VER)
+#ifndef _WIN32
             throw std::runtime_error(NATIVE_PATH("Open failed: ") + str_t(param));
 #else
             throw std::runtime_error(orie::xxstrcpy(sv_t(
@@ -366,12 +368,12 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
     else si.hStdInput = ::GetStdHandle(STD_INPUT_HANDLE);
 
     cmdline_str.reserve(cmdline_str.size() + 100);
-    LPDWORD exit_code;
+    DWORD exit_code;
     bool ret = ::CreateProcessW(nullptr, cmdline_str.data(), nullptr, nullptr, true,
                                 NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)
             && ::WaitForSingleObject(pi.hProcess, INFINITE) 
-            && ::GetExitCodeProcess(pi.hProcess, exit_code) 
-            && *exit_code == 0;
+            && ::GetExitCodeProcess(pi.hProcess, &exit_code) 
+            && exit_code == 0;
     ::CloseHandle(pi.hProcess);
     ::CloseHandle(pi.hThread);
     if (_stdin_confirm)

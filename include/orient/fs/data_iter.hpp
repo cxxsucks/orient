@@ -158,8 +158,10 @@ public:
     time_t ctime() const noexcept;
     // Amount of disk space in bytes of current entry.
     off_t file_size() const noexcept;
+#ifndef _WIN32
     // Preferrable IO block size
     blksize_t io_block_size() const noexcept;
+#endif // !_WIN32
 
     size_t depth() const noexcept;
     //! @brief File type of current entry.

@@ -143,7 +143,7 @@ template <class iter_t, class sv_t>
 struct truefalse_node : public node<iter_t, sv_t> {
     // Public field: "apply" and "apply_blocked" always return its value.
     bool always;
-    truefalse_node(bool _res) noexcept : always(_res) {}
+    truefalse_node(bool _res = false) noexcept : always(_res) {}
 
     node<iter_t, sv_t>* clone() const override {
         return new truefalse_node(*this);

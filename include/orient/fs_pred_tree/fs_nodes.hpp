@@ -366,6 +366,13 @@ public:
     bool next_param(sv_t param) override;
 };
 
+#ifdef _WIN32
+// -username -baduser -groupname -badgroup cannot be used on Windows. 
+// Aliase them to -false.
+using username_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
+using baduser_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
+
+#else
 class username_node : public fs_node {
     uid_t _targ;
     bool _is_group;
@@ -426,6 +433,25 @@ public:
     }
 };
 
+#ifdef ORIE_NEED_SELINUX
+class selcontext_node : public fs_node {
+    std::array<char_t, 256 / sizeof(char_t)> _pattern;
+
+public:
+    double success_rate() const noexcept override { return 0.2; }
+    double cost() const noexcept override {
+        return 1e-5;
+    }
+    fs_node* clone() const override {
+        return new selcontext_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override;
+    bool next_param(sv_t param) override;
+};
+#endif 
+#endif
+
 // CONTENT
 class content_strstr_node : public fs_node {
     str_t _pattern;
@@ -468,24 +494,6 @@ public:
     content_regex_node(bool block = false, bool bin = false, bool icase = false)
         : _blocked(block), _allow_binary(bin), _icase(icase) {}
 };
-
-#ifdef ORIE_NEED_SELINUX
-class selcontext_node : public fs_node {
-    std::array<char_t, 256 / sizeof(char_t)> _pattern;
-
-public:
-    double success_rate() const noexcept override { return 0.2; }
-    double cost() const noexcept override {
-        return 1e-5;
-    }
-    fs_node* clone() const override {
-        return new selcontext_node(*this);
-    }
-
-    bool apply_blocked(fs_data_iter& it) override; 
-    bool next_param(sv_t param) override;
-};
-#endif 
 
 // MODIFIERS
 /**

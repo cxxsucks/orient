@@ -6,6 +6,7 @@
 extern "C" {
 #if _WIN32
 #include <orient/util/dirent_win.h>
+#include <shlwapi.h>
 #define NATIVE_PATH(str) L##str
 #ifdef max
 #undef max
@@ -34,6 +35,7 @@ namespace orie {
     using dir_t = ::_WDIR;
     using dirent_t = ::_wdirent;
     typedef struct _stat stat_t; // using does not work on MSVC :(
+    using ssize_t = ptrdiff_t;
 
     using fs_char_traits = std::char_traits<char>;
     using sv_t = std::wstring_view;
@@ -67,6 +69,11 @@ namespace orie {
     inline std::ostream& NATIVE_STDOUT = std::cout;
     inline std::ostream& NATIVE_STDERR = std::cerr;
 #endif
+
+    using uid_t = decltype(stat_t::st_uid);
+    using gid_t = decltype(stat_t::st_gid);
+    using ino_t = decltype(stat_t::st_ino);
+    using mode_t = decltype(stat_t::st_mode);
 
     // https://en.cppreference.com/w/cpp/string/char_traits
     // Used in case-ignored comparison

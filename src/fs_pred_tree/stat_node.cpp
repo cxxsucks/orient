@@ -1,10 +1,12 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <orient/util/charconv_t.hpp>
 #include <algorithm>
+#ifndef _WIN32
 extern "C" {
 #include <pwd.h>
 #include <grp.h>
 }
+#endif
 
 namespace orie {
 namespace pred_tree {
@@ -272,6 +274,7 @@ bool perm_node::next_param(sv_t param) {
     return true;
 } 
 
+#ifndef _WIN32
 bool username_node::apply_blocked(fs_data_iter& it) {
     if (_targ == ~uid_t())
         throw uninitialized_node(NATIVE_SV("-username"));
@@ -337,6 +340,7 @@ bool selcontext_node::next_param(sv_t param) {
     return false;
 }
 #endif
+#endif // !_WIN32
 
 }
 }
