@@ -4,6 +4,9 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#ifdef _MSC_VER
+#pragma warning(disable: 4996)
+#endif // _MSC_VER
 
 namespace orie {
 
@@ -344,7 +347,7 @@ next_token(const char_t* src, size_t src_size) {
         src_at = next_token(src, src_size, res.data(), res.size()).first;
     }
 
-    size_t res_len = res.find_last_not_of('\0');
+    size_t res_len = res.find_last_not_of(char_t(0));
     if (res_len != res.npos)
         res.erase(res_len + 1);
     return std::make_pair(src_at, res);

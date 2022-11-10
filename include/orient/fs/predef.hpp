@@ -1,12 +1,14 @@
 #pragma once
-#ifdef _MSC_VER
-#pragma warning(disable: 4996)
-#endif // _MSC_VER
 
 extern "C" {
 #if _WIN32
-#include <orient/util/dirent_win.h>
 #include <shlwapi.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "Shlwapi.lib")
+#pragma warning(disable: 4996)
+#endif
+
+#include <orient/util/dirent_win.h>
 #define NATIVE_PATH(str) L##str
 #ifdef max
 #undef max
@@ -178,8 +180,8 @@ namespace orie {
 
     //! @brief Unix fnmatch(3) and Windows PathMatchSpecW wrapper.
     inline bool glob_match(const char_t* needle, const char_t* haystack, bool) {
-        return *haystack == separator ? ::PathMatchSpecW(haystack + 1, needle)
-                                      : ::PathMatchSpecW(haystack, needle);
+        return *haystack == separator ? PathMatchSpecW(haystack + 1, needle)
+                                      : PathMatchSpecW(haystack, needle);
     }
 
 #else // Not Windows. Then these functions are just wrappers.

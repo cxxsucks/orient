@@ -175,7 +175,7 @@ protected:
     // Previous node
     std::shared_ptr<node<iter_t, sv_t>> prev;
     // Memorendum of previous results to avoid recalculation in recursion
-    double prev_succ, prev_cost;
+    double prev_succ = 0.0, prev_cost = 1.0;
 
 public:
     // Communicative if its child is communicative. Can be overriden.

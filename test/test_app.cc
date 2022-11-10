@@ -170,7 +170,7 @@ TEST_F(orieApp, osDefault) {
 TEST_F(orieApp, main) {
     auto conf_path = info().tmpPath / "mainConf.txt",
          start_path = info().tmpPath / "dir10";
-    const char* args[] = {
+    const orie::char_t* args[] = {
         NATIVE_PATH("a.out"), 
         start_path.c_str(),
         NATIVE_PATH("-conf"), conf_path.c_str(),

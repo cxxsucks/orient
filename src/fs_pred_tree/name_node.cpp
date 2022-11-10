@@ -157,10 +157,14 @@ bool regex_node::next_param(sv_t param) {
     ), pcre2_code_free);
 
     if (_re == nullptr) {
-        // Locked to char8 as std::exception only accepts char8
-        PCRE2_UCHAR8 errbuf[128];
-        pcre2_get_error_message_8(errcode, errbuf, 128);
-        throw std::runtime_error(reinterpret_cast<char*>(errbuf));
+            PCRE2_UCHAR errbuf[128];
+            int msg_len = pcre2_get_error_message(errcode, errbuf, 128);
+            if constexpr (sizeof(PCRE2_UCHAR) == 1)
+                throw std::runtime_error(reinterpret_cast<char*>(errbuf));
+            else
+                throw std::runtime_error(orie::xxstrcpy(
+                    std::basic_string_view(errbuf, msg_len)
+                ));
     }
     return true;
 }

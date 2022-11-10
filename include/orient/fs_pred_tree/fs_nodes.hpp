@@ -42,10 +42,18 @@ class access_node;
 // PRED: -perm
 // ARG: /- followed by octal or sympolic permission bit
 class perm_node;
+#ifdef _WIN32
+// -user -nouser -group -nogroup cannot be used on Windows. 
+// Aliase them to -false.
+using username_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
+using baduser_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
+
+#else
 // PRED: -user -group ARG: username
 class username_node;
 // PRED: -nogroup -nouser
 class baduser_node;
+#endif
 
 #ifdef ORIE_NEED_SELINUX
 extern "C" {
@@ -366,13 +374,7 @@ public:
     bool next_param(sv_t param) override;
 };
 
-#ifdef _WIN32
-// -username -baduser -groupname -badgroup cannot be used on Windows. 
-// Aliase them to -false.
-using username_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
-using baduser_node = pred_tree::truefalse_node<fs_data_iter, orie::sv_t>;
-
-#else
+#ifndef _WIN32
 class username_node : public fs_node {
     uid_t _targ;
     bool _is_group;

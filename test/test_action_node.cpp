@@ -83,8 +83,12 @@ TEST_F(actionNode, execSubdir) {
     EXPECT_TRUE(matcher.next_param(NATIVE_SV("sh")));
     EXPECT_TRUE(matcher.next_param(NATIVE_SV("-c")));
     // .../dir3/dir2/dir1 and a newline
+#ifdef _WIN32
+    auto test_str = std::to_wstring(info.tmpPath.native().size() + 16);
+#else
     auto test_str = std::to_string(info.tmpPath.native().size() + 16);
-    test_str = "test $(pwd | wc -c) -eq " + test_str;
+#endif
+    test_str = NATIVE_PATH("test $(pwd | wc -c) -eq ") + test_str;
     EXPECT_TRUE(matcher.next_param(test_str));
     EXPECT_TRUE(matcher.next_param(NATIVE_SV(";")));
     EXPECT_FALSE(matcher.next_param(NATIVE_SV("fooBar")));
@@ -115,9 +119,13 @@ TEST_F(actionNode, fprint0) {
 
     // Close the printing stream by resetting the node
     print = print_node(false, '\n');  
+    // Throws if unable to open output file
+#ifndef _WIN32
+    // TODO: no chmod on Windows
     ::chmod(out_path.c_str(), 0444); // -r--r--r--
     ASSERT_THROW(print.next_param(out_path), std::runtime_error);
     ASSERT_THROW(_do_tests(print), uninitialized_node); // No file opened
+#endif // !_WIN32
 
     // There should be 31 null separators in output file
     orie::str_t out_content;

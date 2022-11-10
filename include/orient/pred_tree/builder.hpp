@@ -75,8 +75,8 @@ private:
     bool _last_is_par_enter = false;
     uint32_t _par_lvl = 0;
     node_type* _adding = nullptr;
-    node_hint _adding_hint;
-    uint64_t _adding_brid_prio;
+    node_hint _adding_hint = node_hint::NOT_FOUND;
+    uint64_t _adding_brid_prio = 0;
 
     sv_t _pred_fallback, _bridge_fallback = cmd_sv[4];
 
@@ -155,7 +155,7 @@ builder<iter_t, sv_t>::build(int exe_argc, const char_type* const* exe_argv) {
         throw parentheses_mismatch(true);
     } else if (!_next_is_bridge) {
         // ERROR: ... -a ERROR: Empty expression
-        char_type the_end[8] = {'t','h','e',' ','e','n','d'};
+        char_type the_end[8] = {'t','h','e',' ','e','n','d','\0'};
         throw missing_predicate(sv_t(the_end), true);
     }
 

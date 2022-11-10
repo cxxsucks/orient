@@ -201,8 +201,23 @@ bool access_node::next_param(sv_t param) {
 double perm_node::success_rate() const noexcept {
     // Each bit reduce 10% success rate.
     // EXACT has harsher conditions so each bit reduces 15%.
+#ifndef __GNUC__
+    // Only GCC/Clang provides __builtin_popcount. Copied from:
+    // http://en.wikipedia.org/wiki/Hamming_weight 
+    auto __builtin_popcount = [](uint32_t x) {
+        uint32_t m1 = 0x55555555;
+        uint32_t m2 = 0x33333333;
+        uint32_t m4 = 0x0f0f0f0f;
+        uint32_t h01 = 0x01010101;
+        x -= (x >> 1) & m1;   /* put count of each 2 bits into those 2 bits */
+        x = (x & m2) + ((x >> 2) & m2);   /* put count of each 4 bits in */
+        x = (x + (x >> 4)) & m4;  /* put count of each 8 bits in */
+        int y = x * h01;
+        return y >> 24;  /* returns left 8 bits of x + (x<<8) + ... */
+    };
+#endif
     double prob =  ::pow(_comp == compar::EXACT_SET ? 0.9 : 0.85,
-        static_cast<double>(::__builtin_popcount(_targ)));
+        static_cast<double>(__builtin_popcount(_targ)));
     // The more bit-ones in ANY_SET, the more likely a file would match.
     return _comp == compar::ANY_SET ? 1 - prob : prob;
 } 

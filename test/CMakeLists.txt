@@ -17,8 +17,12 @@ add_executable(orientest ${TEST_SRCS})
 target_include_directories(orientest PUBLIC ${GTEST_INCLUDE_DIRS})
 add_dependencies(orientest orie)
 target_link_libraries(orientest 
-                      orie pcre2-8
-                      GTest::gtest_main)
+                      orie GTest::gtest_main)
+if(WIN32)
+target_link_libraries(orientest pcre2-16)
+else(WIN32)
+target_link_libraries(orientest pcre2-8)
+endif(WIN32)
 
 include(GoogleTest)
 gtest_discover_tests(orientest)
