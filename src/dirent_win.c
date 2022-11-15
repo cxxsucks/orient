@@ -147,10 +147,11 @@ int _wreaddir_r(
 	DWORD attr = datap->dwFileAttributes;
 	if ((attr & FILE_ATTRIBUTE_DEVICE) != 0)
 		entry->d_type = DT_CHR;
+	// File can be both symlink and directory. Symlink takes precedence.
+	else if ((attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+		entry->d_type = DT_LNK;	
 	else if ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0)
 		entry->d_type = DT_DIR;
-	else if ((attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-		entry->d_type = DT_LNK;	// Windows Symlink
 	else
 		entry->d_type = DT_REG;
 

@@ -165,10 +165,12 @@ fs_data_iter &fs_data_iter::change_root(strview_type start_path) {
     while (!start_path.empty() && start_path.back() == orie::separator)
         start_path.remove_suffix(1);
     strview_type pref_view = strview_type(_prefix);
-    pref_view.remove_suffix(1);
+    if (!pref_view.empty())
+		pref_view.remove_suffix(1);
 
-    if (pref_view == start_path)
-        return *this; // Current directory. Do not change.
+    // Current directory or changing root of end iterator
+    if (pref_view == start_path || _push_count == 0)
+        return *this; // Do not change.
     if (start_path.find(pref_view) != 0)
         return (*this = end());
     bool recur_old = (_recur == has_recur_::enable);
@@ -177,7 +179,8 @@ fs_data_iter &fs_data_iter::change_root(strview_type start_path) {
     do {
         ++*this;
         pref_view = strview_type(_prefix);
-        if (!pref_view.empty()) // Extra Slash
+		// Remove Extra Slash. 
+        if (!pref_view.empty()) 
             pref_view.remove_suffix(1);
     } while (start_path != pref_view && _push_count != 0);
     

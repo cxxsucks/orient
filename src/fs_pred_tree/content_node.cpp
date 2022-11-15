@@ -54,10 +54,15 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
     // Read files with std::wifstream, which handles utf-8 gracefully.
     // TODO: i18n support is $hit on Win$hit 💩!!!
 #ifdef _MSC_VER
-    auto& to_open = it.path(); // utf8 only :(
+    std::wstring to_open = it.path(); // utf8 only :(
 #else
-    auto to_open = orie::xxstrcpy(sv_t(it.path())); // ansi only :(
+    std::wstring to_open = orie::xxstrcpy(sv_t(it.path())); // ansi only :(
 #endif
+    // Remove the trailing separator that may exist
+    if (to_open.empty())
+        return false;
+    if (to_open.front() == separator)
+		to_open = to_open.substr(1);
 
     // Judge binary
     if (!allow_binary) {

@@ -68,7 +68,7 @@ bool downdir_node::next_param(sv_t param) {
         throw invalid_param_name(NATIVE_SV("null parameter"), 
                                  NATIVE_SV("-num"));
 
-    char flag = param.front();
+    char_t flag = param.front();
     if (flag == '+' || flag == '-')
         param.remove_prefix(1);
     size_t parsed;
@@ -176,7 +176,9 @@ bool del_node::apply_blocked(fs_data_iter& it) {
                           << NATIVE_PATH('\n');
         else
 #ifdef _WIN32
-            ::RemoveDirectoryW(it.path().c_str());
+            if (!::RemoveDirectoryW(_todel_dirs_stack.back().c_str()))
+                std::wcerr << L"Cannot Delete: " << _todel_dirs_stack.back() 
+                           << L" Error " << GetLastError() << L'\n';
 #else
             ::rmdir(_todel_dirs_stack.back().c_str());
 #endif

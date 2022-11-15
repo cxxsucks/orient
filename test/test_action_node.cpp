@@ -30,29 +30,31 @@ struct actionNode : public ::testing::Test {
     }
 };
 
+// TODO: Test -exec on Windows :(
+#ifndef _WIN32
 TEST_F(actionNode, execGrep) {
     type_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_SV("f")));
+    ASSERT_TRUE(matcher.next_param("f"));
     exec_node exec(false, false);
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("grep")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("-lIi")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("hello")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("{}")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV(";")));
-    EXPECT_FALSE(exec.next_param(NATIVE_SV("fooBar")));
+    EXPECT_TRUE(exec.next_param("grep"));
+    EXPECT_TRUE(exec.next_param("-lIi"));
+    EXPECT_TRUE(exec.next_param("hello"));
+    EXPECT_TRUE(exec.next_param("{}"));
+    EXPECT_TRUE(exec.next_param(";"));
+    EXPECT_FALSE(exec.next_param("fooBar"));
     auto cond = matcher & exec;
     EXPECT_EQ(2, _do_tests(cond));
 }
 
 TEST_F(actionNode, execMultiBracket) {
     strstr_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_SV("file0")));
+    ASSERT_TRUE(matcher.next_param("file0"));
     exec_node exec(false, false);
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("cp")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("{}")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("{}.new")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV(";")));
-    EXPECT_FALSE(exec.next_param(NATIVE_SV("fooBar")));
+    EXPECT_TRUE(exec.next_param("cp"));
+    EXPECT_TRUE(exec.next_param("{}"));
+    EXPECT_TRUE(exec.next_param("{}.new"));
+    EXPECT_TRUE(exec.next_param(";"));
+    EXPECT_FALSE(exec.next_param("fooBar"));
     // All "file0"s are copied
     auto cond = matcher & exec;
     size_t orig = _do_tests(cond);
@@ -64,14 +66,14 @@ TEST_F(actionNode, execMultiBracket) {
 TEST_F(actionNode, execPlus) {
     // TODO: reliant on reading stdout
     type_node matcher;
-    ASSERT_TRUE(matcher.next_param(NATIVE_SV("f")));
+    ASSERT_TRUE(matcher.next_param("f"));
     exec_node exec(false, false);
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("grep")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("-lIi")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("hello")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("{}")));
-    EXPECT_TRUE(exec.next_param(NATIVE_SV("+")));
-    EXPECT_FALSE(exec.next_param(NATIVE_SV("fooBar")));
+    EXPECT_TRUE(exec.next_param("grep"));
+    EXPECT_TRUE(exec.next_param("-lIi"));
+    EXPECT_TRUE(exec.next_param("hello"));
+    EXPECT_TRUE(exec.next_param("{}"));
+    EXPECT_TRUE(exec.next_param("+"));
+    EXPECT_FALSE(exec.next_param("fooBar"));
     // Output 2 lines
     auto cond = matcher & exec;
     _do_tests(cond);
@@ -80,29 +82,28 @@ TEST_F(actionNode, execPlus) {
 TEST_F(actionNode, execSubdir) {
     // TODO: reliant on reading stdout
     exec_node matcher(false, true);
-    EXPECT_TRUE(matcher.next_param(NATIVE_SV("sh")));
-    EXPECT_TRUE(matcher.next_param(NATIVE_SV("-c")));
+    EXPECT_TRUE(matcher.next_param("sh"));
+    EXPECT_TRUE(matcher.next_param("-c"));
     // .../dir3/dir2/dir1 and a newline
-#ifdef _WIN32
-    auto test_str = std::to_wstring(info.tmpPath.native().size() + 16);
-#else
     auto test_str = std::to_string(info.tmpPath.native().size() + 16);
-#endif
-    test_str = NATIVE_PATH("test $(pwd | wc -c) -eq ") + test_str;
+    test_str = "test $(pwd | wc -c) -eq " + test_str;
     EXPECT_TRUE(matcher.next_param(test_str));
-    EXPECT_TRUE(matcher.next_param(NATIVE_SV(";")));
-    EXPECT_FALSE(matcher.next_param(NATIVE_SV("fooBar")));
+    EXPECT_TRUE(matcher.next_param(";"));
+    EXPECT_FALSE(matcher.next_param("fooBar"));
     // Output 2 lines
     EXPECT_EQ(2, _do_tests(matcher));
 }
+#endif
 
 TEST_F(actionNode, delNode) {
     regex_node matcher;
     del_node del;
     ASSERT_TRUE(matcher.next_param(NATIVE_SV(".*[01]")));
-    EXPECT_FALSE(del.next_param(NATIVE_SV("fooBar")));
-    auto cond = matcher & del;
-    ASSERT_EQ(24, _do_tests(cond));
+    {
+        EXPECT_FALSE(del.next_param(NATIVE_SV("fooBar")));
+        auto cond = matcher & del;
+        ASSERT_EQ(24, _do_tests(cond));
+    }
 
     info.refreshDat();
     EXPECT_EQ(0, _do_tests(matcher));

@@ -132,7 +132,7 @@ builder<iter_t, sv_t>::build(sv_t content) {
         throw parentheses_mismatch(true);
     } else if (!_next_is_bridge) {
         // ERROR: ... -a ERROR: Empty expression
-        char_type the_end[8] = {'t','h','e',' ','e','n','d'};
+        char_type the_end[8] = {'t','h','e',' ','e','n','d', '\0'};
         throw missing_predicate(sv_t(the_end), true);
     }
 

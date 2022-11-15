@@ -216,6 +216,11 @@ void* fs_dumper::to_raw(void* dst) const noexcept {
     dst = reinterpret_cast<uint16_t*>(dst) + 1;
     *reinterpret_cast<time_t*>(dst) = 0;
     dst = reinterpret_cast<time_t*>(dst) + 1;
+
+    for (const dir_dumper& d : _drives)
+        dst = d.to_raw(dst);
+    *reinterpret_cast<category_tag*>(dst) = orie::dir_pop_tag;
+    return reinterpret_cast<category_tag*>(dst) + 1;
 }
 
 dir_dumper* fs_dumper::visit_dir(const str_t& file_name) {

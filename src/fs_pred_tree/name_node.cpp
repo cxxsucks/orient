@@ -34,11 +34,11 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
         // Strings matched by fnmatch(3) must be NULL-terminated
         char_t name_buf[path_max];
         sv_t name_sv = it.basename().substr(0, path_max - 1);
-        ::memcpy(name_buf, name_sv.data(), name_sv.size());
+        ::memcpy(name_buf, name_sv.data(), name_sv.size() * sizeof(char_t));
         name_buf[name_sv.size()] = '\0';
         return orie::glob_match(_pattern.data(), name_buf, _is_icase);
     }
-    std::terminate(); // Unreachable
+    // Unreachable
 }
 
 bool glob_node::next_param(sv_t param) {

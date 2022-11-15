@@ -157,25 +157,23 @@ namespace orie {
 
     //! @brief Get the absolute name of @p src, with an optional starting '\\'.
     //! @param [out] resolv Non-null buffer holding resolved path.
-    //! A redundant '\\' will be placed in @p resolv[0]
+    //! @b NO redundant '\\' will be placed in @p resolv[0]
     //! @return Size written to @p resolv not including '\0'
     //! @retval -1 Failure or buffer too small
     inline ssize_t realpath(const char_t* src,
                             char_t* resolv, size_t buf_len) 
     {
-        // -1 for the '\\' in output
-        DWORD _buf_len = static_cast<DWORD>(buf_len) - 1;
+        DWORD _buf_len = static_cast<DWORD>(buf_len);
         while (*src == separator)
             ++src;
-        DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv + 1, nullptr);
-        if (saved > _buf_len || saved == 0)
+        DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv, nullptr);
+        if (saved >= _buf_len || saved == 0)
             return -1;
-        // On success it does not
+        // On success GetFullPathNameW does not include '\0'
         // Strip '\\' at the end of resolved path
-        if (resolv[saved] == orie::separator)
-            resolv[saved--] = '\0';
-        resolv[0] = separator;
-        return saved; 
+        if (resolv[saved - 1] == orie::separator)
+            resolv[--saved] = L'\0';
+        return static_cast<ssize_t>(saved) - 1;
     }
 
     //! @brief Unix fnmatch(3) and Windows PathMatchSpecW wrapper.

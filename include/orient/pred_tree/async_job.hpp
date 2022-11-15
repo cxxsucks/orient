@@ -21,6 +21,7 @@ class async_job {
     std::atomic<int> _async_result_left;
     std::vector<iter_t> _stashed_async_iters;
     std::mutex _stash_mut;
+    std::thread _cancel_thread;
 
 public:
     // Start or resume the job, stopping when `min_result_sync` iters
@@ -87,13 +88,13 @@ public:
     void cancel() noexcept { _cancelled = true; }
     template <class Rep, class Period> 
     void cancel(const std::chrono::duration<Rep, Period>& timeout) noexcept {
-        std::thread([this, timeout] () {
+        _cancel_thread = std::thread([this, timeout] () {
             std::unique_lock __lck(_cnt_mut);
             if (_cancelled)
                 return;
             if (std::cv_status::timeout == _cancel_cv.wait_for(__lck, timeout))
                 _cancelled = true;
-        }).detach();
+        });
     }
 
     async_job(iter_t begin, iter_t end, node<iter_t, sv_t>& expr)
@@ -118,6 +119,8 @@ public:
     }
         join(); // cnt_running == 0 after joining
         _cancel_cv.notify_all(); // Stop timed cancelling thread
+		if (_cancel_thread.joinable())
+			_cancel_thread.join();
     }
 };
 

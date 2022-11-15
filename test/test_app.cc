@@ -29,7 +29,8 @@ protected:
     void SetUp() override {
         _app.add_root_path(info().tmpPath.native())
             .add_root_path((info().tmpPath / "dir11").native())
-            .add_start_path(NATIVE_PATH("/"));
+            // Empty path is root path
+            .add_start_path(orie::str_t());
     }
     void TearDown() override {
         std::filesystem::remove(temp_directory_path() / "testData.db");
@@ -127,7 +128,7 @@ TEST_F(orieApp, confFile) {
     ASSERT_TRUE(_app.read_conf((info().tmpPath / "testConf.txt").native()))
         << "Read Configuration Failed.";
     ASSERT_TRUE(_app.read_db()) << "Read database failed";
-    _app.add_start_path(NATIVE_PATH("/"));
+    _app.add_start_path(orie::str_t());
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
     ASSERT_TRUE(_app.update_db());
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
@@ -189,8 +190,6 @@ TEST_F(orieApp, main) {
     EXPECT_EQ(0, orie::app::main(5, args));
     // Ok; updatedb and locate. Also no result because by default
     // start from working dir, which is not /tmp
-    EXPECT_EQ(0, orie::app::main(6, args + 1));
-    // 4 results
     EXPECT_EQ(0, orie::app::main(6, args + 1));
     // Ok; start at dir10. Print 1 result
     EXPECT_EQ(0, orie::app::main(7, args));

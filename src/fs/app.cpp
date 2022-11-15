@@ -358,7 +358,7 @@ app app::os_default(fifo_thpool& pool) {
         return res;
 
     ::CreateDirectoryW((confDir += L"\\.orie").c_str(), nullptr);
-    res.read_db(confDir + L"default.db");
+    res.read_db(confDir + L"\\default.db");
 
     pathLen = ::GetEnvironmentVariableW(L"UserProfile", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
@@ -440,7 +440,12 @@ try {
         static std::mutex out_mut;
         if (!has_action) {
             std::lock_guard __lck(out_mut);
+#ifdef _WIN32
+            // Do not print trailing '\\'
+            orie::NATIVE_STDOUT << it.path().c_str() + 1 << '\n';
+#else
             orie::NATIVE_STDOUT << it.path() << '\n';
+#endif
         }
     };
 
