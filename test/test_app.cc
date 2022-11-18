@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 #include <orient/app.hpp>
 #include <orient/fs_pred_tree/fs_expr_builder.hpp>
 #include "afixedbunchofdirs.hpp"
@@ -147,26 +147,35 @@ TEST_F(orieApp, autoUpdate) {
         .stop_auto_update();
 }
 
-#ifdef __unix
 TEST_F(orieApp, osDefault) {
     // Erase existing config
     std::cout << "Regenerating filesystem database.\n May take longer than "
               << "usual if a HDD is mounted, but not under /mnt or /run" << std::endl;
+#ifdef _WIN32
+    std::filesystem::path conf_dir(::getenv("USERPROFILE"));
+    conf_dir /= ".orie";
+    orie::sv_t db_exist_teststr(L"-updir ( -name .orie ) -a -name default.*");
+#else
     std::filesystem::path conf_dir(::getenv("HOME"));
     conf_dir = (conf_dir / ".config" / "orie");
+    orie::sv_t db_exist_teststr("-updir ( -name orie ) -a -name default.* "
+                                "-a -perm 0600");
+#endif
+
     std::filesystem::remove(conf_dir / "default.txt");
     std::filesystem::remove(conf_dir / "default.db");
     // Create config
     _app = orie::app::os_default(_pool);
-    _app.update_db();
+    _app.update_db().add_start_path(orie::str_t());
+    // Config file exists, but db file does not
+    EXPECT_LE(1, _do_tests(db_exist_teststr));
+
     // Reset, then read the config (and database)
     _app = orie::app::os_default(_pool);
     _app.update_db().add_start_path(orie::str_t());
     // database file and config file
-    EXPECT_LE(2, _do_tests(NATIVE_SV("-updir ( -name orie ) -a -name default.* "
-                                     "-a -perm 0600")));
+    EXPECT_LE(2, _do_tests(db_exist_teststr));
 }
-#endif
 
 TEST_F(orieApp, main) {
     auto conf_path = info().tmpPath / "mainConf.txt",

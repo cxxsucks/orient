@@ -166,14 +166,26 @@ namespace orie {
         DWORD _buf_len = static_cast<DWORD>(buf_len);
         while (*src == separator)
             ++src;
-        DWORD saved = ::GetFullPathNameW(src, _buf_len, resolv, nullptr);
+
+        HANDLE hdl = ::CreateFileW(src, GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (hdl == INVALID_HANDLE_VALUE)
+            return -1;
+        DWORD saved = ::GetFinalPathNameByHandleW(hdl, resolv, _buf_len,
+                                                  VOLUME_NAME_DOS);
+        ::CloseHandle(hdl);
         if (saved >= _buf_len || saved == 0)
             return -1;
+
         // On success GetFullPathNameW does not include '\0'
+        // Strip the "\\\\?\\" part
+        saved -= 4;
+        // The '\0' also have to be memmoved
+        ::memmove(resolv, resolv + 4, saved * sizeof(wchar_t) + sizeof(wchar_t));
         // Strip '\\' at the end of resolved path
         if (resolv[saved - 1] == orie::separator)
             resolv[--saved] = L'\0';
-        return static_cast<ssize_t>(saved) - 1;
+        return static_cast<ssize_t>(saved);
     }
 
     //! @brief Unix fnmatch(3) and Windows PathMatchSpecW wrapper.

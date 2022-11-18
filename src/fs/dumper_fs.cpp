@@ -231,7 +231,8 @@ dir_dumper* fs_dumper::visit_dir(const str_t& file_name) {
     // Handle possible redundant starting '\\'
     if (drive_letter == separator) {
         drive_letter = file_name[1];
-        left = left.substr(1);
+        if (!left.empty())
+			left = left.substr(1);
     }
     drive_letter = ::towupper(drive_letter);
 
