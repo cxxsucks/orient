@@ -359,7 +359,7 @@ public:
     enum class compar { EXACT_SET, ALL_SET, ANY_SET, };
 
 private:
-    mode_t _targ = ~mode_t();
+    mode_t _targ = mode_t(-1);
     compar _comp = compar::EXACT_SET;
 
 public:

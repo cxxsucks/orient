@@ -74,23 +74,24 @@ TEST_F(actionNode, execPlus) {
     EXPECT_TRUE(exec.next_param("{}"));
     EXPECT_TRUE(exec.next_param("+"));
     EXPECT_FALSE(exec.next_param("fooBar"));
+
     // Output 2 lines
     auto cond = matcher & exec;
+    std::cout << "Below this there shall be 2 lines of output:" << std::endl;
     _do_tests(cond);
 }
 
 TEST_F(actionNode, execSubdir) {
-    // TODO: reliant on reading stdout
     exec_node matcher(false, true);
     EXPECT_TRUE(matcher.next_param("sh"));
     EXPECT_TRUE(matcher.next_param("-c"));
-    // .../dir3/dir2/dir1 and a newline
+    // ${testTmpPath}/dir3/dir2/dir1 and a newline put by pwd(1)
     auto test_str = std::to_string(info.tmpPath.native().size() + 16);
+    std::cerr << info.tmpPath.native() << ' ' << test_str << '\n';
     test_str = "test $(pwd | wc -c) -eq " + test_str;
     EXPECT_TRUE(matcher.next_param(test_str));
     EXPECT_TRUE(matcher.next_param(";"));
     EXPECT_FALSE(matcher.next_param("fooBar"));
-    // Output 2 lines
     EXPECT_EQ(2, _do_tests(matcher));
 }
 #endif

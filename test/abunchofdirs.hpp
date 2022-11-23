@@ -30,6 +30,7 @@ struct ABunchOfDirs {
             create_directories(tmpPath);
             _prep_dir(depth, tmpPath);
         }
+        tmpPath = std::filesystem::canonical(tmpPath);
         refreshDat();
     }
 

@@ -16,3 +16,4 @@ unused
 **/*tmpdir*
 CMakeSettings.json
 win_port/packages
+.DS_Store

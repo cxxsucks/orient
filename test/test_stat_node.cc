@@ -165,7 +165,7 @@ TEST_F(statNode, size) {
     EXPECT_EQ(64, _do_tests(matcher));
 }
 
-#ifdef __unix
+#ifndef _WIN32
 TEST_F(statNode, ugid) {
     char uid_cstr[10] = "", gid_cstr[10] = "";
     orie::to_char_t(uid_cstr, ::getuid());

@@ -240,7 +240,7 @@ bool perm_node::apply_blocked(fs_data_iter& it) {
 }
 
 bool perm_node::next_param(sv_t param) {
-    if (_targ != ~mode_t() || param.empty())
+    if (_targ != mode_t(-1) || param.empty())
         return false;
 
     // Handle the first character
