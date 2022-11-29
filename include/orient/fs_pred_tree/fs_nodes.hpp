@@ -148,7 +148,7 @@ public:
 
     regex_node(bool full = false, bool exact = false,
                bool lname = false, bool icase = false) 
-        : _match_dat(pcre2_match_data_create(1, nullptr), pcre2_match_data_free)
+        : _match_dat(pcre2_match_data_create(16, nullptr), pcre2_match_data_free)
         , _is_full(full) , _is_exact(exact), _is_lname(lname), _is_icase(icase) { }
 };
 

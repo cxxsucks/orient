@@ -27,7 +27,7 @@ static bool _do_match(const fs_data_iter& it, sv_t str_needle, bool icase,
     // Allocate a match data each call to _do_match for better concurrency
     std::unique_ptr<pcre2_match_data, decltype(&pcre2_match_data_free)> match_dat(
         // Only do allocation if the request is actually a regex match.
-        re_needle != nullptr ? pcre2_match_data_create(8, nullptr) : nullptr,
+        re_needle != nullptr ? pcre2_match_data_create(16, nullptr) : nullptr,
         &pcre2_match_data_free
     );
 
@@ -187,7 +187,7 @@ bool content_regex_node::next_param(sv_t param) {
         _re.reset(pcre2_compile(
             // char to uint8 on Unix, wchar_t to uint16 on Windows
             reinterpret_cast<PCRE2_SPTR>(param.data()), param.size(),
-            _icase ? PCRE2_CASELESS : 0,
+            _icase ? PCRE2_CASELESS | PCRE2_MULTILINE : PCRE2_MULTILINE,
             &errcode, &erroffset, nullptr
         ), pcre2_code_free);
 
