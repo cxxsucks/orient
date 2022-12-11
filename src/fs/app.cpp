@@ -268,6 +268,29 @@ app& app::write_conf(str_t path) {
     return *this;
 }
 
+app::job_list app::get_jobs(fsearch_expr& expr) {
+    job_list jobs;
+    jobs.reserve(_start_paths.size());
+    // A lock must be introduced or an updatedb may alter data_dumped between
+    // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
+    std::shared_lock __lck(_member_mut);
+
+    // Construct jobs
+    for (sv_t p : _start_paths) {
+        fs_data_iter it(_data_dumped.get(), p);
+        if (it == it.end()) // Invalid starting path
+            continue;
+
+        jobs.emplace_back(
+            _data_dumped, // std::shared_ptr is internally thread safe
+            std::make_unique<
+                pred_tree::async_job<fs_data_iter, sv_t>
+            >(it, it.end(), expr)
+        );
+    }
+    return jobs;
+}
+
 app::app(fifo_thpool& p) : _pool(p) {}
 app::app(app&& rhs) 
     : _conf_path_valid(rhs._conf_path_valid), _pool(rhs._pool)
@@ -457,7 +480,7 @@ try {
                          "-updatedb first.\n";
         return 4;
     }
-    
+
     if (!startpath_flag) {
         char_t cwd_buf[path_max];
 #ifdef _WIN32
@@ -469,10 +492,9 @@ try {
 #endif
     }
     if (builder.has_async()) 
-        // TODO: Options to set the timeout field
-        app.run_pooled(*builder.get(), callback, std::chrono::hours(1));
+        app.run_pooled(*builder.get(), callback);
     else app.run(*builder.get(), callback);
-    
+
 } catch (std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;

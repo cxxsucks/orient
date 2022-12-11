@@ -14,12 +14,10 @@ struct contentNode : public ::testing::Test {
         orie::fifo_thpool pool(8);
         std::atomic<ptrdiff_t> res = 0;
 
-        async_job<fs_data_iter, orie::sv_t> job(
-            iter, iter.end(), matcher, pool,
-            [&res] (bool is_async, fs_data_iter&) { 
-                is_async ? ++res : --res;
-            }
-        );
+        async_job<fs_data_iter, orie::sv_t> job(iter, iter.end(), matcher);
+        job.start(pool, [&res] (bool is_async, fs_data_iter&) { 
+            is_async ? ++res : --res;
+        });
         job.join();
         return res;
     }

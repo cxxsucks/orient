@@ -89,14 +89,9 @@ public:
     >> job_list;
     template <class callback_t>
     void run(fsearch_expr& expr, callback_t callback);
+    job_list get_jobs(fsearch_expr& expr);
     template <class callback_t> 
-    job_list get_jobs(fsearch_expr& expr, callback_t callback,
-                      int min_result_sync = 2147483647,
-                      int min_result_async = 2147483647);
-    template <class callback_t, class Rep, class Period> 
-    void run_pooled(fsearch_expr& expr, callback_t callback,
-                    const std::chrono::duration<Rep, Period>& timeout = 
-                    std::chrono::hours(1));
+    void run_pooled(fsearch_expr& expr, callback_t callback);
 
     app(fifo_thpool& pool);
     app(app&&);
@@ -122,38 +117,10 @@ void app::run(fsearch_expr& expr, cb_t callback) {
 }
 
 template <class callback_t> 
-app::job_list app::get_jobs(fsearch_expr& expr, callback_t callback,
-                            int min_sync, int min_async) 
-{
-    job_list jobs;
-    jobs.reserve(_start_paths.size());
-    // A lock must be introduced or an updatedb may alter data_dumped between
-    // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
-    std::shared_lock __lck(_member_mut);
-
-    // Construct jobs
-    for (sv_t p : _start_paths) {
-        fs_data_iter it(_data_dumped.get(), p);
-        if (it == it.end()) // Invalid starting path
-            continue;
-
-        jobs.emplace_back(
-            _data_dumped, // std::shared_ptr is internally thread safe
-            std::make_unique<pred_tree::async_job<fs_data_iter, sv_t>>(
-                it, it.end(), expr, _pool, callback, min_sync, min_async)
-        );
-    }
-    return jobs;
-}
-
-template <class callback_t, class Rep, class Period> 
-void app::run_pooled(fsearch_expr& expr, callback_t callback,
-                     const std::chrono::duration<Rep, Period>& timeout)
-{
-    job_list jobs = get_jobs(expr, callback);
-    // Would quickly finish after timeout reached
+void app::run_pooled(fsearch_expr& expr, callback_t callback) {
+    job_list jobs = get_jobs(expr);
     for (auto& j : jobs)
-        j.second->cancel(timeout);
+        j.second->start(_pool, callback);
     for (auto& j : jobs)
         j.second->join();
 }

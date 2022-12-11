@@ -20,7 +20,7 @@ struct orieApp : public testing::Test {
         std::atomic<size_t> res = 0;
         auto f = [&res] (fs_data_iter&) { ++res; };
         if (builder.has_async())
-            _app.run_pooled(*builder.get(), f, std::chrono::hours(1));
+            _app.run_pooled(*builder.get(), f);
         else _app.run(*builder.get(), f);
         return res;
     }
