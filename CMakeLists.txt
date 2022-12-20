@@ -14,13 +14,13 @@ if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_Declare(pcre2
         GIT_REPOSITORY https://github.com/PCRE2Project/pcre2
         GIT_TAG pcre2-10.42)
-    set(PCRE2_BUILD_PCRE2GREP CACHE INTERNAL OFF)
-    set(PCRE2_BUILD_TESTS CACHE INTERNAL OFF)
-    set(PCRE2_DISABLE_PERCENT_ZT CACHE INTERNAL ON)
+    set(PCRE2_BUILD_PCRE2GREP OFF CACHE INTERNAL "")
+    set(PCRE2_BUILD_TESTS OFF CACHE INTERNAL "")
+    set(PCRE2_DISABLE_PERCENT_ZT ON CACHE INTERNAL "")
     if (WIN32)
-        set(PCRE2_NEWLINE CACHE INTERNAL "CRLF")
-        set(PCRE2_BUILD_PCRE2_8 CACHE INTERNAL OFF)
-        set(PCRE2_BUILD_PCRE2_16 CACHE INTERNAL ON)
+        set(PCRE2_NEWLINE "CRLF" CACHE INTERNAL "")
+        set(PCRE2_BUILD_PCRE2_8 OFF CACHE INTERNAL "")
+        set(PCRE2_BUILD_PCRE2_16 ON CACHE INTERNAL "")
     endif(WIN32)
     FetchContent_MakeAvailable(pcre2)
 endif(NOT ORIE_SYSTEM_PCRE2)
@@ -65,6 +65,6 @@ add_subdirectory(test)
 endif(ORIE_TEST)
 
 target_compile_options(orie PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<CXX_COMPILER_ID:MSVC>:/W3>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
