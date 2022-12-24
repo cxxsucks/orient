@@ -11,28 +11,6 @@ class fifo_thpool;
 namespace dmp {
 class dir_dumper;
 
-struct file_dumper {
-    using value_type = orie::char_t;
-    using string_type = std::basic_string<value_type>;
-    using strview_type = std::basic_string_view<value_type>;
-
-    string_type _filename;
-    category_tag _category = file_tag;
-
-/** @brief Find the n-th parent of the node, or nullptr if *this has no parent.
- * @note A very large depth will result in stored root being returned.
- * @note Therefore obtain root node with parent(~unsigned()) */
-    const string_type& file_name() const noexcept { return _filename; }
-    size_t n_bytes() const noexcept;
-
-    const void* from_raw(const void* raw_src) noexcept;
-    void* to_raw(void* raw_dst) const noexcept;
-
-    file_dumper() = default;
-    file_dumper(const string_type& fname, char_t dtype_field);
-    ~file_dumper() noexcept = default;
-};
-
 class dir_dumper {
 public:
     using value_type = orie::char_t;
@@ -43,7 +21,7 @@ private:
     bool _valid = false;
     bool _is_ignored = false;
     time_t _last_write;
-    std::vector<file_dumper> _sub_files;
+    std::vector<std::byte> _sub_data;
     std::vector<dir_dumper*> _sub_dirs;
     size_t _old_size = 0;
     string_type _filename;

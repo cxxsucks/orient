@@ -65,6 +65,6 @@ add_subdirectory(test)
 endif(ORIE_TEST)
 
 target_compile_options(orie PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W3>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )

@@ -16,8 +16,12 @@
 
 namespace orie {
 
-fs_data_record::strview_type fs_data_record::file_name_view() const noexcept {
-    return strview_type(_name_begin, _name_len);
+sv_t fs_data_record::file_name_view() const noexcept {
+    return sv_t(_name_begin, _name_len);
+}
+
+size_t fs_data_record::file_name_len() const noexcept {
+    return static_cast<size_t>(_name_len);
 }
 
 ptrdiff_t fs_data_record::increment() noexcept {

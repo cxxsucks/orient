@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <orient/fs/data_iter.hpp>
 
 #define private public
 #include <orient/fs/dumper.hpp>
@@ -38,10 +39,12 @@ struct dumperFiles : public ::testing::Test {
             [&file_name](const dir_dumper* p) {return p && p->_filename == file_name; });
         if (diter != dmp->_sub_dirs.cend())
             return orie::dir_tag;
-        auto fiter = std::find_if(dmp->_sub_files.cbegin(), dmp->_sub_files.cend(),
-            [&file_name](const file_dumper& p) {return p._filename == file_name; });
-        if (fiter != dmp->_sub_files.cend())
-            return fiter->_category;
+        orie::fs_data_record rec(dmp->_sub_data.data(), 0);
+        while (rec.pos() < dmp->_sub_data.size()) {
+            if (rec.file_name_view() == file_name)
+                return rec.file_type();
+            rec.increment();
+        }
         return orie::unknown_tag;
     }
 

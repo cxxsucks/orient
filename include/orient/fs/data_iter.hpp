@@ -26,15 +26,19 @@ public:
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     //! @return Change of current depth inside the filesystem.
     ptrdiff_t increment() noexcept;
+
     //! @brief Get the file name of current entry
     //! @warning Returned string view is @b not null-terminated (end reached)
     //! @warning Undefined if @a file_type returns unknown_tag
     strview_type file_name_view() const noexcept;
+    size_t file_name_len() const noexcept;
+
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.
     //! @retval dir_tag Directory @retval link_tag Symbolic Link 
     //! @retval file_tag Any other file
     category_tag file_type() const noexcept;
+
     //! @brief If the current entry is a directory, return its modified time.
     //! Returns -1 otherwise.
     //! @note This strange behavior exists because only mtime of dirs is saved

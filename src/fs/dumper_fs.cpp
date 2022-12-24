@@ -49,7 +49,7 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
         goto updated;
 
     _last_write = st.st_mtime;
-    clear(1); // Clear all donon-dir files
+    clear(1); // Clear all non-dir files
     if (!(pd = orie::opendir(path_slash.c_str())))
         return;
     while ((ent = orie::readdir(pd))) {
@@ -62,9 +62,32 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
             path_slash.erase(len_orig);
         }
 
-        if (ent->d_type != DT_DIR) 
-            _sub_files.emplace_back(string_type(ent->d_name), ent->d_type);
-        else
+        if (ent->d_type != DT_DIR) {
+            // from d_type to orie::category_type
+            category_tag tag;
+            switch (ent->d_type) {
+            case DT_LNK:  tag = orie::link_tag; break;
+            case DT_BLK:  tag = orie::blk_tag; break;
+            case DT_FIFO: tag = orie::fifo_tag; break;
+            case DT_SOCK: tag = orie::sock_tag; break;
+            case DT_CHR:  tag = orie::char_tag; break;
+            case DT_REG:  tag = orie::file_tag; break;
+            default: 
+                // Should not reach, but don't crash because of this
+                std::cerr << "Warning: unknown file type " 
+                          << static_cast<int>(ent->d_type) << '\n';
+                continue; // Do not add it
+            }
+            // Category, name length and name
+            uint16_t name_len = static_cast<uint16_t>(orie::strlen(ent->d_name));
+            const std::byte* ptr = reinterpret_cast<const std::byte*>(&tag);
+            _sub_data.insert(_sub_data.cend(), ptr, ptr + sizeof(category_tag));
+            ptr = reinterpret_cast<const std::byte*>(&name_len);
+            _sub_data.insert(_sub_data.cend(), ptr, ptr + sizeof(uint16_t));
+            ptr = reinterpret_cast<const std::byte*>(&ent->d_name);
+            _sub_data.insert(_sub_data.cend(), ptr, ptr + sizeof(char_t) * name_len);
+        } 
+        else 
             visit_child_dir(ent->d_name)->_valid = true;
     }
     orie::closedir(pd);
@@ -118,7 +141,7 @@ unsigned int dir_dumper::depth(dir_dumper const *relative_to) const noexcept {
     return res;
 }
 
-file_dumper::string_type dir_dumper::path(unsigned depth) const {
+str_t dir_dumper::path(unsigned depth) const {
     if (!depth || !_parent_dir)
         return _filename;
     return _parent_dir->path(--depth) + separator + _filename;

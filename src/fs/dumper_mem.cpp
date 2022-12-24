@@ -1,32 +1,14 @@
 #include <orient/fs/dumper.hpp>
+#include <orient/fs/data_iter.hpp> // fs_data_record
 
 #include <cstring>
+#include <cassert>
 #include <algorithm>
 
 namespace orie {
 namespace dmp {
 
 // CONSTRUCTORS
-file_dumper::file_dumper(const string_type& fname, char_t dtype) : _filename(fname) {
-    switch (dtype) {
-    case DT_LNK:
-        _category = category_tag::link_tag; return;
-    case DT_BLK:
-        _category = category_tag::blk_tag; return;
-    case DT_FIFO:
-        _category = category_tag::fifo_tag; return;
-    case DT_SOCK:
-        _category = category_tag::sock_tag; return;
-    case DT_CHR:
-        _category = category_tag::char_tag; return;
-    case DT_REG:
-        _category = category_tag::file_tag; return;
-    }
-    // Should not reach, but don't crash because of this
-    // std::terminate()
-    _category = category_tag::file_tag;
-}
-
 dir_dumper::dir_dumper(const string_type& fname, time_t write, dir_dumper* parent)
     : _last_write(write), _filename(fname), _parent_dir(parent)
 {
@@ -37,7 +19,7 @@ dir_dumper::dir_dumper(const string_type& fname, time_t write, dir_dumper* paren
 dir_dumper::dir_dumper(dir_dumper&& rhs) noexcept 
     : dir_dumper(std::move(rhs._filename), rhs._last_write, rhs._parent_dir) 
 {
-    _sub_files = std::move(rhs._sub_files);
+    _sub_data = std::move(rhs._sub_data);
     _sub_dirs = std::move(rhs._sub_dirs);
     _old_size = rhs._old_size;
     rhs._old_size = 0;
@@ -65,29 +47,6 @@ dir_dumper& dir_dumper::operator=(dir_dumper&& rhs) noexcept {
     return *this;
 }
 
-const void* file_dumper::from_raw(const void* src) noexcept {
-    if (!src) return nullptr;
-    category_tag tag = *reinterpret_cast<const category_tag*>(src);
-    switch (tag) {
-    case category_tag::blk_tag:
-    case category_tag::char_tag:
-    case category_tag::fifo_tag:
-    case category_tag::file_tag:
-    case category_tag::link_tag:
-    case category_tag::sock_tag:
-        _category = tag;
-        break;
-    default:
-        return nullptr; // Invalid Tag
-    }
-
-    src = reinterpret_cast<const category_tag*>(src) + 1;
-    uint16_t name_len = *reinterpret_cast<const uint16_t*>(src);
-    src = reinterpret_cast<const uint16_t*>(src) + 1;
-    _filename = string_type(reinterpret_cast<const value_type*>(src), name_len);
-    return reinterpret_cast<const value_type*>(src) + name_len;
-}
-
 // Read n_bytes() of raw bytes from src. Returns the one-past-end pointer of read data.
 // If src is not null and the data is valid, the return is not null.
 // Bad data results in null return.
@@ -106,42 +65,35 @@ const void* dir_dumper::from_raw(const void* src) noexcept {
     _last_write = *reinterpret_cast<const time_t*>(src);
     src = reinterpret_cast<const time_t*>(src) + 1;
     
-    tag = *reinterpret_cast<const category_tag*>(src);
-    while (tag != orie::dir_pop_tag) {
-        switch (tag) {
-        default: return nullptr;
-        case category_tag::file_tag:  
-        case category_tag::blk_tag:
-        case category_tag::char_tag:
-        case category_tag::fifo_tag:
-        case category_tag::link_tag:
-        case category_tag::sock_tag:
-            src = _sub_files.emplace_back().from_raw(src);
-            break;
-        case category_tag::dir_tag:
-            src = (new dir_dumper(string_type(), time_t(), this))->from_raw(src); 
-            break;
-        }
-        if (src)
-            tag = *reinterpret_cast<const category_tag*>(src);
-        else 
-            return nullptr;
+    // dir_pop_tag_right after dir_tag, implying an empty dir
+    if (dir_pop_tag == *reinterpret_cast<const category_tag*>(src))
+        return reinterpret_cast<const category_tag*>(src) + 1; 
+
+    // read indexed files with fs_data_record
+    fs_data_record rec(src, 0); 
+    ptrdiff_t popped = 0;
+    while (popped >= 0 && rec.file_type() != dir_tag) {
+        popped = rec.increment();
+    }
+    _sub_data.assign(reinterpret_cast<const std::byte*>(src),
+                     reinterpret_cast<const std::byte*>(src) + rec.pos() + popped);
+    assert(popped <= 0); // Cannot enter a directory
+    if (popped < 0)
+        // +1 for one-past-end of dir_pop_tag
+        return reinterpret_cast<const std::byte*>(src) + rec.pos() + popped + 1;
+    else
+        src = reinterpret_cast<const std::byte*>(src) + rec.pos();
+
+    // If popped==0, then the record is still inside the directory
+    // therefore current position must be a directory
+    assert(*reinterpret_cast<const category_tag*>(src) == dir_tag);
+    while (src != nullptr &&
+           (tag = *reinterpret_cast<const category_tag*>(src)) != dir_pop_tag)
+    {
+        assert(tag == orie::dir_tag);
+        src = (new dir_dumper(string_type(), time_t(), this))->from_raw(src); 
     }
     return src ? reinterpret_cast<const category_tag*>(src) + 1 : nullptr;
-}
-
-// Writes n_bytes() of raw bytes to dst. Returns the one-past-end pointer of written data.
-// If dst is not null, the return is not null. Make sure the destination is pre-allocated.
-// Written data can be read with from_raw(void*)
-void* file_dumper::to_raw(void* dst) const noexcept {
-    if (!dst) return nullptr;
-    *reinterpret_cast<value_type*>(dst) = _category;
-    dst = reinterpret_cast<value_type*>(dst) + 1;
-    uint16_t name_len = static_cast<uint16_t>(_filename.size());
-    *reinterpret_cast<uint16_t*>(dst) = name_len;
-    dst = reinterpret_cast<uint16_t*>(dst) + 1;
-    ::memcpy(dst, _filename.c_str(), name_len * sizeof(value_type));
-    return reinterpret_cast<value_type*>(dst) + name_len;
 }
 
 // Writes n_bytes() of raw bytes to dst. Returns the one-past-end pointer of written data.
@@ -151,6 +103,7 @@ void* file_dumper::to_raw(void* dst) const noexcept {
 // Written data can be read with from_raw(void*)
 void* dir_dumper::to_raw(void* dst) const noexcept {
     if (!dst) return nullptr;
+    // dir_tag, name length, basename, mtime
     *reinterpret_cast<value_type*>(dst) = category_tag::dir_tag;
     dst = reinterpret_cast<value_type*>(dst) + 1;
     uint16_t name_len = static_cast<uint16_t>(_filename.size());
@@ -161,17 +114,13 @@ void* dir_dumper::to_raw(void* dst) const noexcept {
     *reinterpret_cast<time_t*>(dst) = _last_write;
     dst = reinterpret_cast<time_t*>(dst) + 1;
 
+    // Sub files, sub dirs, and dir_pop_tag
+    dst = std::copy(_sub_data.cbegin(), _sub_data.cend(), 
+                    reinterpret_cast<std::byte*>(dst));
     for (const dir_dumper* pdir : _sub_dirs)
         dst = pdir->to_raw(dst);
-    for (const file_dumper& file : _sub_files)
-        dst = file.to_raw(dst);
     *reinterpret_cast<value_type*>(dst) = orie::dir_pop_tag;
     return reinterpret_cast<value_type*>(dst) + 1;
-}
-
-size_t file_dumper::n_bytes() const noexcept {
-    return sizeof(uint16_t) + sizeof(category_tag)
-           + sizeof(value_type) * _filename.size();
 }
 
 size_t dir_dumper::n_bytes() const noexcept {
@@ -180,15 +129,14 @@ size_t dir_dumper::n_bytes() const noexcept {
                  + sizeof(time_t) + sizeof(value_type);
     for (const dir_dumper* pdir : _sub_dirs)
         res += pdir->n_bytes();
-    for (const file_dumper& file : _sub_files)
-        res += file.n_bytes();
+    res += _sub_data.size();
     return res;
 }
 
 // TODO: The parameter is SO DUMB!
 void dir_dumper::clear(int all) noexcept {
     if (all & 1) 
-        _sub_files.clear();
+        _sub_data.clear();
     
     if (all & 2) {
         std::for_each(_sub_dirs.begin(), _sub_dirs.end(), [](dir_dumper* sub) {
