@@ -71,16 +71,16 @@ const void* dir_dumper::from_raw(const void* src) noexcept {
 
     // read indexed files with fs_data_record
     fs_data_record rec(src, 0); 
-    ptrdiff_t popped = 0;
-    while (popped >= 0 && rec.file_type() != dir_tag) {
-        popped = rec.increment();
+    ptrdiff_t pushed = 0;
+    while (pushed >= 0 && rec.file_type() != dir_tag) {
+        pushed = rec.increment();
     }
     _sub_data.assign(reinterpret_cast<const std::byte*>(src),
-                     reinterpret_cast<const std::byte*>(src) + rec.pos() + popped);
-    assert(popped <= 0); // Cannot enter a directory
-    if (popped < 0)
+                     reinterpret_cast<const std::byte*>(src) + rec.pos() + pushed);
+    assert(pushed <= 0); // Cannot enter a directory
+    if (pushed < 0)
         // +1 for one-past-end of dir_pop_tag
-        return reinterpret_cast<const std::byte*>(src) + rec.pos() + popped + 1;
+        return reinterpret_cast<const std::byte*>(src) + rec.pos() + pushed + 1;
     else
         src = reinterpret_cast<const std::byte*>(src) + rec.pos();
 
@@ -121,6 +121,21 @@ void* dir_dumper::to_raw(void* dst) const noexcept {
         dst = pdir->to_raw(dst);
     *reinterpret_cast<value_type*>(dst) = orie::dir_pop_tag;
     return reinterpret_cast<value_type*>(dst) + 1;
+}
+
+void dir_dumper::compact() {
+    // places raw data of both dirs and files in _sub_data
+    size_t to_add = 0;
+    for (const dir_dumper* pdir : _sub_dirs)
+        to_add += pdir->n_bytes();
+    size_t old_sz = _sub_data.size();
+    _sub_data.insert(_sub_data.cend(), to_add, std::byte());
+    // Old end pointer
+    std::byte* dst = _sub_data.data() + old_sz;
+    for (const dir_dumper* pdir : _sub_dirs)
+        dst = static_cast<std::byte*>(pdir->to_raw(dst));
+    assert(dst == _sub_data.size() + _sub_data.data());
+    clear(2);
 }
 
 size_t dir_dumper::n_bytes() const noexcept {

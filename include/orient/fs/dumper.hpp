@@ -49,13 +49,18 @@ public:
 
     size_t n_bytes() const noexcept ;
     const void* from_raw(const void* raw_src) noexcept ;
-/** @brief Writes n_bytes() of raw bytes to dst.
- * @return the one-past-end pointer of written data.
- * @retval Not null only if dst is not null.
- * @warning Make sure the destination is sufficiently pre-allocated.
- * as @code dir_node::n_bytes() @endcode may return a huge value.
- * @note Written data can be read with from_raw(void*) */
+    /** @brief Writes n_bytes() of raw bytes to dst.
+     * @return the one-past-end pointer of written data.
+     * @retval Not null only if dst is not null.
+     * @warning Make sure the destination is sufficiently pre-allocated.
+     * as @code dir_node::n_bytes() @endcode may return a huge value.
+     * @note Written data can be read with from_raw(void*) */
     void* to_raw(void* raw_dst) const noexcept ;
+    /** @brief Turn its dumped data from @c dumper form into more compact raw 
+     *  form, saving some memory
+     *  @warning Next call to @a from_fs will drop @b all data dumped and start
+     *  from scratch! */
+    void compact();
 
     const str_t& filename() const noexcept { return _filename; }
     dir_dumper* parent(unsigned depth = 1) const noexcept;

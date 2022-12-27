@@ -107,7 +107,8 @@ fs_data_iter::path() const {
 fs_data_iter& fs_data_iter::operator++() {
     _opt_fullpath.reset(); _opt_stat.reset();
     if (_push_count == 0)
-        throw std::out_of_range("Incrementing End fsData Iterator");
+        // No throwing or errors to make allowance for `-quit`
+        return *this; 
         
     fs_data_record tmp = _cur_record;
     ptrdiff_t pushed = _cur_record.increment();
@@ -169,7 +170,7 @@ fs_data_iter &fs_data_iter::change_root(strview_type start_path) {
     while (!start_path.empty() && start_path.back() == orie::separator)
         start_path.remove_suffix(1);
     strview_type pref_view = strview_type(_prefix);
-    if (!pref_view.empty())
+    if (!pref_view.empty()) // pref_view always has slash
 		pref_view.remove_suffix(1);
 
     // Current directory or changing root of end iterator

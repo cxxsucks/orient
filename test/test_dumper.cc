@@ -11,13 +11,13 @@
 
 static AFixedBunchOfDirs __dumper_dirs_global;
 
-struct dumperFiles : public ::testing::Test {
+struct dumperFileChange : public ::testing::Test {
     path tmpPath, dir_path,
         link_path, file_path;
     std::unique_ptr<dir_dumper> dmp;
     bool ok = true;
 
-    dumperFiles() {
+    dumperFileChange() {
         tmpPath = current_path() / 
             ("dumper_tst_tmpdir_" + std::to_string(::time(nullptr)));
         //tmpPath = "./dumper_tst_tmpdir_" + std::to_string(::time(nullptr));
@@ -48,12 +48,12 @@ struct dumperFiles : public ::testing::Test {
         return orie::unknown_tag;
     }
 
-    ~dumperFiles() {
+    ~dumperFileChange() {
         remove_all(tmpPath);
     }
 };
 
-TEST_F(dumperFiles, linkBecomeDir) {
+TEST_F(dumperFileChange, linkBecomeDir) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -68,7 +68,7 @@ TEST_F(dumperFiles, linkBecomeDir) {
     EXPECT_EQ(orie::dir_tag, fileCateg(link_path.filename().native()));
 }
 
-TEST_F(dumperFiles, linkBecomeFile) {
+TEST_F(dumperFileChange, linkBecomeFile) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -82,7 +82,7 @@ TEST_F(dumperFiles, linkBecomeFile) {
     EXPECT_EQ(orie::file_tag, fileCateg(link_path.filename().native()));
 }
 
-TEST_F(dumperFiles, dirBecomeFile) {
+TEST_F(dumperFileChange, dirBecomeFile) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -96,7 +96,7 @@ TEST_F(dumperFiles, dirBecomeFile) {
     EXPECT_EQ(orie::file_tag, fileCateg(dir_path.filename().native()));
 }
 
-TEST_F(dumperFiles, fileDelete) {
+TEST_F(dumperFileChange, fileDelete) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -111,7 +111,7 @@ TEST_F(dumperFiles, fileDelete) {
     EXPECT_EQ(orie::file_tag, fileCateg(file_path.filename().native()));
 }
 
-TEST_F(dumperFiles, dirDelete) {
+TEST_F(dumperFileChange, dirDelete) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -126,7 +126,7 @@ TEST_F(dumperFiles, dirDelete) {
     EXPECT_EQ(orie::dir_tag, fileCateg(dir_path.filename().native()));
 }
 
-TEST_F(dumperFiles, linkDelete) {
+TEST_F(dumperFileChange, linkDelete) {
     if (!ok)
         FAIL() << "Unable to set temp directory";
 
@@ -141,11 +141,12 @@ TEST_F(dumperFiles, linkDelete) {
     EXPECT_EQ(orie::link_tag, fileCateg(link_path.filename().native()));
 }
 
-struct dumperSpeed : public ::testing::Test {
-    dumperSpeed() {
+struct dumperDb : public ::testing::Test {
+    dumperDb() {
         __dumper_dirs_global.create(13);
         dmp.reset(new dir_dumper(info().tmpPath.native(), 0, nullptr));
     }
+
 protected:
     int64_t speed_fromFs() {
         auto startTime = std::chrono::system_clock::now();
@@ -161,7 +162,7 @@ protected:
     int64_t execCost = 0;
 };
 
-TEST_F(dumperSpeed, readFs) {
+TEST_F(dumperDb, readFs) {
     EXPECT_LE(speed_fromFs(), 2000) 
         << "Reading Filesystem Time Limit Exceeded";
     EXPECT_GE(dmp->n_bytes(), 100000)
@@ -169,15 +170,15 @@ TEST_F(dumperSpeed, readFs) {
     std::cerr << dmp->n_bytes() << '\n';
 }
 
-TEST_F(dumperSpeed, updateFs) {
+TEST_F(dumperDb, updateFs) {
     int64_t noDat = speed_fromFs();
     int64_t hasDat = speed_fromFs();
     EXPECT_GE(noDat, hasDat) 
         << "Fail to Utilize Existing Data";
 }
 
-TEST_F(dumperSpeed, database) {
-    speed_fromFs();
+TEST_F(dumperDb, database) {
+    dmp->from_fs(__dummy_pool);
     size_t fromFsSz = dmp->n_bytes();
     std::unique_ptr<int8_t[]> buf(new int8_t[fromFsSz]);
     ::memset(buf.get(), 0xee, 1);
@@ -190,7 +191,7 @@ TEST_F(dumperSpeed, database) {
         << "Content Changes After Saving and Loading";
 }
 
-TEST_F(dumperSpeed, prune) {
+TEST_F(dumperDb, prune) {
     dir_dumper* dir11 = dmp->visit_dir((info().tmpPath / "dir11").native());
     dir_dumper* dir10 = dmp->visit_dir((info().tmpPath / "dir10").native());
     dir10->set_ignored(true);
@@ -203,4 +204,19 @@ TEST_F(dumperSpeed, prune) {
     dmp->from_fs(__dummy_pool);
     EXPECT_LE(dir11->n_bytes(), 1000);
     EXPECT_GE(dir10->n_bytes(), 1000);
+}
+
+TEST_F(dumperDb, compact) {
+    dmp->from_fs(__dummy_pool);
+    size_t old_nbyte = dmp->n_bytes();
+    std::vector<std::byte> old_dump(old_nbyte, std::byte(0xef));
+    dmp->to_raw(old_dump.data());
+
+    dmp->compact();
+    size_t cur_nbyte = dmp->n_bytes();
+    ASSERT_EQ(old_nbyte, cur_nbyte);
+    std::vector<std::byte> cur_dump(old_nbyte, std::byte(0xfe));
+    dmp->to_raw(cur_dump.data());
+    EXPECT_EQ(cur_dump, old_dump) 
+        << "Dumped data not identical after compacting.";
 }

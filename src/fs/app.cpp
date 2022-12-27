@@ -49,7 +49,7 @@ app& app::update_db(str_t path) {
         auto* to_dump = dump_worker.visit_dir(p);
         if (!to_dump) {
             NATIVE_STDERR << NATIVE_PATH("Invalid pruned path:")
-                << p << NATIVE_PATH('\n');
+                          << p << NATIVE_PATH('\n');
             continue;
         }
         to_dump->clear();
@@ -67,10 +67,11 @@ app& app::update_db(str_t path) {
         auto* to_dump = dump_worker.visit_dir(p.first);
         if (!to_dump) {
             NATIVE_STDERR << NATIVE_PATH("Invalid root path:")
-                << p.first << NATIVE_PATH('\n');
+                          << p.first << NATIVE_PATH('\n');
             continue;
         }
         to_dump->from_fs(_pool, p.second);
+        to_dump->compact();
         to_dump->set_ignored(true);
     }
 }
