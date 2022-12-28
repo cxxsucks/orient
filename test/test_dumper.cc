@@ -170,13 +170,6 @@ TEST_F(dumperDb, readFs) {
     std::cerr << dmp->n_bytes() << '\n';
 }
 
-TEST_F(dumperDb, updateFs) {
-    int64_t noDat = speed_fromFs();
-    int64_t hasDat = speed_fromFs();
-    EXPECT_GE(noDat, hasDat) 
-        << "Fail to Utilize Existing Data";
-}
-
 TEST_F(dumperDb, database) {
     dmp->from_fs(__dummy_pool);
     size_t fromFsSz = dmp->n_bytes();
@@ -185,10 +178,6 @@ TEST_F(dumperDb, database) {
     dmp->to_raw(buf.get());
     ASSERT_NE(0xee, buf[fromFsSz - 1])
         << "n_bytes() returned smaller than actual size";
-    dmp->clear();
-    dmp->from_raw(buf.get());
-    EXPECT_EQ(dmp->n_bytes(), fromFsSz)
-        << "Content Changes After Saving and Loading";
 }
 
 TEST_F(dumperDb, prune) {

@@ -92,26 +92,17 @@ TEST_F(orieApp, multithreaded) {
 }
 
 TEST_F(orieApp, readDb) {
-    auto start_time = std::chrono::system_clock::now();
     _app.read_db((temp_directory_path() / "testData.db").native())
         .update_db();
     ASSERT_TRUE(_app) << "Write to database failed.";
-    time_t nodb_cost = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::system_clock::now() - start_time
-    ).count();
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 
     _app = orie::app(_pool); // Reset
     SetUp();
-    start_time = std::chrono::system_clock::now();
     _app.read_db((temp_directory_path() / "testData.db").native())
         .update_db();
     ASSERT_TRUE(_app) << "Update database failed.";
-    time_t hasdb_cost = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::system_clock::now() - start_time
-    ).count();
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
-    EXPECT_GT(nodb_cost, hasdb_cost * 2) << "Database is not fast enough";
 }
 
 TEST_F(orieApp, confFile) {

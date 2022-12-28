@@ -43,7 +43,6 @@ app& app::update_db(str_t path) {
         _db_path = std::move(path);
     // Read and reuse the old dumped data
     std::shared_lock __lck(_member_mut);
-    dump_worker.from_raw(_data_dumped.get());
 
     for (const str_t& p : _ignored_paths) {
         auto* to_dump = dump_worker.visit_dir(p);

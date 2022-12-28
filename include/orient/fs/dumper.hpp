@@ -48,7 +48,6 @@ public:
     dir_dumper* visit_dir(const string_type& file_name);
 
     size_t n_bytes() const noexcept ;
-    const void* from_raw(const void* raw_src) noexcept ;
     /** @brief Writes n_bytes() of raw bytes to dst.
      * @return the one-past-end pointer of written data.
      * @retval Not null only if dst is not null.

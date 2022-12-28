@@ -47,55 +47,6 @@ dir_dumper& dir_dumper::operator=(dir_dumper&& rhs) noexcept {
     return *this;
 }
 
-// Read n_bytes() of raw bytes from src. Returns the one-past-end pointer of read data.
-// If src is not null and the data is valid, the return is not null.
-// Bad data results in null return.
-const void* dir_dumper::from_raw(const void* src) noexcept {
-    if (!src)
-        return nullptr;
-    category_tag tag = *reinterpret_cast<const category_tag*>(src);
-    if (tag != orie::dir_tag)
-        return nullptr;
-
-    src = reinterpret_cast<const category_tag*>(src) + 1;
-    uint16_t name_len = *reinterpret_cast<const uint16_t*>(src);
-    src = reinterpret_cast<const uint16_t*>(src) + 1;
-    _filename = string_type(reinterpret_cast<const value_type*>(src), name_len);
-    src = reinterpret_cast<const value_type*>(src) + name_len;
-    _last_write = *reinterpret_cast<const time_t*>(src);
-    src = reinterpret_cast<const time_t*>(src) + 1;
-    
-    // dir_pop_tag_right after dir_tag, implying an empty dir
-    if (dir_pop_tag == *reinterpret_cast<const category_tag*>(src))
-        return reinterpret_cast<const category_tag*>(src) + 1; 
-
-    // read indexed files with fs_data_record
-    fs_data_record rec(src, 0); 
-    ptrdiff_t pushed = 0;
-    while (pushed >= 0 && rec.file_type() != dir_tag) {
-        pushed = rec.increment();
-    }
-    _sub_data.assign(reinterpret_cast<const std::byte*>(src),
-                     reinterpret_cast<const std::byte*>(src) + rec.pos() + pushed);
-    assert(pushed <= 0); // Cannot enter a directory
-    if (pushed < 0)
-        // +1 for one-past-end of dir_pop_tag
-        return reinterpret_cast<const std::byte*>(src) + rec.pos() + pushed + 1;
-    else
-        src = reinterpret_cast<const std::byte*>(src) + rec.pos();
-
-    // If popped==0, then the record is still inside the directory
-    // therefore current position must be a directory
-    assert(*reinterpret_cast<const category_tag*>(src) == dir_tag);
-    while (src != nullptr &&
-           (tag = *reinterpret_cast<const category_tag*>(src)) != dir_pop_tag)
-    {
-        assert(tag == orie::dir_tag);
-        src = (new dir_dumper(string_type(), time_t(), this))->from_raw(src); 
-    }
-    return src ? reinterpret_cast<const category_tag*>(src) + 1 : nullptr;
-}
-
 // Writes n_bytes() of raw bytes to dst. Returns the one-past-end pointer of written data.
 // If dst is not null, the return is not null.
 // Make sure the destination is sufficiently pre-allocated.
