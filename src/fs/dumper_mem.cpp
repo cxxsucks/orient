@@ -9,15 +9,15 @@ namespace orie {
 namespace dmp {
 
 // CONSTRUCTORS
-dir_dumper::dir_dumper(const string_type& fname, time_t write, dir_dumper* parent)
-    : _last_write(write), _filename(fname), _parent_dir(parent)
+dir_dumper::dir_dumper(const string_type& fname, time_t, dir_dumper* parent)
+    : _filename(fname), _parent_dir(parent)
 {
     if (_parent_dir)
         parent->_sub_dirs.push_back(this);
 }
 
 dir_dumper::dir_dumper(dir_dumper&& rhs) noexcept 
-    : dir_dumper(std::move(rhs._filename), rhs._last_write, rhs._parent_dir) 
+    : dir_dumper(std::move(rhs._filename), 0, rhs._parent_dir) 
 {
     _sub_data = std::move(rhs._sub_data);
     _sub_dirs = std::move(rhs._sub_dirs);
@@ -54,7 +54,7 @@ dir_dumper& dir_dumper::operator=(dir_dumper&& rhs) noexcept {
 // Written data can be read with from_raw(void*)
 void* dir_dumper::to_raw(void* dst) const noexcept {
     if (!dst) return nullptr;
-    // dir_tag, name length, basename, mtime
+    // dir_tag, name length, basename
     *reinterpret_cast<value_type*>(dst) = category_tag::dir_tag;
     dst = reinterpret_cast<value_type*>(dst) + 1;
     uint16_t name_len = static_cast<uint16_t>(_filename.size());
@@ -62,8 +62,6 @@ void* dir_dumper::to_raw(void* dst) const noexcept {
     dst = reinterpret_cast<uint16_t*>(dst) + 1;
     ::memcpy(dst, _filename.c_str(), name_len * sizeof(value_type));
     dst = reinterpret_cast<value_type*>(dst) + name_len;
-    *reinterpret_cast<time_t*>(dst) = _last_write;
-    dst = reinterpret_cast<time_t*>(dst) + 1;
 
     // Sub files, sub dirs, and dir_pop_tag
     dst = std::copy(_sub_data.cbegin(), _sub_data.cend(), 
@@ -90,9 +88,8 @@ void dir_dumper::compact() {
 }
 
 size_t dir_dumper::n_bytes() const noexcept {
-    size_t res = sizeof(uint16_t) + sizeof(category_tag)
-                 + sizeof(value_type) * _filename.size()
-                 + sizeof(time_t) + sizeof(value_type);
+    size_t res = sizeof(uint16_t) + sizeof(category_tag) +
+                 sizeof(value_type) * _filename.size() + sizeof(value_type);
     for (const dir_dumper* pdir : _sub_dirs)
         res += pdir->n_bytes();
     res += _sub_data.size();

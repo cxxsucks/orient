@@ -36,22 +36,16 @@ char_t dir_dumper::__handle_unknown_dtype(const char_t* path) noexcept {
 void dir_dumper::from_fs_impl(str_t& path_slash,
     std::atomic<ptrdiff_t>& idle, fifo_thpool& pool) noexcept 
 {
-    orie::stat_t st;
     orie::dirent_t* ent;
     orie::dir_t* pd;
     size_t len_orig = path_slash.size();
 
-    if (orie::stat(path_slash.c_str(), &st) != 0)
-        return clear();
     if (_is_ignored)
         return;
-    if (up_to_date(st.st_mtime))
-        goto updated;
-
-    _last_write = st.st_mtime;
     clear(1); // Clear all non-dir files
+
     if (!(pd = orie::opendir(path_slash.c_str())))
-        return;
+        return clear();
     while ((ent = orie::readdir(pd))) {
         if (orie::strcmp(NATIVE_PATH("."), ent->d_name) == 0 ||
                 orie::strcmp(NATIVE_PATH(".."), ent->d_name) == 0)
@@ -93,7 +87,7 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
     orie::closedir(pd);
     clear(8);
 
-updated:
+    // this dir updated; update sub dirs
     for (dir_dumper* b : _sub_dirs) {
         (path_slash += separator) += b->_filename;
         if (idle > 0) {
@@ -178,67 +172,25 @@ dir_dumper *dir_dumper::visit_dir(const string_type& full_path) {
     return visit_relative_dir(full_path.substr(my_path.size()));
 }
 
-bool dir_dumper::up_to_date(time_t t) const noexcept {
-    if (_is_ignored)
-        return true;
-    else return t == _last_write;
-}
-
 #ifdef _WIN32
 size_t fs_dumper::n_bytes() const noexcept {
     // Like dir_dumper::n_bytes, but filename is always empty.
     size_t res = sizeof(uint16_t) + sizeof(category_tag)
                 //  + sizeof(char_t) * _filename.size()
-                 + sizeof(time_t) + sizeof(char_t);
+                 + sizeof(char_t);
     for (const dir_dumper& d : _drives)
         res += d.n_bytes();
     return res;
 }
 
-const void* fs_dumper::from_raw(const void* src) noexcept {
-    if (!src)
-        return nullptr;
-    category_tag tag = *reinterpret_cast<const category_tag*>(src);
-    if (tag != orie::dir_tag)
-        return nullptr;
-
-    src = reinterpret_cast<const category_tag*>(src) + 1;
-    uint16_t name_len = *reinterpret_cast<const uint16_t*>(src);
-    if (name_len != 0) {
-        // For ease of debugging
-        std::wcerr << L"Fake root directory should have no name.\n";
-        return nullptr;
-    }
-    // skip the name_len and last_write field 
-    src = reinterpret_cast<const uint16_t*>(src) + 1;
-    src = reinterpret_cast<const time_t*>(src) + 1;
-
-    tag = *reinterpret_cast<const category_tag*>(src);
-    while (tag != orie::dir_pop_tag) {
-        if (tag != orie::dir_tag) {
-            std::wcerr << "Fake root directory shall only contain directories.\n";
-            return nullptr;
-        }
-        src = _drives.emplace_back(str_t(), time_t(), nullptr)
-                     .from_raw(src);
-        if (src != nullptr)
-            tag = *reinterpret_cast<const category_tag*>(src);
-        else 
-            return nullptr;
-    }
-    return src ? reinterpret_cast<const category_tag*>(src) + 1 : nullptr;
-}
-
 void* fs_dumper::to_raw(void* dst) const noexcept {
     if (nullptr == dst)
         return nullptr;
-    // Like dir_dumper::to_raw, but with name length and mtime of 0
+    // Like dir_dumper::to_raw, but with name length
     *reinterpret_cast<char_t*>(dst) = category_tag::dir_tag;
     dst = reinterpret_cast<char_t*>(dst) + 1;
     *reinterpret_cast<uint16_t*>(dst) = 0;
     dst = reinterpret_cast<uint16_t*>(dst) + 1;
-    *reinterpret_cast<time_t*>(dst) = 0;
-    dst = reinterpret_cast<time_t*>(dst) + 1;
 
     for (const dir_dumper& d : _drives)
         dst = d.to_raw(dst);

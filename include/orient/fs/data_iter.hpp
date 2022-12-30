@@ -39,13 +39,6 @@ public:
     //! @retval file_tag Any other file
     category_tag file_type() const noexcept;
 
-    //! @brief If the current entry is a directory, return its modified time.
-    //! Returns -1 otherwise.
-    //! @note This strange behavior exists because only mtime of dirs is saved
-    //! in database. Saving mtime of dirs made it possible to skip re-scanning dirs that
-    //! remain unchanged since last scan. Saving mtime of files is meaningless.
-    time_t dir_mtime() const noexcept;
-
     // Get internal position.
     size_t pos() const noexcept {return _cur_pos;}
     // Compare equality of two records.

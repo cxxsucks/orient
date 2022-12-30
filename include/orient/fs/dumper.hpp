@@ -20,7 +20,6 @@ public:
 private:
     bool _valid = false;
     bool _is_ignored = false;
-    time_t _last_write;
     std::vector<std::byte> _sub_data;
     std::vector<dir_dumper*> _sub_dirs;
     size_t _old_size = 0;
@@ -39,9 +38,6 @@ public:
     bool ignored() const noexcept {return _is_ignored;}
     // 1 files 2 directories 3 all
     void clear(int type = 3) noexcept ;
-
-    bool up_to_date(time_t t) const noexcept;
-    time_t last_write_time() const noexcept {return _last_write;}
 
     dir_dumper* visit_relative_dir(const string_type& rela_path);
     dir_dumper* visit_child_dir(const string_type& file_name);

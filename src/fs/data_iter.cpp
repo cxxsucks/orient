@@ -11,8 +11,6 @@
 #define _name_begin reinterpret_cast<const char_type*>(        \
         static_cast<const uint8_t*>(_viewing)                   \
             + _cur_pos + sizeof(char_type) + sizeof(uint16_t))
-#define _dir_mtime *reinterpret_cast<const time_t*>(           \
-        _name_begin + _name_len)
 
 namespace orie {
 
@@ -28,12 +26,7 @@ ptrdiff_t fs_data_record::increment() noexcept {
     category_tag prev_cate = _category;
     _cur_pos += sizeof(char_t) + _name_len * sizeof(char_t) +
                 sizeof(uint16_t); // Tag, name and name length
-    ptrdiff_t push_count = 0;
-
-    if (prev_cate == category_tag::dir_tag) {
-        _cur_pos += sizeof(time_t);
-        ++push_count;
-    }
+    ptrdiff_t push_count = prev_cate == dir_tag ? 1 : 0;
 
     // Use while loop in case of multiple dir exit
     // One possible situation is multiple layers of empty dirs.
@@ -58,12 +51,6 @@ fs_data_record::category_tag fs_data_record::file_type() const noexcept {
     default:
         return category_tag::unknown_tag;
     }
-}
-
-time_t fs_data_record::dir_mtime() const noexcept{
-    if (_category == category_tag::dir_tag)
-        return *reinterpret_cast<const time_t*>(_name_begin + _name_len);
-    return ~time_t();
 }
 
 fs_data_iter::fs_data_iter(const void* dat, size_t start) 
@@ -245,12 +232,7 @@ uid_t fs_data_iter::uid() const noexcept{
 }
 
 time_t fs_data_iter::mtime() const noexcept{
-    if (!_opt_stat.has_value()) {
-        time_t _ = _cur_record.dir_mtime();
-        if (_ != ~time_t())
-            return _;
-        _fetch_stat();
-    }
+    _fetch_stat();
     return _opt_stat.value().st_mtime;
 }
 

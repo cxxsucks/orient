@@ -116,13 +116,9 @@ TEST_F(dataIter, stat) {
     time_t orig = it->mtime();
     ::sleep(1);
     std::ofstream(tmpPath / "dirB" / "fileBC") << "RandomString";
+    // Even if the dir is modified, the mtime in fs_data_iter
+    // would remain unchanged because it is cached to reduce calls to stat
     EXPECT_EQ(it->mtime(), orig);
-#ifndef _WIN32
-    EXPECT_EQ(it->uid(), ::getuid());
-#else
-    EXPECT_GT(it->atime(), orig);
-#endif
-    EXPECT_GT(it->mtime(), orig);
 }
 
 TEST_F(dataIter, changeRoot) {
