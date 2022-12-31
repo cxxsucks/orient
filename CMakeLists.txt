@@ -9,8 +9,8 @@ option(ORIE_LINK_STATIC "Statically link orient executable" OFF)
 
 # Unfortunately PCRE2 provides no package name therefore whether to use system
 # library can only be manually toggled unlike GTest.
+include(FetchContent)
 if (NOT ORIE_SYSTEM_PCRE2)
-    include(FetchContent)
     FetchContent_Declare(pcre2
         GIT_REPOSITORY https://github.com/PCRE2Project/pcre2
         GIT_TAG pcre2-10.42)
@@ -25,6 +25,13 @@ if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_MakeAvailable(pcre2)
 endif(NOT ORIE_SYSTEM_PCRE2)
 
+if (NOT ORIE_SYSTEM_RAPIDFUZZ)
+    FetchContent_Declare(rapidfuzz
+        GIT_REPOSITORY https://github.com/maxbachmann/rapidfuzz-cpp.git
+        GIT_TAG main)
+    FetchContent_MakeAvailable(rapidfuzz)
+endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree FS_PRED_TREE_SRCS)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/fs FS_SRCS)
@@ -36,12 +43,12 @@ if(WIN32)
     )
     install(FILES include/dirent_win.h DESTINATION include)
     add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-    target_link_libraries(orie pcre2-16)
+    target_link_libraries(orie PRIVATE pcre2-16 rapidfuzz::rapidfuzz)
 
 else(WIN32)
     add_library(orie ${FS_SRCS} ${FS_PRED_TREE_SRCS})
     add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-    target_link_libraries(orie pcre2-8)
+    target_link_libraries(orie PRIVATE pcre2-8 rapidfuzz::rapidfuzz)
 endif(WIN32)
 
 install(TARGETS orie DESTINATION lib)

@@ -91,6 +91,9 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
     case 52: return new prune_node;
     case 53: throw std::logic_error("-ls is not implemented :(");
     case 54: throw std::logic_error("-fls is not implemented :(");
+
+    // -fuzz -quit v0.3.0
+    case 55: return new fuzz_node;
     }
     return nullptr;
 }
@@ -101,6 +104,7 @@ fs_node *fs_expr_builder::modifier_dispatch(orie::sv_t cmd) const {
     switch (_at_builtin_cmds(cmd)) {
     case 39: return new updir_node;
     case 40: return new downdir_node;
+    // -prunemod -quitmod v3.0
     }
     return nullptr;
 }

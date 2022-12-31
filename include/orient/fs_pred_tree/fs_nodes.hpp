@@ -6,6 +6,10 @@
 #include <string>
 #include <mutex>
 #include <array>
+// namespace rapidfuzz::fuzz {
+//     template <typename CharT1> struct CachedPartialRatio;
+// }
+#include <rapidfuzz/fuzz.hpp>
 
 extern "C" {
 #include <pcre2.h>
@@ -24,8 +28,9 @@ class glob_node;
 // PRED: -regex -iregex -bregex -ibregex 
 // ARG: --icase --full --readlink STR
 class regex_node;
+// PRED: -fuzz
+class fuzz_node;
 // PRED: -type
-// TODO: Currently only file, directory, link
 class type_node;
 
 /* Predicates that require only one or two syscalls, 
@@ -150,6 +155,33 @@ public:
                bool lname = false, bool icase = false) 
         : _match_dat(pcre2_match_data_create(16, nullptr), pcre2_match_data_free)
         , _is_full(full) , _is_exact(exact), _is_lname(lname), _is_icase(icase) { }
+};
+
+class fuzz_node : public fs_node {
+    std::optional<
+        rapidfuzz::fuzz::CachedPartialRatio<char_t>
+    > _matcher;
+    bool _is_full;
+    bool _is_lname;
+    bool _next_cutoff;
+    double _cutoff;
+    // Prevent too short matches like "e" matching "hello"
+    // Set to half of needle length
+    size_t _min_haystack_len;
+
+public:
+    double success_rate() const noexcept override { return 0.07; }
+    double cost() const noexcept override { return 1e-6; }
+    fs_node* clone() const override {
+        return new fuzz_node(*this);
+    }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+
+    fuzz_node(bool full = false, bool lname = false)
+        : _is_full(full), _is_lname(lname), _next_cutoff(false)
+        , _cutoff(90.0), _min_haystack_len(0) {};
 };
 
 class type_node : public fs_node {

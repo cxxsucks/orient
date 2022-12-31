@@ -62,6 +62,31 @@ TEST_F(statNode, regex) {
     EXPECT_EQ(2, _do_tests(matcher));
 }
 
+TEST_F(statNode, fuzz) {
+    fuzz_node matcher;
+    // Parsing Errors
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("--foo")),
+                 invalid_param_name);
+    ASSERT_THROW(matcher.apply_blocked(__global_dummy_iter),
+                 uninitialized_node);
+
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("symlink")));
+    EXPECT_EQ(2, _do_tests(matcher));
+    EXPECT_FALSE(matcher.next_param(NATIVE_SV("symlink")));
+
+    matcher = fuzz_node();
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("simlynk")));
+    EXPECT_EQ(0, _do_tests(matcher));
+
+    matcher = fuzz_node();
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--cutoff")));
+    ASSERT_THROW(matcher.next_param(NATIVE_SV("9876543210")),
+                 invalid_param_name);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("65")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("simlynk")));
+    EXPECT_EQ(2, _do_tests(matcher));
+}
+
 TEST_F(statNode, icase) {
     glob_node matcher;
     ASSERT_TRUE(matcher.next_param(NATIVE_SV("--ignore-case")));

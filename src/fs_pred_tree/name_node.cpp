@@ -98,7 +98,7 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
 
 bool regex_node::apply_blocked(fs_data_iter& it) {
     if (_re == nullptr)
-        throw uninitialized_node(NATIVE_SV("--regex"));
+        throw uninitialized_node(NATIVE_SV("-bregex"));
     if (_is_lname && it.file_type() != link_tag)
         return false; // Not a link 
 
@@ -144,7 +144,7 @@ bool regex_node::next_param(sv_t param) {
             _is_icase = true;
         else if (param == NATIVE_SV("--readlink"))
             _is_lname = true;
-        else throw invalid_param_name(param, NATIVE_SV("--regex"));
+        else throw invalid_param_name(param, NATIVE_SV("-bregex"));
         return true;
     }
 
@@ -166,6 +166,52 @@ bool regex_node::next_param(sv_t param) {
                     std::basic_string_view(errbuf, msg_len)
                 ));
     }
+    return true;
+}
+
+bool fuzz_node::apply_blocked(fs_data_iter& it) {
+    if (!_matcher.has_value())
+        throw orie::pred_tree::uninitialized_node(NATIVE_SV("-fuzz"));
+
+    // TODO: readlink
+    sv_t to_match = _is_full ? sv_t(it.path()) : it.basename();
+    if (to_match.size() < _min_haystack_len)
+        return false;
+    return _matcher.value().similarity(to_match, _cutoff) > _cutoff;
+}
+
+bool fuzz_node::next_param(sv_t param) {
+    if (_matcher.has_value())
+        return false;
+
+    if (param.substr(0, 2) == NATIVE_SV("--")) {
+        if (param == NATIVE_SV("--full"))
+            _is_full = true;
+        else if (param == NATIVE_SV("--cutoff")) 
+            _next_cutoff = true;
+        else if (param == NATIVE_SV("--readlink"))
+            _is_lname = true;
+        else throw invalid_param_name(param, NATIVE_SV("-fuzz"));
+        return true;
+    }
+
+    if (_next_cutoff) {
+        uint64_t targ;
+        const char_t* __beg = param.data(),
+            *__end = __beg + param.size(),
+            *__numend = orie::from_char_t(__beg, __end, targ);
+        if (__numend != __end) 
+            throw pred_tree::not_a_number(param);
+        if (targ > 100)
+            throw pred_tree::invalid_param_name(param, NATIVE_SV(
+                "--cutoff; must be between 0~99"
+            ));
+        _cutoff = static_cast<double>(targ);
+        _next_cutoff = false;
+    } else {
+        _matcher.emplace(param);
+        _min_haystack_len = (param.size() >> 1) + 1;
+    } 
     return true;
 }
 

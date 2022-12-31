@@ -16,12 +16,12 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} TEST_SRCS)
 add_executable(orientest ${TEST_SRCS})
 target_include_directories(orientest PUBLIC ${GTEST_INCLUDE_DIRS})
 add_dependencies(orientest orie)
-target_link_libraries(orientest 
+target_link_libraries(orientest PRIVATE
                       orie GTest::gtest_main)
 if(WIN32)
-target_link_libraries(orientest pcre2-16)
+target_link_libraries(orientest PRIVATE pcre2-16 rapidfuzz::rapidfuzz)
 else(WIN32)
-target_link_libraries(orientest pcre2-8)
+target_link_libraries(orientest PRIVATE pcre2-8 rapidfuzz::rapidfuzz)
 endif(WIN32)
 
 include(GoogleTest)
