@@ -61,6 +61,24 @@ TEST_F(contentNode, blockedRegex) {
     EXPECT_EQ(-1, _do_tests(matcher));
 }
 
+TEST_F(contentNode, blockedFuzz) {
+    // bin, 90 cutoff
+    content_fuzz_node matcher(true, true);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HelloWorld")));
+    EXPECT_EQ(-3, _do_tests(matcher));
+
+    // no bin, 90 cutoff
+    matcher = content_fuzz_node(true, false);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HalloWould")));
+    EXPECT_EQ(0, _do_tests(matcher));
+
+    // no bin, 65 cutoff
+    matcher = content_fuzz_node(true, false);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--cutoff")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("65")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HalloWould")));
+    EXPECT_EQ(-2, _do_tests(matcher));
+}
 
 TEST_F(contentNode, strstr) {
     // No bin, no icase
@@ -84,4 +102,23 @@ TEST_F(contentNode, regex) {
     matcher = content_regex_node(false, true, true);
     ASSERT_TRUE(matcher.next_param(NATIVE_SV("z{5001}")));
     EXPECT_EQ(1, _do_tests(matcher));
+}
+
+TEST_F(contentNode, fuzz) {
+    // bin, 90 cutoff
+    content_fuzz_node matcher(false, true);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HelloWorld")));
+    EXPECT_EQ(3, _do_tests(matcher));
+
+    // no bin, 90 cutoff
+    matcher = content_fuzz_node(false, false);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HalloWould")));
+    EXPECT_EQ(0, _do_tests(matcher));
+
+    // no bin, 65 cutoff
+    matcher = content_fuzz_node(false, false);
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("--cutoff")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("65")));
+    ASSERT_TRUE(matcher.next_param(NATIVE_SV("HalloWould")));
+    EXPECT_EQ(2, _do_tests(matcher));
 }

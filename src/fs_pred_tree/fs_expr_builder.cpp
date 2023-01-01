@@ -92,8 +92,9 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
     case 53: throw std::logic_error("-ls is not implemented :(");
     case 54: throw std::logic_error("-fls is not implemented :(");
 
-    // -fuzz -quit v0.3.0
+    // -fuzz -content-fuzz -quit v0.3.0
     case 55: return new fuzz_node;
+    case 56: return new content_fuzz_node;
     }
     return nullptr;
 }

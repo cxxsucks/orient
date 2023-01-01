@@ -32,7 +32,7 @@ class fs_expr_builder : public builder<fs_data_iter, sv_t>
         NATIVE_SV("-exec"),     NATIVE_SV("-execdir"),  // 49 50
         NATIVE_SV("-delete"),   NATIVE_SV("-prune"),    // 51 52
         NATIVE_SV("-ls"),       NATIVE_SV("-fls"),      // 53 54
-        NATIVE_SV("-fuzz"),  // NATIVE_SV("-quit"),      // 55 56
+        NATIVE_SV("-fuzz"),     NATIVE_SV("-content-fuzz"),NATIVE_SV("-quit") // 55 56 57
     };
 
     static constexpr size_t _at_builtin_cmds(sv_t sv);

@@ -20,6 +20,7 @@ namespace pred_tree {
 
 using fs_node = node<fs_data_iter, sv_t>;
 using fs_mod_node = mod_base_node<fs_data_iter, sv_t>;
+using fuzz_cache = rapidfuzz::fuzz::CachedPartialRatio<char_t>;
 
 /* Predicates that require no syscalls; info read directly from fs dump */
 // PRED: -name -iname -path -ipath -lname -strstr -istrstr
@@ -86,6 +87,8 @@ struct prune_node;
 class content_strstr_node;
 // PRED: -content-regex ARG: --icase --block --binary STR
 class content_regex_node;
+// PRED: -content-fuzz ARG: --block --binary STR
+class fuzz_regex_node;
 
 // MODIF: -downdir
 class downdir_node;
@@ -158,9 +161,7 @@ public:
 };
 
 class fuzz_node : public fs_node {
-    std::optional<
-        rapidfuzz::fuzz::CachedPartialRatio<char_t>
-    > _matcher;
+    std::optional<fuzz_cache> _matcher;
     bool _is_full;
     bool _is_lname;
     bool _next_cutoff;
@@ -313,7 +314,8 @@ public:
         // whose `name_len` must be >0 in order to fit multiple names.
         return _name_min_len <= 0 ? 0.5 : 1.0;
     }
-    double cost() const noexcept override { return 2e-4; }
+    // -exec is the slowest!
+    double cost() const noexcept override { return 1e-3; }
     fs_node* clone() const override {
         return new exec_node(*this);
     }
@@ -494,7 +496,7 @@ class content_strstr_node : public fs_node {
     bool _icase;
 
 public:
-    double success_rate() const noexcept override { return 1.0; }
+    double success_rate() const noexcept override { return 0.1; }
     double cost() const noexcept override { return 1e-4; }
     fs_node* clone() const override {
         return new content_strstr_node(*this);
@@ -515,7 +517,7 @@ class content_regex_node : public fs_node {
     bool _icase;
 
 public:
-    double success_rate() const noexcept override { return 1.0; }
+    double success_rate() const noexcept override { return 0.1; }
     double cost() const noexcept override { return 5e-4; }
     fs_node* clone() const override {
         return new content_regex_node(*this);
@@ -527,6 +529,28 @@ public:
 
     content_regex_node(bool block = false, bool bin = false, bool icase = false)
         : _blocked(block), _allow_binary(bin), _icase(icase) {}
+};
+
+class content_fuzz_node : public fs_node {
+    std::optional<fuzz_cache> _matcher;
+    bool _blocked;
+    bool _allow_binary;
+    bool _next_cutoff;
+    double _cutoff;
+
+public:
+    double success_rate() const noexcept override { return 0.15; }
+    double cost() const noexcept override { return 5e-4; }
+    fs_node* clone() const override {
+        return new content_fuzz_node(*this);
+    }
+
+    tribool_bad apply(fs_data_iter& it) override;
+    bool apply_blocked(fs_data_iter& it) override; 
+    bool next_param(sv_t param) override;
+
+    content_fuzz_node(bool block = false, bool bin = false)
+        : _blocked(block), _allow_binary(bin), _next_cutoff(false), _cutoff(90) {}
 };
 
 // MODIFIERS
