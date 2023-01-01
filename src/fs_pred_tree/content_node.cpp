@@ -296,7 +296,7 @@ bool content_fuzz_node::next_param(sv_t param) {
             throw pred_tree::not_a_number(param);
         if (targ > 100)
             throw pred_tree::invalid_param_name(param, NATIVE_SV(
-                "--cutoff; must be between 0~99"
+                "--cutoff; must in 0~99"
             ));
         _cutoff = static_cast<double>(targ);
         _next_cutoff = false;

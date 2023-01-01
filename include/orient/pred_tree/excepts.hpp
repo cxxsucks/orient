@@ -91,9 +91,10 @@ class invalid_param_name : public invalid_node_arg {
 public:
     template <typename sv_t>
     invalid_param_name(sv_t param, sv_t node) : invalid_node_arg("") {
-        orie::strncpy(msg, param.data(), std::min(size_t(25), param.size()));
+        orie::strncpy(msg, param.data(), std::min(size_t(20), param.size()));
         orie::strcat(msg, " is invalid for ");
         orie::strncat(msg, node.data(), std::min(size_t(25), node.size()));
+        msg[63] = '\0';
     }
 
     const char* what() const noexcept override { return msg; }

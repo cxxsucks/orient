@@ -235,7 +235,7 @@ namespace orie {
             if (::realpath(src, tmp_dest) == nullptr)
                 return -1;
             // -1 because buf_len includes NULL
-            strncpy(resolv, tmp_dest, buf_len - 1);
+            ::strncpy(resolv, tmp_dest, buf_len - 1);
             resolv[buf_len - 1] = '\0';
         }
         return ::strlen(resolv);

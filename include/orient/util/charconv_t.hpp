@@ -30,21 +30,6 @@ des_t* strncpy(des_t* dest, const src_t* src, size_t nmemb)
     return dest;
 }
 
-template<> inline
-char* strncpy<char, char>(char* d, const char* s, size_t n) noexcept {
-    size_t size_cp = ::strnlen(s, n);
-    ::memcpy(d, s, size_cp);
-    d[size_cp] = '\0';
-    return d;
-}
-template<> inline
-wchar_t* strncpy<wchar_t, wchar_t>(wchar_t* d, const wchar_t* s, size_t n) noexcept {
-    size_t size_cp = ::wcsnlen(s, n);
-    ::memcpy(d, s, size_cp * sizeof(wchar_t));
-    d[size_cp] = L'\0';
-    return d;
-}
-
 /** @brief Copy null-terminated string of arbitrary type to dest
  * @tparam des_t a type assignable from type @p src_t
  * @param [out] dest pre-allocated buffer at least as long as @p src
@@ -99,14 +84,6 @@ des_t* strncat(des_t* dest, const src_t* src, size_t nmemb) noexcept {
         dest + orie::strlen<des_t>(dest), src, nmemb
     );
     return dest;
-}
-template<> inline
-char* strncat<char, char>(char* d, const char* s, size_t n) noexcept {
-    return ::strncat(d, s, n);
-}
-template<> inline
-wchar_t* strncat<wchar_t, wchar_t>(wchar_t* d, const wchar_t* s, size_t n) noexcept {
-    return ::wcsncat(d, s, n);
 }
 
 template<class des_t, class src_t>
