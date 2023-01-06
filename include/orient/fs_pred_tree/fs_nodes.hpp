@@ -6,9 +6,6 @@
 #include <string>
 #include <mutex>
 #include <array>
-// namespace rapidfuzz::fuzz {
-//     template <typename CharT1> struct CachedPartialRatio;
-// }
 #include <rapidfuzz/fuzz.hpp>
 
 extern "C" {
@@ -78,8 +75,6 @@ class print_node;
 class exec_node;
 // TODO: -delete
 class del_node;
-// PRED: -prune
-struct prune_node;
 
 /* Content Matching Predicates. They will be asynchorously
  * executed because of their "slow" nature, and thus invalidating -prune */
@@ -90,6 +85,18 @@ class content_regex_node;
 // PRED: -content-fuzz ARG: --block --binary STR
 class fuzz_regex_node;
 
+/* fs_data_iter manipulation nodes
+ * They do changes to the iterator while matching, such as
+ * ending the search prematurely. Unless otherwise noted,
+ * they will NOT work with -content-* */
+
+// MODIF: -prunemod 
+// PRED: -prune (implemented as -prunemod -true)
+struct prunemod_node;
+// MODIF: -quitmod
+// PRED: -quit (implemented as -quitmod -true)
+// ARG: times the child returns true before quitting
+class quitmod_node;
 // MODIF: -downdir
 class downdir_node;
 // MODIF: -updir
@@ -246,19 +253,33 @@ struct empty_node : public fs_node {
     fs_node* clone() const override {
         return new empty_node(*this);
     }
+
+    bool apply_blocked(fs_data_iter& it) override; 
+};
+
+struct prunemod_node : public fs_mod_node {
+    // Use fs_mod_node::cost instead,
+    // but provide a success rate overload
+    double success_rate() const noexcept override { return 1.0; }
+    fs_node* clone() const override {
+        return new prunemod_node(*this);
+    }
     bool communicative() const noexcept override {return false;}
 
     bool apply_blocked(fs_data_iter& it) override; 
 };
 
-struct prune_node : public fs_node {
-    double success_rate() const noexcept override { return 1.0; }
-    double cost() const noexcept override { return 1e-8; }
+class quitmod_node : public fs_mod_node {
+    ptrdiff_t _quit_after = 1;
+
+public:
+    // Use fs_mod_node::cost and success_rate
     fs_node* clone() const override {
-        return new prune_node(*this);
+        return new quitmod_node(*this);
     }
     bool communicative() const noexcept override {return false;}
 
+    bool next_param(sv_t param) override;
     bool apply_blocked(fs_data_iter& it) override; 
 };
 

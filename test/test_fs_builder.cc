@@ -78,4 +78,28 @@ TEST_F(fsExprBuilder, prune) {
     )); // 8 file0 and NO dir4
     EXPECT_EQ(8, _do_tests(*builder.get()));
     EXPECT_FALSE(builder.has_action());
+
+    builder.build(NATIVE_SV(
+        " -prunemod -name dir4 -a -name file0"
+    )); // 8 file0 and NO dir4
+    EXPECT_EQ(8, _do_tests(*builder.get()));
+}
+
+TEST_F(fsExprBuilder, quit) {
+    orie::pred_tree::fs_expr_builder builder;
+    builder.build(NATIVE_SV(" -name file0 -a -quit 6")); 
+    EXPECT_EQ(6, _do_tests(*builder.get()));
+    EXPECT_FALSE(builder.has_action());
+
+    // Modifier form
+    builder.build(NATIVE_SV("-quitmod 4 -name file0")); 
+    EXPECT_EQ(4, _do_tests(*builder.get()));
+
+    // Quit after 1 true by default
+    builder.build(NATIVE_SV("-quitmod -name file0")); 
+    EXPECT_EQ(1, _do_tests(*builder.get()));
+
+    // There are only 2 "dir3"
+    builder.build(NATIVE_SV("-quitmod 6 -name dir3")); 
+    EXPECT_EQ(2, _do_tests(*builder.get()));
 }

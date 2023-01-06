@@ -88,13 +88,14 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
     case 49: return new exec_node(false, false);
     case 50: return new exec_node(false, true);
     case 51: return new del_node;
-    case 52: return new prune_node;
+    case 52: return new prunemod_node;
     case 53: throw std::logic_error("-ls is not implemented :(");
     case 54: throw std::logic_error("-fls is not implemented :(");
 
     // -fuzz -content-fuzz -quit v0.3.0
     case 55: return new fuzz_node;
     case 56: return new content_fuzz_node;
+    case 57: return new quitmod_node;
     }
     return nullptr;
 }
@@ -106,6 +107,8 @@ fs_node *fs_expr_builder::modifier_dispatch(orie::sv_t cmd) const {
     case 39: return new updir_node;
     case 40: return new downdir_node;
     // -prunemod -quitmod v3.0
+    case 58: return new prunemod_node;
+    case 59: return new quitmod_node;
     }
     return nullptr;
 }

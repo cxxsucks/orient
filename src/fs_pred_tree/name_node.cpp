@@ -249,11 +249,5 @@ bool type_node::next_param(sv_t param) {
     return true;
 }
 
-bool prune_node::apply_blocked(fs_data_iter& it) {
-    if (it.file_type() == orie::dir_tag)
-        it.disable_pending_recursion();
-    return true;
-}
-
 }
 }
