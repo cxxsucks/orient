@@ -65,7 +65,7 @@ bool del_node::apply_blocked(fs_data_iter& it) {
         // !it.path().starts_with(_todel_dirs_stack.back()))
            it.path().size() < _todel_dirs_stack.back().size() ||
            ::memcmp(it.path().data(), _todel_dirs_stack.back().data(), 
-                    _todel_dirs_stack.back().size()) != 0))
+                    _todel_dirs_stack.back().size() * sizeof(char_t)) != 0))
     {
         if (_dry_run)
             NATIVE_STDOUT << NATIVE_PATH("DELETE: ") 
@@ -111,12 +111,16 @@ bool del_node::next_param(sv_t param) {
 }
 
 del_node::~del_node() noexcept {
-    for (const str_t& path : _todel_dirs_stack) 
+    if (_dry_run)
+        return;
+    while (!_todel_dirs_stack.empty()) {
 #ifdef _WIN32
-        ::RemoveDirectoryW(path.c_str());
+        ::RemoveDirectoryW(_todel_dirs_stack.back().c_str());
 #else
-        ::rmdir(path.c_str());
+        ::rmdir(_todel_dirs_stack.back().c_str());
 #endif
+        _todel_dirs_stack.pop_back();
+    }
 }
 
 // This implementation sacrificed performance (when constructing cmdline)

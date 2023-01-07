@@ -99,7 +99,7 @@ namespace orie {
             }
             return 0;
         }
-        static const char_t* find(const char_t* s, size_t n, char a) {
+        static const char_t* find(const char_t* s, size_t n, char_t a) {
             auto const ua(to_upper(a));
             while (n-- != 0) {
                 if (to_upper(*s) == ua)

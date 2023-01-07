@@ -60,7 +60,7 @@ public:
     virtual void clear() noexcept; 
 
     builder() noexcept = default;
-	~builder() noexcept { clear(); }
+    ~builder() noexcept { clear(); }
     builder(const builder<iter_t, sv_t>&) = delete;
     builder<iter_t, sv_t>& operator=(const builder<iter_t, sv_t>&) = delete;
     builder(builder<iter_t, sv_t>&&) = default;
@@ -254,123 +254,124 @@ builder<iter_t, sv_t>::_apply_mods(node_type* to_apply) {
 
 template <class iter_t, class sv_t>
 bool builder<iter_t, sv_t>::_place_bridge_fallback() {
-	if (!_next_is_bridge)
-		return true;
+    if (!_next_is_bridge)
+        return true;
 
-	auto [to_add, prio] = bridge_dispatch(_bridge_fallback);
-	if (to_add == nullptr) 
-		return false;
+    auto [to_add, prio] = bridge_dispatch(_bridge_fallback);
+    if (to_add == nullptr) 
+        return false;
 
-	prio += static_cast<uint64_t>(_par_lvl) << 32;
-	while (!_bridge_stack.empty() && _bridge_stack.back().second >= prio)
-		_merge_last_two();
-	_bridge_stack.emplace_back(to_add, prio);
-	_next_is_bridge = false;
-	return true;
+    prio += static_cast<uint64_t>(_par_lvl) << 32;
+    while (!_bridge_stack.empty() && _bridge_stack.back().second >= prio)
+        _merge_last_two();
+    _bridge_stack.emplace_back(to_add, prio);
+    _next_is_bridge = false;
+    return true;
 }
 
 template <class iter_t, class sv_t>
 void builder<iter_t, sv_t>::_par_enter() { 
-	// A parentheses pair must supercede a bridge
-	// Ex: ... -a ( ... ) ... Ex2: ( ... ) ...
-	if (!_place_bridge_fallback()) 
-		throw missing_bridge(sv_t(_lpar_cstr));
-	_last_is_par_enter = true;
-	++_par_lvl; 
+    // A parentheses pair must supercede a bridge
+    // Ex: ... -a ( ... ) ... Ex2: ( ... ) ...
+    if (!_place_bridge_fallback()) 
+        throw missing_bridge(sv_t(_lpar_cstr));
+    _last_is_par_enter = true;
+    ++_par_lvl; 
 }
 
 template <class iter_t, class sv_t>
 void builder<iter_t, sv_t>::_par_exit() {
-	--_par_lvl;
-	// ERROR: ... ( ... ) ) ...
-	if (_par_lvl == ~uint32_t()) // -1
-		throw orie::pred_tree::parentheses_mismatch(false);
-	// ERROR empty pair: ... ( ) ...
-	if (_last_is_par_enter)
-		throw orie::pred_tree::empty_parentheses();
-	// ERROR: ... ( ... -a ) ... ERROR: ... ( ... -a ! ) ...
-	// ERROR(bridge fallback implicitly added): ... ( ... ! ) ...
-	if (!_next_is_bridge)
-		throw orie::pred_tree::missing_predicate(sv_t(_rpar_cstr), true);
+    --_par_lvl;
+    // ERROR: ... ( ... ) ) ...
+    if (_par_lvl == ~uint32_t()) // -1
+        throw orie::pred_tree::parentheses_mismatch(false);
+    // ERROR empty pair: ... ( ) ...
+    if (_last_is_par_enter)
+        throw orie::pred_tree::empty_parentheses();
+    // ERROR: ... ( ... -a ) ... ERROR: ... ( ... -a ! ) ...
+    // ERROR(bridge fallback implicitly added): ... ( ... ! ) ...
+    if (!_next_is_bridge)
+        throw orie::pred_tree::missing_predicate(sv_t(_rpar_cstr), true);
 
-	// then merge all nodes inside into one large node 
-	while (!_bridge_stack.empty() && (_bridge_stack.back().second >> 32) > _par_lvl)
-		_merge_last_two();
-	// finally handle modifiers before the parentheses
-	// -not ( ... )
-	_pred_stack.back() = _apply_mods(_pred_stack.back());
+    // then merge all nodes inside into one large node 
+    while (!_bridge_stack.empty() && (_bridge_stack.back().second >> 32) > _par_lvl)
+        _merge_last_two();
+    // finally handle modifiers before the parentheses
+    // -not ( ... )
+    _pred_stack.back() = _apply_mods(_pred_stack.back());
 }
 
 template <class iter_t, class sv_t>
 void builder<iter_t, sv_t>::_place_adding(sv_t param) {
-	if (_adding == nullptr)
-		return;
-	_last_is_par_enter = false;
+    if (_adding == nullptr)
+        return;
+    _last_is_par_enter = false;
 
-	switch (_adding_hint) {
-	case node_hint::MODIFIER:
-		if (!_place_bridge_fallback()) 
-			throw missing_bridge(param);
-		_mod_stack.emplace_back(_adding, _par_lvl);
-		break;
+    switch (_adding_hint) {
+    case node_hint::MODIFIER:
+        if (!_place_bridge_fallback()) 
+            throw missing_bridge(param);
+        _mod_stack.emplace_back(_adding, _par_lvl);
+        break;
 
-	case node_hint::PRED:
-		if (!_place_bridge_fallback())
-			throw missing_bridge(param);
-		_pred_stack.push_back(_apply_mods(_adding));
-		_next_is_bridge = true;
-		break;
+    case node_hint::PRED:
+        if (!_place_bridge_fallback())
+            throw missing_bridge(param);
+        _pred_stack.push_back(_apply_mods(_adding));
+        _next_is_bridge = true;
+        break;
 
-	case node_hint::BRIDGE:
-		// ERROR: ... -a -o ...
-		if (!_next_is_bridge) 
-			throw missing_predicate(param, true);
-	
-		while (!_bridge_stack.empty() && _bridge_stack.back().second >= _adding_brid_prio)
-			_merge_last_two();
-		_bridge_stack.emplace_back(_adding, _adding_brid_prio);
-		_next_is_bridge = false;
-		break;
-	default: std::terminate();
-	}
+    case node_hint::BRIDGE:
+        // ERROR: ... -a -o ...
+        if (!_next_is_bridge) 
+            throw missing_predicate(param, true);
+    
+        while (!_bridge_stack.empty() && _bridge_stack.back().second >= _adding_brid_prio)
+            _merge_last_two();
+        _bridge_stack.emplace_back(_adding, _adding_brid_prio);
+        _next_is_bridge = false;
+        break;
+    default: std::terminate();
+    }
 
-	_adding = nullptr;
+    _adding = nullptr;
 }
 
 template <class iter_t, class sv_t>
 void builder<iter_t, sv_t>::_consume_one_param(sv_t param) {
-	// previous node accepts the parameter `param`
-	if (_adding && _adding->next_param(param))
-		return; 
-	// The previous node exists, but accepts no more parameters. 
-	// Push the fully constructed node into stacks, then create a new one with param
-	else if (_adding)
-		_place_adding(param); // `_adding` became nullptr after being placed
-	// `_adding` didn't accept `param`, therefore `param` must be treated as a new node
+    // previous node accepts the parameter `param`
+    if (_adding && _adding->next_param(param))
+        return; 
+    // The previous node exists, but accepts no more parameters. 
+    // Push the fully constructed node into stacks, then create a new one with param
+    else if (_adding)
+        _place_adding(param); // `_adding` became nullptr after being placed
+    // `_adding` didn't accept `param`, therefore `param` must be treated as a new node
 
-	assert(_adding == nullptr);
-	if (param.size() == 1 && param[0] == '(')
-		return _par_enter();
-	else if (param.size() == 1 && param[0] == ')')
-		return _par_exit();
+    assert(_adding == nullptr);
+    if (param.size() == 1 && param[0] == '(')
+        return _par_enter();
+    else if (param.size() == 1 && param[0] == ')')
+        return _par_exit();
 
-	// Create a new one with "param"
-	else if ((_adding = pred_dispatch(param))) {
-		_adding_hint = node_hint::PRED;
-	} else if ((_adding = modifier_dispatch(param))) {
-		_adding_hint = node_hint::MODIFIER;
-	} else if (std::tie(_adding, _adding_brid_prio) = bridge_dispatch(param); _adding) {
-		_adding_brid_prio += static_cast<uint64_t>(_par_lvl) << 32;
-		_adding_hint = node_hint::BRIDGE;
-	} 
+    // Create a new one with "param"
+    else if ((_adding = pred_dispatch(param)) != nullptr) {
+        _adding_hint = node_hint::PRED;
+    } else if ((_adding = modifier_dispatch(param)) != nullptr) {
+        _adding_hint = node_hint::MODIFIER;
+    } else if (std::tie(_adding, _adding_brid_prio) = bridge_dispatch(param); _adding) {
+        _adding_brid_prio += static_cast<uint64_t>(_par_lvl) << 32;
+        _adding_hint = node_hint::BRIDGE;
+    } 
 
-	// Got bullsh*t when expecting a node name.
-	// Now attempt to place fallback pred, with what we got as its first parameter
-	else if ((_adding = pred_dispatch(_pred_fallback)) && _adding->next_param(param)) {
-		_adding_hint = node_hint::PRED;
-	} else 
-		// No fallback or fallback does not accept "param"
-		throw unknown_node_name(param);
+    // Got bullsh*t when expecting a node name.
+    // Now attempt to place fallback pred, with what we got as its first parameter
+    else if ((_adding = pred_dispatch(_pred_fallback)) != nullptr &&
+              _adding->next_param(param)) {
+        _adding_hint = node_hint::PRED;
+    } else 
+        // No fallback or fallback does not accept "param"
+        throw unknown_node_name(param);
 }
 
 }

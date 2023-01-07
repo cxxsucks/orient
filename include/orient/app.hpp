@@ -94,8 +94,8 @@ public:
     void run_pooled(fsearch_expr& expr, callback_t callback);
 
     app(fifo_thpool& pool);
-    app(app&&);
-    app& operator=(app&&);
+    app(app&&) noexcept;
+    app& operator=(app&&) noexcept;
     app(const app&) = delete;
     app& operator=(const app&) = delete;
     ~app();

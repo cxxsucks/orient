@@ -5,7 +5,8 @@
 #include <stdexcept>
 #include <string>
 #ifdef _MSC_VER
-#pragma warning(disable: 4996)
+// Negate unsigned, implicit narrow cast
+#pragma warning(disable: 4996 4146 4244)
 #endif // _MSC_VER
 
 namespace orie {
@@ -353,4 +354,8 @@ container_t str_split(const std::basic_string<char_t>& str,
     return res;
 }
 
+#ifdef _MSC_VER
+// Negate unsigned, implicit narrow cast
+#pragma warning(default: 4146 4244)
+#endif // _MSC_VER
 }

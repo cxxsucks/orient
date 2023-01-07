@@ -25,9 +25,9 @@ char_t dir_dumper::__handle_unknown_dtype(const char_t* path) noexcept {
     if (S_ISCHR(stbuf.st_mode))
         return DT_CHR;
     if (S_ISSOCK(stbuf.st_mode))
-        return DT_SOCK;
+        return char_t(DT_SOCK); // On Windows these are negative values
     if (S_ISBLK(stbuf.st_mode))
-        return DT_BLK;
+        return char_t(DT_BLK); 
     // Should not reach here, but don't crash so easily.
     NATIVE_STDERR << NATIVE_PATH("Unknown file type: ") << path << '\n';
     return DT_REG;
@@ -44,9 +44,9 @@ void dir_dumper::from_fs_impl(str_t& path_slash,
         return;
     clear(1); // Clear all non-dir files
 
-    if (!(pd = orie::opendir(path_slash.c_str())))
+    if (nullptr == (pd = orie::opendir(path_slash.c_str())))
         return clear();
-    while ((ent = orie::readdir(pd))) {
+    while (nullptr != (ent = orie::readdir(pd))) {
         if (orie::strcmp(NATIVE_PATH("."), ent->d_name) == 0 ||
                 orie::strcmp(NATIVE_PATH(".."), ent->d_name) == 0)
             continue;
@@ -160,7 +160,7 @@ dir_dumper *dir_dumper::visit_relative_dir(const string_type &rela_path) {
     dir_dumper* visiting = this;
 
     for (const string_type& name : cont)
-        if (!(visiting = visiting->visit_child_dir(name)))
+        if (nullptr == (visiting = visiting->visit_child_dir(name)))
             return nullptr;
     return visiting;
 }
@@ -207,7 +207,7 @@ dir_dumper* fs_dumper::visit_dir(const str_t& file_name) {
     if (drive_letter == separator) {
         drive_letter = file_name[1];
         if (!left.empty())
-			left = left.substr(1);
+            left = left.substr(1);
     }
     drive_letter = ::towupper(drive_letter);
 

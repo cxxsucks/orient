@@ -292,7 +292,7 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
 }
 
 app::app(fifo_thpool& p) : _pool(p) {}
-app::app(app&& rhs) 
+app::app(app&& rhs) noexcept
     : _conf_path_valid(rhs._conf_path_valid), _pool(rhs._pool)
 {
     rhs.stop_auto_update();
@@ -308,7 +308,7 @@ app::app(app&& rhs)
     _data_dumped = std::move(rhs._data_dumped);
 }
 
-app& app::operator=(app&& r) {
+app& app::operator=(app&& r) noexcept {
     if (this != &r) {
         this->~app();
         new (this) app(std::move(r));

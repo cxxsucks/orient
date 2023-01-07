@@ -64,6 +64,7 @@ private:
         default: std::terminate(); // Unreachable
         }
     }
+
 public:
     __match_helper(sv_t needle, bool icase, bool allow_bin)
         : _needle(std::in_place_index<0>, needle, icase)
@@ -100,12 +101,12 @@ public:
             to_open = to_open.substr(1);
 
         // Judge binary
-        if (!allow_binary) {
+        if (!_allow_binary) {
             char read_buf[4096];
             ::memset(read_buf, -1, 4096); // Fill the buffer with non-NULLs
             std::ifstream bin_ifs(to_open, std::ios_base::binary);
             bin_ifs.read(read_buf, 4096); // `read` does not place NULL
-            if (std::char_traits<char>::find(read_buf, bin_ifs.tellg(), '\0'))
+            if (std::char_traits<char>::find(read_buf, bin_ifs.gcount(), '\0'))
                 return false;
         }
 
@@ -116,10 +117,15 @@ public:
     #ifdef _MSC_VER
         ifs.imbue(std::locale("en_US.utf8"));
     #endif
-        ifs.read(read_buf.get(), 256);
-        do { // At least match once
-            ifs.read(read_buf.get() + 256, 16384);
-            if (_do_one_match(sv_t(read_buf.get(), 16384 + 256), match_dat.get()))
+
+        std::streamsize last_read = ifs.read(read_buf.get(), 256).gcount();
+        if (!ifs.good()) // At least match once
+            return _do_one_match(sv_t(read_buf.get(), 256), match_dat.get());
+
+        do {
+            last_read = ifs.read(read_buf.get() + 256, 16384).gcount();
+            if (_do_one_match(sv_t(read_buf.get(), last_read + 256),
+                                   match_dat.get()))
                 return true;
             ::memcpy(read_buf.get(), read_buf.get() + 16384, 256 * sizeof(wchar_t));
         } while (ifs.good());
