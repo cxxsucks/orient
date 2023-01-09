@@ -48,8 +48,8 @@ public:
 
     // Auto updating
     template <class Rep, class Period>
-    app& start_auto_update(
-        const std::chrono::duration<Rep, Period>& interval);
+    app& start_auto_update(const std::chrono::duration<Rep, Period>& interval,
+                           bool update_immediate);
     // CANNOT BE CALLED SIMUTANEOUSLY ON MULTIPLE THREADS!
     app& stop_auto_update();
 
@@ -126,18 +126,24 @@ void app::run_pooled(fsearch_expr& expr, callback_t callback) {
 }
 
 template <class Rep, class Period>
-app& app::start_auto_update(
-    const std::chrono::duration<Rep, Period>& interval)
+app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
+                            bool immediate)
 {
     if (_auto_update_thread != nullptr)
         stop_auto_update();
     _auto_update_stopped = false;
     assert(_auto_update_thread == nullptr);
 
-    _auto_update_thread.reset(new std::thread( [this, interval] () {
+    _auto_update_thread.reset(new std::thread( [this, interval, immediate] () {
+        bool not_first = false;
         while (!_auto_update_stopped) {
-            read_conf();
-            update_db();
+            // Do not update if first time inside the loop and
+            // an immediate updatedb is not requested
+            if (not_first || immediate) {
+                read_conf();
+                update_db();
+            }
+            not_first = true;
             std::unique_lock __lck(_member_mut);
             _auto_update_cv.wait_for(__lck, interval, 
                 [this] () {return _auto_update_stopped;});

@@ -30,6 +30,8 @@ if (NOT ORIE_SYSTEM_RAPIDFUZZ)
         GIT_REPOSITORY https://github.com/maxbachmann/rapidfuzz-cpp.git
         GIT_TAG main)
     FetchContent_MakeAvailable(rapidfuzz)
+else (NOT ORIE_SYSTEM_RAPIDFUZZ)
+    find_package(rapidfuzz REQUIRED)
 endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

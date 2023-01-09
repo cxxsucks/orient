@@ -126,7 +126,7 @@ TEST_F(orieApp, confFile) {
 }
 
 TEST_F(orieApp, autoUpdate) {
-    _app.start_auto_update(std::chrono::milliseconds(80));
+    _app.start_auto_update(std::chrono::milliseconds(80), true);
     std::ofstream(info().tmpPath / "testConf.txt") << "aaa";
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
     ASSERT_EQ(1, _do_tests(NATIVE_SV("-name testConf.txt")));
@@ -134,7 +134,7 @@ TEST_F(orieApp, autoUpdate) {
     // Corner case: stop immediately after start
     // No deadlock or segfault shall happen
     _app.stop_auto_update()
-        .start_auto_update(std::chrono::hours(9999))
+        .start_auto_update(std::chrono::hours(9999), true)
         .stop_auto_update();
 }
 
