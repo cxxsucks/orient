@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
+option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
 option(ORIE_LINK_STATIC "Statically link orient executable" OFF)
 
 # Unfortunately PCRE2 provides no package name therefore whether to use system
