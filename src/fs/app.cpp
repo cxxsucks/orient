@@ -385,7 +385,7 @@ app app::os_default(fifo_thpool& pool) {
 
     pathLen = ::GetEnvironmentVariableW(L"UserProfile", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
-        res.add_root_path(pathBuf);
+        res.add_root_path(pathBuf, true);
     pathLen = ::GetEnvironmentVariableW(L"TEMP", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
         res.add_ignored_path(pathBuf);
@@ -397,17 +397,17 @@ app app::os_default(fifo_thpool& pool) {
         if (::GetDriveTypeW(dri) != DRIVE_FIXED)
             continue;
         dri[2] = L'\0';
-        res.add_root_path(dri);
+        res.add_root_path(dri, true);
         ::wcscpy(pathBuf, dri);
         ::wcscat(pathBuf, L"\\Program Files");
         DWORD ftyp = ::GetFileAttributesW(pathBuf);
         if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf);
+            res.add_root_path(pathBuf, true);
 
         ::wcscat(pathBuf, L" (x86)");
         ftyp = ::GetFileAttributesW(pathBuf);
         if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf);
+            res.add_root_path(pathBuf, true);
         dri[2] = L'\\';
     }
     res.write_conf();
@@ -426,27 +426,30 @@ try {
         // More would be added if a non-bloated argparser is found :(
         // (No hashmap, set, string or vector; only string_view, array, ...)
         if (NATIVE_SV("-conf") == exe_argv[expr_since]) {
-            if (expr_since + 1 == exe_argc || 
+            if (expr_since + 1 == exe_argc ||
                 !app.read_conf(exe_argv[expr_since + 1])) {
                 orie::NATIVE_STDOUT << "Unable to read configuration.\n";
                 return 3;
-            } else {
+            }
+            else {
                 expr_since += 2;
                 continue;
             }
-        } else if (NATIVE_SV("-updatedb") == exe_argv[expr_since]) {
+        }
+        else if (NATIVE_SV("-updatedb") == exe_argv[expr_since]) {
             updatedb_flag = true;
             ++expr_since;
             continue;
         }
 
-        orie::char_t realpath_buf[path_max] = {};
-        orie::realpath(exe_argv[expr_since], realpath_buf, path_max);
-        orie::stat_t stbuf;
-        // TODO: `find` accepts non-dirs, but orie::fs_data_iter
-        // forces the starting path to be a directory
-        if (0 != orie::stat(realpath_buf, &stbuf) || !S_ISDIR(stbuf.st_mode))
+        if (exe_argv[expr_since][0] == char_t('-'))
             break;
+        orie::char_t realpath_buf[path_max] = {};
+        ssize_t realpath_len =
+            orie::realpath(exe_argv[expr_since], realpath_buf, path_max);
+        if (realpath_len < 0 || realpath_len >= path_max)
+            NATIVE_STDERR << exe_argv[expr_since]
+                          << NATIVE_PATH(": No such directory\n");
         app.add_start_path(realpath_buf);
         startpath_flag = true;
         ++expr_since;

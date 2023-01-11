@@ -166,8 +166,13 @@ namespace orie {
         DWORD _buf_len = static_cast<DWORD>(buf_len);
         while (*src == separator)
             ++src;
+        if (*src == L'\0') { // orient's fake root path
+            resolv[0] = separator;
+            resolv[1] = L'\0';
+            return 1;
+        }
 
-        HANDLE hdl = ::CreateFileW(src, GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+        HANDLE hdl = ::CreateFileW(src, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS, nullptr);
         if (hdl == INVALID_HANDLE_VALUE)
             return -1;
@@ -228,7 +233,7 @@ namespace orie {
                             char_t* resolv, size_t buf_len) 
     {
         if (buf_len >= PATH_MAX) {
-            if (::realpath(src, resolv))
+            if (::realpath(src, resolv) == nullptr)
                 return -1;
         } else {
             char tmp_dest[PATH_MAX];

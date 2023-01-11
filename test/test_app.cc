@@ -143,7 +143,7 @@ TEST_F(orieApp, osDefault) {
     std::cout << "Regenerating filesystem database.\n May take longer than "
               << "usual if a HDD is mounted, but not under /mnt or /run" << std::endl;
 #ifdef _WIN32
-    std::filesystem::path conf_dir(::getenv("USERPROFILE"));
+    std::filesystem::path conf_dir(::getenv("APPDATA"));
     conf_dir /= ".orie";
     orie::sv_t db_exist_teststr(L"-updir ( -name .orie ) -a -name default.*");
 #else
