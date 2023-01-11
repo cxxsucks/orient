@@ -69,8 +69,8 @@ TEST_F(dataIter, increment) {
 
     fs_data_iter it(dat);
     EXPECT_EQ(_count_dataIt(it), 11);
-    EXPECT_EQ(it++, fs_data_iter::end());
-    EXPECT_EQ(++it, fs_data_iter::end());
+    EXPECT_THROW(++it, std::out_of_range);
+    EXPECT_THROW(it++, std::out_of_range);
 }
 
 TEST_F(dataIter, updir) {

@@ -94,8 +94,7 @@ fs_data_iter::path() const {
 fs_data_iter& fs_data_iter::operator++() {
     _opt_fullpath.reset(); _opt_stat.reset();
     if (_push_count == 0)
-        // No throwing or errors to make allowance for `-quit`
-        return *this; 
+        throw std::out_of_range("Incrementing end fs_data_iter");
         
     fs_data_record tmp = _cur_record;
     ptrdiff_t pushed = _cur_record.increment();

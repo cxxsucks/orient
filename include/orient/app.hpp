@@ -108,11 +108,13 @@ void app::run(fsearch_expr& expr, cb_t callback) {
         fs_data_iter it(_data_dumped.get(), p);
         if (it == it.end())
             continue;
-        while (it != it.end()) {
-            if (expr.apply_blocked(it))
-                callback(it);
-            ++it;
-        }
+        try {
+            while (it != it.end()) {
+                if (expr.apply_blocked(it))
+                    callback(it);
+                ++it;
+            }
+        } catch(const pred_tree::quitted&) { }
     }
 }
 

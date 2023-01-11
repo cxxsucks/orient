@@ -10,11 +10,14 @@ struct fsExprBuilder : public testing::Test {
         fs_data_iter iter(info.dat.get());
         matcher.update_cost();
         size_t cnt = 0;
-        while (iter != iter.end())  {
-            if (matcher.apply_blocked(iter))
-                ++cnt;
-            ++iter;
-        }
+        try {
+            while (iter != iter.end())  {
+                if (matcher.apply_blocked(iter))
+                    ++cnt;
+                ++iter;
+            }
+        } catch(const orie::pred_tree::quitted&) { }
+        
         return cnt;
         // libstdc++ *copies* the iterator in count_if, which invalidates `prune`
         // return std::count_if(iter, iter.end(), [&matcher] (auto& dat_it)
@@ -88,16 +91,19 @@ TEST_F(fsExprBuilder, prune) {
 TEST_F(fsExprBuilder, quit) {
     orie::pred_tree::fs_expr_builder builder;
     builder.build(NATIVE_SV(" -name file0 -a -quit 6")); 
-    EXPECT_EQ(6, _do_tests(*builder.get()));
+    // Throws quitted exception when the 6th file0 is found
+    EXPECT_EQ(5, _do_tests(*builder.get()));
     EXPECT_FALSE(builder.has_action());
 
     // Modifier form
     builder.build(NATIVE_SV("-quitmod 4 -name file0")); 
-    EXPECT_EQ(4, _do_tests(*builder.get()));
+    EXPECT_EQ(3, _do_tests(*builder.get()));
 
-    // Quit after 1 true by default
+    // Quit immediately when child returned true
     builder.build(NATIVE_SV("-quitmod -name file0")); 
-    EXPECT_EQ(1, _do_tests(*builder.get()));
+    EXPECT_EQ(0, _do_tests(*builder.get()));
+    builder.build(NATIVE_SV("-name file0 -quit")); 
+    EXPECT_EQ(0, _do_tests(*builder.get()));
 
     // There are only 2 "dir3"
     builder.build(NATIVE_SV("-quitmod 6 -name dir3")); 
