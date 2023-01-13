@@ -34,7 +34,6 @@ public:
     static constexpr uint64_t magic_num = 0x44f8a1ef44f8a1ef + sizeof(long);
 
     static app os_default(fifo_thpool& pool);
-    static int main(int argc_exe, const char_t* const* argv_exe) noexcept;
 
     // Set path to database and read from it
     app& read_db(str_t path = str_t());
@@ -89,9 +88,9 @@ public:
     >> job_list;
     template <class callback_t>
     void run(fsearch_expr& expr, callback_t callback);
-    job_list get_jobs(fsearch_expr& expr);
     template <class callback_t> 
     void run_pooled(fsearch_expr& expr, callback_t callback);
+    job_list get_jobs(fsearch_expr& expr);
 
     app(fifo_thpool& pool);
     app(app&&) noexcept;

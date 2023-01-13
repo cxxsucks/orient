@@ -1,6 +1,5 @@
 #include <orient/app.hpp>
 #include <orient/fs/dumper.hpp>
-#include <orient/fs_pred_tree/fs_expr_builder.hpp>
 #include <fstream>
 #include <algorithm>
 #include <cassert>
@@ -416,95 +415,5 @@ app app::os_default(fifo_thpool& pool) {
     return res;
 }
 #endif
-
-int app::main(int exe_argc, const char_t* const* exe_argv) noexcept {
-try {
-    int expr_since = 1;
-    bool updatedb_flag = false, startpath_flag = false;
-    orie::fifo_thpool pool;
-    orie::app app(orie::app::os_default(pool));
-    while (expr_since < exe_argc) {
-        // -conf is the only global option implemented :(
-        // More would be added if a non-bloated argparser is found :(
-        // (No hashmap, set, string or vector; only string_view, array, ...)
-        if (NATIVE_SV("-conf") == exe_argv[expr_since]) {
-            if (expr_since + 1 == exe_argc ||
-                !app.read_conf(exe_argv[expr_since + 1])) {
-                orie::NATIVE_STDOUT << "Unable to read configuration.\n";
-                return 3;
-            }
-            else {
-                expr_since += 2;
-                continue;
-            }
-        }
-        else if (NATIVE_SV("-updatedb") == exe_argv[expr_since]) {
-            updatedb_flag = true;
-            ++expr_since;
-            continue;
-        }
-
-        if (exe_argv[expr_since][0] == char_t('-'))
-            break;
-        orie::char_t realpath_buf[path_max] = {};
-        ssize_t realpath_len =
-            orie::realpath(exe_argv[expr_since], realpath_buf, path_max);
-        if (realpath_len < 0 || realpath_len >= path_max)
-            NATIVE_STDERR << exe_argv[expr_since]
-                          << NATIVE_PATH(": No such directory\n");
-        app.add_start_path(realpath_buf);
-        startpath_flag = true;
-        ++expr_since;
-    }
-
-    orie::pred_tree::fs_expr_builder builder;
-    if (expr_since == exe_argc)
-        builder.build(updatedb_flag ? 
-            NATIVE_SV("-false") : NATIVE_SV("-true"));
-    else
-        builder.build(exe_argc - expr_since + 1, exe_argv + expr_since - 1);
-    bool has_action = builder.has_action();
-    auto callback = [has_action] (orie::fs_data_iter& it) {
-        static std::mutex out_mut;
-        if (!has_action) {
-            std::lock_guard __lck(out_mut);
-#ifdef _WIN32
-            // Do not print trailing '\\'
-            orie::NATIVE_STDOUT << it.path().c_str() + 1 << '\n';
-#else
-            orie::NATIVE_STDOUT << it.path() << '\n';
-#endif
-        }
-    };
-
-    if (updatedb_flag)
-        app.update_db();
-    else app.read_db();
-    if (app._data_dumped == nullptr) {
-        NATIVE_STDERR << "Database not initialized. Please run with "
-                         "-updatedb first.\n";
-        return 4;
-    }
-
-    if (!startpath_flag) {
-        char_t cwd_buf[path_max];
-#ifdef _WIN32
-        // TODO: cwd is longer than path_max
-        ::GetCurrentDirectoryW(path_max, cwd_buf);
-        app.add_start_path(cwd_buf);
-#else
-        app.add_start_path(::getcwd(cwd_buf, path_max));
-#endif
-    }
-    if (builder.has_async()) 
-        app.run_pooled(*builder.get(), callback);
-    else app.run(*builder.get(), callback);
-
-} catch (std::exception& e) {
-    std::cerr << e.what() << '\n';
-    return 1;
-}
-    return 0;
-}
 
 }

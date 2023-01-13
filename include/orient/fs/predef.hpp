@@ -59,6 +59,7 @@ namespace orie {
     using dir_t = ::DIR;
     using dirent_t = ::dirent;
     using stat_t = struct stat;
+    using ssize_t = ssize_t;
 
     using fs_char_traits = std::char_traits<char>;
     using sv_t = std::string_view;
