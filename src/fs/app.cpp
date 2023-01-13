@@ -356,6 +356,8 @@ app app::os_default(fifo_thpool& pool) {
        .add_root_path("/home", true)
        .add_ignored_path("/proc")
        .add_ignored_path("/run")
+       .add_ignored_path("/media")
+       .add_ignored_path("/mnt")
        .add_ignored_path("/tmp")
        .add_ignored_path("/var/tmp")
        .write_conf();

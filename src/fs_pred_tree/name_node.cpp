@@ -236,9 +236,9 @@ bool type_node::next_param(sv_t param) {
     size_t i = 0;
     for (char_t ch : param) {
         switch (ch) {
-        case file_tag:
-        case dir_tag:
-        case link_tag:
+        case file_tag: case dir_tag: case link_tag:
+        case fifo_tag: case blk_tag: case sock_tag:
+        case char_tag:
             _permitted[i++] = static_cast<category_tag>(ch);
             break;
         }
