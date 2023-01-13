@@ -3,7 +3,6 @@
 #include <memory>
 #include <iterator>
 #include <ctime>
-#include <string_view>
 
 #include "excepts.hpp"
 
@@ -397,6 +396,43 @@ public:
  
     cond_node(CONDS cond) : _cond(cond) {}
 };
+
+// MODIF: -quitmod
+// PRED: -quit (implemented as -quitmod -true)
+// ARG: times the child returns true before quitting
+template <class iter_t, class sv_t>
+class quitmod_node : public mod_base_node<iter_t, sv_t> {
+    ptrdiff_t _quit_after = 1;
+
+public:
+    // Use fs_mod_node::cost and success_rate
+    node<iter_t, sv_t>* clone() const override {
+        return new quitmod_node(*this);
+    }
+    bool communicative() const noexcept override {return false;}
+
+    bool next_param(sv_t param) override {
+        ptrdiff_t targ;
+        const typename sv_t::value_type
+            *beg = param.data(),
+            *end = beg + param.size(),
+            *numend = orie::from_char_t(beg, end, targ);
+        if (end == numend) {
+            _quit_after = targ;
+            return true;
+        }
+        return false;
+    }
+
+    bool apply_blocked(iter_t& it) override {
+        bool res = (mod_base_node<iter_t, sv_t>::prev == nullptr ||
+                    mod_base_node<iter_t, sv_t>::prev->apply_blocked(it));
+        if (res && --_quit_after <= 0)
+            throw quitted("-quitmod reached 0");
+        return res;
+    }
+};
+
 
 // For testing purposes only: takes 1 param and ignores it.
 // Always true

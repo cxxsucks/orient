@@ -43,10 +43,10 @@ fs_data_record::category_tag fs_data_record::file_type() const noexcept {
     if (_viewing == nullptr)
         return category_tag::unknown_tag;
     switch (_category) {
-    case category_tag::dir_tag:
-    case category_tag::file_tag:
-    case category_tag::link_tag:
-    case category_tag::dir_pop_tag:
+    case file_tag: case dir_tag: case link_tag:
+    case fifo_tag: case blk_tag: case sock_tag:
+    case char_tag:
+    // case category_tag::dir_pop_tag:
         return _category;
     default:
         return category_tag::unknown_tag;
@@ -94,8 +94,7 @@ fs_data_iter::path() const {
 fs_data_iter& fs_data_iter::operator++() {
     _opt_fullpath.reset(); _opt_stat.reset();
     if (_push_count == 0)
-        // No throwing or errors to make allowance for `-quit`
-        return *this; 
+        throw std::out_of_range("Incrementing end fs_data_iter");
         
     fs_data_record tmp = _cur_record;
     ptrdiff_t pushed = _cur_record.increment();

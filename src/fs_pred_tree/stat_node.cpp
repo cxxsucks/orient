@@ -178,7 +178,7 @@ bool access_node::apply_blocked(fs_data_iter& it) {
         throw uninitialized_node(NATIVE_SV("-access"));
 #ifdef _WIN32
     // Windows _access and _waccess cannot test execution permission
-    return ::_waccess(it.path().c_str(), _access_test_mode & 06) != -1;
+    return ::_waccess(it.path().c_str() + 1, _access_test_mode & 06) != -1;
 #else
     return ::access(it.path().c_str(), _access_test_mode) == 0;
 #endif

@@ -1,6 +1,5 @@
 #include <orient/app.hpp>
 #include <orient/fs/dumper.hpp>
-#include <orient/fs_pred_tree/fs_expr_builder.hpp>
 #include <fstream>
 #include <algorithm>
 #include <cassert>
@@ -356,6 +355,8 @@ app app::os_default(fifo_thpool& pool) {
        .add_root_path("/home", true)
        .add_ignored_path("/proc")
        .add_ignored_path("/run")
+       .add_ignored_path("/media")
+       .add_ignored_path("/mnt")
        .add_ignored_path("/tmp")
        .add_ignored_path("/var/tmp")
        .write_conf();
@@ -385,7 +386,7 @@ app app::os_default(fifo_thpool& pool) {
 
     pathLen = ::GetEnvironmentVariableW(L"UserProfile", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
-        res.add_root_path(pathBuf);
+        res.add_root_path(pathBuf, true);
     pathLen = ::GetEnvironmentVariableW(L"TEMP", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
         res.add_ignored_path(pathBuf);
@@ -397,109 +398,22 @@ app app::os_default(fifo_thpool& pool) {
         if (::GetDriveTypeW(dri) != DRIVE_FIXED)
             continue;
         dri[2] = L'\0';
-        res.add_root_path(dri);
+        res.add_root_path(dri, true);
         ::wcscpy(pathBuf, dri);
         ::wcscat(pathBuf, L"\\Program Files");
         DWORD ftyp = ::GetFileAttributesW(pathBuf);
         if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf);
+            res.add_root_path(pathBuf, true);
 
         ::wcscat(pathBuf, L" (x86)");
         ftyp = ::GetFileAttributesW(pathBuf);
         if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf);
+            res.add_root_path(pathBuf, true);
         dri[2] = L'\\';
     }
     res.write_conf();
     return res;
 }
 #endif
-
-int app::main(int exe_argc, const char_t* const* exe_argv) noexcept {
-try {
-    int expr_since = 1;
-    bool updatedb_flag = false, startpath_flag = false;
-    orie::fifo_thpool pool;
-    orie::app app(orie::app::os_default(pool));
-    while (expr_since < exe_argc) {
-        // -conf is the only global option implemented :(
-        // More would be added if a non-bloated argparser is found :(
-        // (No hashmap, set, string or vector; only string_view, array, ...)
-        if (NATIVE_SV("-conf") == exe_argv[expr_since]) {
-            if (expr_since + 1 == exe_argc || 
-                !app.read_conf(exe_argv[expr_since + 1])) {
-                orie::NATIVE_STDOUT << "Unable to read configuration.\n";
-                return 3;
-            } else {
-                expr_since += 2;
-                continue;
-            }
-        } else if (NATIVE_SV("-updatedb") == exe_argv[expr_since]) {
-            updatedb_flag = true;
-            ++expr_since;
-            continue;
-        }
-
-        orie::char_t realpath_buf[path_max] = {};
-        orie::realpath(exe_argv[expr_since], realpath_buf, path_max);
-        orie::stat_t stbuf;
-        // TODO: `find` accepts non-dirs, but orie::fs_data_iter
-        // forces the starting path to be a directory
-        if (0 != orie::stat(realpath_buf, &stbuf) || !S_ISDIR(stbuf.st_mode))
-            break;
-        app.add_start_path(realpath_buf);
-        startpath_flag = true;
-        ++expr_since;
-    }
-
-    orie::pred_tree::fs_expr_builder builder;
-    if (expr_since == exe_argc)
-        builder.build(updatedb_flag ? 
-            NATIVE_SV("-false") : NATIVE_SV("-true"));
-    else
-        builder.build(exe_argc - expr_since + 1, exe_argv + expr_since - 1);
-    bool has_action = builder.has_action();
-    auto callback = [has_action] (orie::fs_data_iter& it) {
-        static std::mutex out_mut;
-        if (!has_action) {
-            std::lock_guard __lck(out_mut);
-#ifdef _WIN32
-            // Do not print trailing '\\'
-            orie::NATIVE_STDOUT << it.path().c_str() + 1 << '\n';
-#else
-            orie::NATIVE_STDOUT << it.path() << '\n';
-#endif
-        }
-    };
-
-    if (updatedb_flag)
-        app.update_db();
-    else app.read_db();
-    if (app._data_dumped == nullptr) {
-        NATIVE_STDERR << "Database not initialized. Please run with "
-                         "-updatedb first.\n";
-        return 4;
-    }
-
-    if (!startpath_flag) {
-        char_t cwd_buf[path_max];
-#ifdef _WIN32
-        // TODO: cwd is longer than path_max
-        ::GetCurrentDirectoryW(path_max, cwd_buf);
-        app.add_start_path(cwd_buf);
-#else
-        app.add_start_path(::getcwd(cwd_buf, path_max));
-#endif
-    }
-    if (builder.has_async()) 
-        app.run_pooled(*builder.get(), callback);
-    else app.run(*builder.get(), callback);
-
-} catch (std::exception& e) {
-    std::cerr << e.what() << '\n';
-    return 1;
-}
-    return 0;
-}
 
 }

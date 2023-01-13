@@ -131,5 +131,10 @@ public:
     const char* what() const noexcept override { return msg; }
 };
 
+// Thrown by -quitmod; caught by async_job
+struct quitted : public std::runtime_error {
+    quitted(const char* what) : std::runtime_error(what) {}
+};
+
 }
 }

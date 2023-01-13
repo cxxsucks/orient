@@ -23,6 +23,7 @@ if (NOT ORIE_SYSTEM_PCRE2)
         set(PCRE2_BUILD_PCRE2_8 OFF CACHE INTERNAL "")
         set(PCRE2_BUILD_PCRE2_16 ON CACHE INTERNAL "")
     endif(WIN32)
+    # By default PCRE2 build static lib only
     FetchContent_MakeAvailable(pcre2)
 endif(NOT ORIE_SYSTEM_PCRE2)
 
@@ -36,25 +37,42 @@ else (NOT ORIE_SYSTEM_RAPIDFUZZ)
 endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree FS_PRED_TREE_SRCS)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/fs FS_SRCS)
+set(orie_pcre2_libname pcre2-)
 
+# List common sources
+set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
+set(orie_src
+    ${s}/app.cpp ${s}/data_iter.cpp
+    ${s}/dumper_fs.cpp ${s}/dumper_mem.cpp)
+set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
+set(orie_src ${orie_src}
+    ${s}/action_node.cpp ${s}/content_node.cpp
+    ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
+    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp)
+unset(s)
+
+# Platform specific settings
 if(WIN32)
-    add_library(orie
-        ${FS_SRCS} ${FS_PRED_TREE_SRCS}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/dirent_win.c
-    )
+    set(orie_src ${orie_src}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/dirent_win.c)
     install(FILES include/dirent_win.h DESTINATION include)
-    add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-    target_link_libraries(orie PRIVATE pcre2-16 rapidfuzz::rapidfuzz)
-
+    set(orie_pcre2_libname ${orie_pcre2_libname}16)
 else(WIN32)
-    add_library(orie ${FS_SRCS} ${FS_PRED_TREE_SRCS})
-    add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-    target_link_libraries(orie PRIVATE pcre2-8 rapidfuzz::rapidfuzz)
+    set(orie_pcre2_libname ${orie_pcre2_libname}8)
 endif(WIN32)
 
+add_library(orie ${orie_src})
+add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
+target_link_libraries(orie PRIVATE ${orie_pcre2_libname} rapidfuzz::rapidfuzz)
+target_link_libraries(orient PRIVATE orie)
+
+if(ORIE_TEST)
+add_subdirectory(test)
+endif(ORIE_TEST)
+unset(orie_pcre2_libname)
+
 install(TARGETS orie DESTINATION lib)
+install(TARGETS orient DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include
         FILES_MATCHING PATTERN "*.hpp")
 
@@ -66,13 +84,6 @@ if(ORIE_LINK_STATIC)
     set_target_properties(orient PROPERTIES LINK_SEARCH_END_STATIC ON)
     target_link_options(orient PRIVATE -static-libgcc -static-libstdc++ -static)
 endif(ORIE_LINK_STATIC)
-
-target_link_libraries(orient orie)
-install(TARGETS orient DESTINATION bin)
-
-if(ORIE_TEST)
-add_subdirectory(test)
-endif(ORIE_TEST)
 
 target_compile_options(orie PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>

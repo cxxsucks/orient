@@ -70,11 +70,15 @@ public:
                 ++_cnt_running;
                 pool.enqueue(pool_job, _begin);
             } else if (res == tribool_bad::True) {
-                // TODO: Async callback?
-                if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
-                    callback(false, _begin);
-                else callback(_begin);
-                --min_result_sync;
+                try {
+                    // TODO: Async callback?
+                    if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
+                        callback(false, _begin);
+                    else callback(_begin);
+                    --min_result_sync;
+                } catch (pred_tree::quitted&) {
+                    _cancelled = true;
+                }
             }
             ++_begin;
         }

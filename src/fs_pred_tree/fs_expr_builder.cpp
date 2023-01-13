@@ -94,8 +94,10 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
 
     // -fuzz -content-fuzz -quit v0.3.0
     case 55: return new fuzz_node;
-    case 56: return new content_fuzz_node;
-    case 57: return new quitmod_node;
+    case 56: 
+        _has_async = true;
+        return new content_fuzz_node;
+    case 57: return new quitmod_node<fs_data_iter, sv_t>;
     }
     return nullptr;
 }
@@ -108,7 +110,7 @@ fs_node *fs_expr_builder::modifier_dispatch(orie::sv_t cmd) const {
     case 40: return new downdir_node;
     // -prunemod -quitmod v3.0
     case 58: return new prunemod_node;
-    case 59: return new quitmod_node;
+    case 59: return new quitmod_node<fs_data_iter, sv_t>;
     }
     return nullptr;
 }

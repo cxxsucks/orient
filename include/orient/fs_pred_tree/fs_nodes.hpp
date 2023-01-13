@@ -93,10 +93,6 @@ class fuzz_regex_node;
 // MODIF: -prunemod 
 // PRED: -prune (implemented as -prunemod -true)
 struct prunemod_node;
-// MODIF: -quitmod
-// PRED: -quit (implemented as -quitmod -true)
-// ARG: times the child returns true before quitting
-class quitmod_node;
 // MODIF: -downdir
 class downdir_node;
 // MODIF: -updir
@@ -266,20 +262,6 @@ struct prunemod_node : public fs_mod_node {
     }
     bool communicative() const noexcept override {return false;}
 
-    bool apply_blocked(fs_data_iter& it) override; 
-};
-
-class quitmod_node : public fs_mod_node {
-    ptrdiff_t _quit_after = 1;
-
-public:
-    // Use fs_mod_node::cost and success_rate
-    fs_node* clone() const override {
-        return new quitmod_node(*this);
-    }
-    bool communicative() const noexcept override {return false;}
-
-    bool next_param(sv_t param) override;
     bool apply_blocked(fs_data_iter& it) override; 
 };
 

@@ -113,29 +113,5 @@ bool prunemod_node::apply_blocked(fs_data_iter& it) {
     return true;
 }
 
-bool quitmod_node::next_param(sv_t param) {
-    ptrdiff_t targ;
-    const char_t* beg = param.data(),
-        *end = beg + param.size(),
-        *numend = orie::from_char_t(beg, end, targ);
-    if (end == numend) {
-        _quit_after = targ;
-        return true;
-    }
-    return false;
-}
-
-bool quitmod_node::apply_blocked(fs_data_iter& it) {
-    if (_quit_after <= 0) {
-        it = it.end();
-        return false;
-    }
-
-    bool res = (prev == nullptr || prev->apply_blocked(it));
-    if (res)
-        --_quit_after;
-    return res;
-}
-
 }
 }

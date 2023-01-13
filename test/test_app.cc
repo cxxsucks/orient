@@ -143,7 +143,7 @@ TEST_F(orieApp, osDefault) {
     std::cout << "Regenerating filesystem database.\n May take longer than "
               << "usual if a HDD is mounted, but not under /mnt or /run" << std::endl;
 #ifdef _WIN32
-    std::filesystem::path conf_dir(::getenv("USERPROFILE"));
+    std::filesystem::path conf_dir(::getenv("APPDATA"));
     conf_dir /= ".orie";
     orie::sv_t db_exist_teststr(L"-updir ( -name .orie ) -a -name default.*");
 #else
@@ -168,6 +168,19 @@ TEST_F(orieApp, osDefault) {
     EXPECT_LE(2, _do_tests(db_exist_teststr));
 }
 
+// Cannot test on non-msvc Windows because of inconsistent signiture
+#if defined(_MSC_VER) || !defined(_WIN32)
+
+#ifdef _MSC_VER
+#define wmain fake_main
+#include "../src/main.cc"
+#undef wmain
+#else
+#define main fake_main
+#include "../src/main.cc"
+#undef main
+#endif
+
 TEST_F(orieApp, main) {
     auto conf_path = info().tmpPath / "mainConf.txt",
          start_path = info().tmpPath / "dir10";
@@ -179,18 +192,19 @@ TEST_F(orieApp, main) {
         NATIVE_PATH("-name"), NATIVE_PATH("dir9")
     };
     // -conf accepts 1 argument
-    EXPECT_NE(0, orie::app::main(3, args));
+    EXPECT_NE(0, fake_main(3, args));
     // -conf file must be valid. 
     // Before app::write_conf, the file does not exist
-    EXPECT_NE(0, orie::app::main(4, args));
+    EXPECT_NE(0, fake_main(4, args));
     _app.write_conf(conf_path.native());
     // Database not initialized
-    EXPECT_NE(0, orie::app::main(4, args));
+    EXPECT_NE(0, fake_main(4, args));
     // Ok; just updatedb. No result
-    EXPECT_EQ(0, orie::app::main(5, args));
+    EXPECT_EQ(0, fake_main(5, args));
     // Ok; updatedb and locate. Also no result because by default
     // start from working dir, which is not /tmp
-    EXPECT_EQ(0, orie::app::main(6, args + 1));
+    EXPECT_EQ(0, fake_main(6, args + 1));
     // Ok; start at dir10. Print 1 result
-    EXPECT_EQ(0, orie::app::main(7, args));
+    EXPECT_EQ(0, fake_main(7, args));
 }
+#endif
