@@ -115,6 +115,33 @@ Feel free to start an issue on either bugs or feature requests.
 
 ## Some ideas & unplanned works
 
+### Separate `find` Compat Script
+
+`find`'s many global options are utilities unrelated to file searching
+itself, and are verbose to implement in C++, but quite easy in bash, like
+`-files0-from` which is just tokenizing a file and appending to start
+paths.  
+Others, like `-mount`, can be emulated with `-prunemod -path /mntpoint -a ( )`.
+`-daystart` remains an obstacle requiring extensive changes.
+
+### Root Path Auto Generation
+
+Default config generation hard-codes some starting points and enables
+multithreaded read on all of them, which is suboptimal for rotational
+hard disks.  
+
+On Linux, `/sys/block/sda/queue/rotational` provide insights on whether
+a disk is rotational, which macOS and Windows unfortunately (but
+unexpectedly) do not have.  
+In a future release root points will be aquired from `/etc/mtab` and
+`/sys/.../rotational`, which auto-configure root paths on Linux and macOS.
+> Apple is so cool! They must have equipped their MacBooks with the best
+> hard disks in the world and is definitely not rotational!
+
+A bash script may do that job, and `app::os_default` can be simplified to
+an `execvp` call, but direct implementation in `app::os_default` is also
+feasible and easier for (especially `SearchEverywhere`) end users.
+
 ### Using `CLucene`
 
 `Clucene` is a feature-rich performant general-purpose indexer. It can

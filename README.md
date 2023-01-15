@@ -6,9 +6,13 @@ computers (\<5M files).
 
 Inverted index, the tech behind `plocate` which make searches done in
 constant time, is not implemented due to its sheer amount of workload.
-It will be worked on if this repo reached 512 stars, so smash that button
-if the app proved useful for you!  
+It will be worked on if this repo reached 512 stars, so smash that star
+button if the app proved useful for you!  
 (More about this [here](docs/TODO.md).)
+
+**IMPORTANT**: This README is about the CLI application.  
+For GUI frontend, see [SearchEverywhere](https://github.com/ccPlus/SearchEverywhere)  
+For developers, see [Lib Overview](docs/lib_overview.md).
 
 ## Unique Features
 
@@ -27,6 +31,10 @@ The First Libre File Indexer Ever on macOS and Windows!😜
 - Handles Windows drives as if they were Unix directories
     (with '\\' being separator of course)
 
+Screenshot on macOS and Windows respectively:  
+![orie_mac](docs/md_pics/orie_mac.png)  
+![orie_win](docs/md_pics/orie_win.png)  
+
 ### Non-root, multithreaded `updatedb` (SSD only)
 
 Unlike `locate`, rebuild filesystem index requires **NO** root permission
@@ -40,15 +48,15 @@ Whether multithread updatedb shall be enabled can be toggled per path.
 The figure shows that `orient` can scan 870000 files within 1.5 secs with
 *cache dropped*, but the disk used is a rather high-end one. Take it with
 a grain of salt though.  
-[!updatedb](docs/md_pics/updatedb.png)  
+![updatedb](docs/md_pics/updatedb.png)  
 
 ### Rapid Fuzzy & Content matching
 
 Like updatedb, the same thread pool is also used for content match.
-Fuzzy matching `hello world` from 75000-file Linux kernel took 5.5secs
-when cache dropped and 1.5secs with cache.  
-[!contentMatch](docs/md_pics/content_match.png)  
-(take with a grain of salt; 16x Intel i7 11???H and NVMe SSD)
+Fuzzy matching `hello world` from the 75000-file Linux kernel source
+tree took 5.5secs when cache dropped and 1.5secs with cache.  
+![contentMatch](docs/md_pics/content_match.png)  
+(take with a grain of salt; 16x Intel i7 11800H and NVMe SSD)
 > On Windows content matching is **significantly slower**, a combined
 > effect of UTF8 to UTF16 conversion, lack of efficient kernel memory
 > mapping (`mmap(2)`) and the bloated, inefficient nature of Windows.
@@ -60,7 +68,7 @@ when cache dropped and 1.5secs with cache.
 As shown below, `orient` also implements **large portions of** `find`'s
 matches, making users easy to familierze themselves with existing
 experience in using `find` while also increasing the app's versatility.  
-[!find](docs/md_pics/find.png)
+![find](docs/md_pics/find.png)
 
 ### Match parent dir or child file
 
@@ -68,9 +76,11 @@ Unlike `Everything` which hard code parent match to string matching only,
 in `orient`, `-updir -downdir` can be applied to any predicate.
 
 Also `-downdir` is almost 0 overhead and `-updir` make searches **even**
-**faster** by caching recent matches. Take a look:
-[!updir](docs/md_pics/updir.png)  
-[!downdir](docs/md_pics/downdir.png)
+**faster** by caching recent matches.  
+Matching Parent:  
+![updir](docs/md_pics/updir.png)  
+Matching Children:  
+![downdir](docs/md_pics/downdir.png)
 
 ## Comparison
 
@@ -137,13 +147,13 @@ orient /usr -quitmod \( -type l -a -okdir realpath \{\} \; \)
 
 `orient` does not have as much (unique) predicates as `find`. Instead,
 `orient` use `-PRED --ARG` syntax, giving multiple matching schemes to
-a single predicate, boosting code reuseability. Here are some examples:
+a single predicate, boosting code reuseability.
 
 - Path match predicates: `-name` `-bregex` `-strstr` `-fuzz`  
     Arguments: `--ignore-case`(except `-fuzz`) `--full` `--readlink`
 - Content match predicates: `-content-{strstr,fuzz,regex}`  
     Arguments: `--ignore-case`(except fuzz) `--blocked` `--allow-binary`
-- File stat predicates: `-size` `-{a,m,c}{time,min}` `-inum`
+- File stat predicates: `-size` `-{a,m,c}{time,min}` `-inum`  
     Arguments: File name or integer prefixed by `+` or `-`
 - and more...
 
@@ -154,18 +164,19 @@ Many `find` compatible predicates are actually aliases, like
 > It is also possible to mix two syntaxes together, though unrecommended  
 > like `-iname --full` or `-anewer +5`
 
-Here are some examples:  
+Below are some simple examples.
 See more on how to use them [here](docs/predicates.md).
 
 ```sh
 # Find C source files containing "hello"; orient style only
-orient / -content-strstr hello -a -name "*.c"
+orient / -content-strstr hello -name "*.c"
 
 # Many `find` style predicates are actually aliases, ex:
 orient / -iname "*.cpp" # find style
 orient / -name --ignore-case "*.cpp" # orient style
 
-# Assume /usr/tmp links to /var/tmp
+# Assuming /home/a/b links to /var/tmp, then
+# all the following 3 lines matches /home/a/b
 # `-lname` is identical to `-name --readlink`  
 orient / -lname "*tmp"
 orient / -name --readlink "*tmp"
@@ -181,12 +192,28 @@ something" before propagating to other preds, which is exactly what
 children of directories.  
 With modifiers, `-updir -downdir` can be applied to any predicate
 in `orient`, unlike `Everything` which hard code parent match to string
-matching only.
+matching only.  
+*Any* predicate include recursive use of `-updir -downdir` themselves.
 
 Also `-downdir` is almost 0 overhead and `-updir` make searches **even**
 **faster** by caching recent matches.
 
-Some more modifiers include `-prunemod`, `-quitmod` and `-not`.
+Some more modifiers include `-prunemod`, `-quitmod` and `-not`. Ex:  
+
+```sh
+# Find bin/gcc*
+orient / -updir -name "gcc*" -a -executable
+# Find bin/gcc* or bin/clang*
+orient / -updir \( -name "gcc*" -o -name "clang*" \) -a -executable
+
+# Find git repositories, first level only
+orient / -downdir \( -name .git -a -type d \) -a -prune
+# Must use -exec test on find and is extremely slow
+find .. -type d -a -exec test -d '{}/.git' \; -a -print -a -prune
+
+# .cc files under src directory of a git repository
+orient / -updir \( -name src -a -updir -downdir -name .git \) -name "*.cc"
+```
 
 ## Installation
 
@@ -196,7 +223,7 @@ and it should work.
 
 Unfortunately the macOS ARM version is missing since I don't have one such
 machine🫥. Feel free to report whether it works on issue or discussion.
-> Currently this app is too little-tested to release to a distribution.
+> Currently this app is too little-tested to release to a distribution.  
 > May release to Arch AUR first btw.
 
 ### Build From Source
@@ -210,9 +237,9 @@ Build dependencies:
 - rapidfuzz
 - GoogleTest (Test Only)
 
-Aside from `CMake`, all dependency can be auto-downloaded by CMake.
+Aside from `CMake`, all dependency can be auto-downloaded by CMake.  
 Using an installed one is also possible, should you have already
-installed some of them.
+installed some of them, via toggling configure options below.
 
 Configure Options:
 
@@ -222,20 +249,53 @@ Configure Options:
 - `ORIE_LINK_STATIC`: Statically link orient executable
 - `ORIE_SYSTEM_RAPIDFUZZ`: Use System rapidfuzz Library (header only)
 
-If `ORIE_LINK_STATIC` is on, then `ORIE_SYSTEM_PCRE2` shall better be
-off, or the app would still dynamically link to PCRE2.  
 Replace the `OPTION` below with your enabled options, and run the
 following commands:
 
 ```sh
 git clone https://github.com/ccPlus/orient.git
 cd orient; mkdir build; cd build
-cmake -DOPTION1=ON -DOPTION1=ON -DCMAKE_BUILD_TYPE=Release ..
+cmake -DOPTION1=ON -DOPTION2=ON -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 sudo make install
 ```
 
 ## Caveats
+
+### Multithreaded Read by Default
+
+Default config generation hard-codes some starting points and enables
+multithreaded read on all of them, which is suboptimal for rotational
+hard disks.  
+If you happen to use HDDs, do the following the first time running `orient`:
+
+1. Run `orient -updatedb`
+2. Immediately interrupt with `Ctrl-C`
+3. Open `~/.config/orie/default.txt` or `%APPDATA%\.orie\default.txt`
+4. Review the paths succeeding `ROOT`, remove the `SSD` field if any of
+    these paths are actually not on SSD.
+5. If there are any HDD root paths not listed, write
+    `ROOT "/path/to/mountpoint"` or simply do not index it with
+    `IGNORED "/path/to/mountpoint"`.
+
+On Linux, `/sys/block/sda/queue/rotational` provide insights on whether
+a disk is rotational, which macOS and Windows unfortunately (but
+unexpectedly) do not have.  
+In a future release root points will be aquired from `/etc/mtab` and
+`/sys/.../rotational`, which auto-configure root paths on Linux and macOS.
+> ApPlE iS sO cOoL! tHeY mUsT hAvE eQuIpPeD tHeIr MaCbOoKs WiTh ThE bEsT
+> hArD dIsKs In ThE wOrLd AnD iS dEfInItElY nOt RoTaTiOnAl!
+
+### Untested features
+
+The `exec` series of predicates are implemented, but not tested, on Windows.  
+And a moderate amount of software engineering experience would tell that
+untested features would certainly contain errors, if not fail outright.
+
+There are a number of untested features, with `exec` on Windows being the
+only one actually listed in [feature list](docs/predicates.md).  
+Other untested features are listed in [TODO list](docs/TODO.md), but not
+feature list, along with reasons why they are not tested.
 
 ### **Unimplemented** `find` features
 
@@ -272,4 +332,4 @@ See [TODO List](docs/TODO.md) for details.
     > therefore it is directly placed into source instead of module.
 - [PCRE2](https://github.com/PCRE2Project/pcre2) Regular Expression
 - [rapidfuzz-cpp](https://github.com/maxbachmann/rapidfuzz-cpp):
-    Fuzzy string matcher
+    **Header Only** Fuzzy string matching library
