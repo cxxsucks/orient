@@ -26,6 +26,7 @@ if (NOT ORIE_SYSTEM_PCRE2)
     # By default PCRE2 build static lib only
     FetchContent_MakeAvailable(pcre2)
 endif(NOT ORIE_SYSTEM_PCRE2)
+set(orie_pcre2_libname pcre2-)
 
 if (NOT ORIE_SYSTEM_RAPIDFUZZ)
     FetchContent_Declare(rapidfuzz
@@ -35,9 +36,6 @@ if (NOT ORIE_SYSTEM_RAPIDFUZZ)
 else (NOT ORIE_SYSTEM_RAPIDFUZZ)
     find_package(rapidfuzz REQUIRED)
 endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(orie_pcre2_libname pcre2-)
 
 # List common sources
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
@@ -62,19 +60,46 @@ else(WIN32)
 endif(WIN32)
 
 add_library(orie ${orie_src})
+add_library(orie::orie ALIAS orie)
 add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-target_link_libraries(orie PRIVATE ${orie_pcre2_libname} rapidfuzz::rapidfuzz)
+target_link_libraries(orie PUBLIC ${orie_pcre2_libname} rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
+target_include_directories(orie PUBLIC 
+                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_include_directories(orient PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(ORIE_TEST)
 add_subdirectory(test)
 endif(ORIE_TEST)
 unset(orie_pcre2_libname)
 
-install(TARGETS orie DESTINATION lib)
-install(TARGETS orient DESTINATION bin)
-install(DIRECTORY include/ DESTINATION include
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+install(TARGETS orient DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.hpp")
+
+# Install liborie as CMake Module
+set(ORIE_CMAKE_CONFIG_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/orie)
+# Group all targets into a single exported target (only 1 in this case)
+install(TARGETS orie EXPORT orieTargs DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# Generate *Config.cmake for each target (only 1 in this case)
+configure_package_config_file(orieConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/orieConfig.cmake
+    INSTALL_DESTINATION ${ORIE_CMAKE_CONFIG_DESTINATION})
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/orieConfigVersion.cmake
+    COMPATIBILITY SameMinorVersion)
+
+install(EXPORT orieTargs NAMESPACE orie:: 
+        DESTINATION ${ORIE_CMAKE_CONFIG_DESTINATION})
+install(TARGETS orie DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# Manually install *Config.cmake for each target (only 1 in this case)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/orieConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/orieConfigVersion.cmake
+    DESTINATION ${ORIE_CMAKE_CONFIG_DESTINATION})
 
 if(ORIE_LINK_STATIC)
     set_target_properties(orie PROPERTIES LINK_SEARCH_START_STATIC ON)

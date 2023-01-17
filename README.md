@@ -14,6 +14,10 @@ button if the app proved useful for you!
 For GUI frontend, see [SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere)  
 For developers, see [Lib Overview](docs/lib_overview.md).
 
+This project started being worked on since August 2022, but was not published
+until January 2023 dur to countless bugs. There may still be countless bugs
+currently though.
+
 ## Unique Features
 
 ### Extremely Lightweight
@@ -230,6 +234,9 @@ machine🫥. Feel free to report whether it works on issue or discussion.
 
 Building from source is recommended in the early stage of release.
 Give it a shot!  
+Or even better, build both `orient` and
+[SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere).
+By building `SearchEverywhere`, `orient` also gets built.
 Build dependencies:
 
 - CMake

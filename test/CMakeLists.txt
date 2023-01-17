@@ -18,7 +18,7 @@ add_executable(orientest
     test_tokenize.cc
 )
 
-target_include_directories(orientest PUBLIC ${GTEST_INCLUDE_DIRS})
+target_include_directories(orientest PRIVATE ${GTEST_INCLUDE_DIRS})
 add_dependencies(orientest orie)
 target_link_libraries(orientest PRIVATE
     orie GTest::gtest_main
