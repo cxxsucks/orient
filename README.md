@@ -11,7 +11,7 @@ button if the app proved useful for you!
 (More about this [here](docs/TODO.md).)
 
 **IMPORTANT**: This README is about the CLI application.  
-For GUI frontend, see [SearchEverywhere](https://github.com/ccPlus/SearchEverywhere)  
+For GUI frontend, see [SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere)  
 For developers, see [Lib Overview](docs/lib_overview.md).
 
 ## Unique Features
@@ -253,7 +253,7 @@ Replace the `OPTION` below with your enabled options, and run the
 following commands:
 
 ```sh
-git clone https://github.com/ccPlus/orient.git
+git clone https://github.com/cxxsucks/orient.git
 cd orient; mkdir build; cd build
 cmake -DOPTION1=ON -DOPTION2=ON -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
