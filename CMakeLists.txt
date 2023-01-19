@@ -46,13 +46,15 @@ set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp
     ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
-    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp)
+    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp
+    src/util/file_mem_chunk.cpp
+)
 unset(s)
 
 # Platform specific settings
 if(WIN32)
     set(orie_src ${orie_src}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/dirent_win.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/util/dirent_win.c)
     install(FILES include/dirent_win.h DESTINATION include)
     set(orie_pcre2_libname ${orie_pcre2_libname}16)
 else(WIN32)
