@@ -112,12 +112,9 @@ namespace orie {
     };
     using icase_sv_t = std::basic_string_view<char_t, fs_icase_traits>;
 
-    constexpr char_t root_path_str[] = NATIVE_PATH("root_paths");
-    constexpr char_t pruned_path_str[] = NATIVE_PATH("pruned_paths");
-    constexpr char_t db_path_str[] = NATIVE_PATH("database_path");
-
-    enum category_tag : char_t {
+    enum category_tag : uint8_t {
         unknown_tag = 0,
+        next_chunk_tag = '+',
         file_tag = 'f', dir_tag = 'd',
         link_tag = 'l', char_tag = 'c',
         fifo_tag = 'p', blk_tag = 'b', sock_tag = 's',

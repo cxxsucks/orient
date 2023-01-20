@@ -12,8 +12,9 @@ struct fileMemChunk : public testing::Test {
     fileMemChunk() 
         : tmpPath(std::filesystem::temp_directory_path() /
                   ("fileMemTest" + std::to_string(std::random_device()())))
-        , chunk(tmpPath.c_str(), 3, true, true)
-    {
+        , chunk(tmpPath.c_str(), 3, true, true) { }
+
+    void SetUp() override {
         chunk._unplaced_dat.assign(1111111, std::byte('a'));
         chunk._unplaced_dat.push_back(std::byte('z'));
         chunk.add_last_chunk();
@@ -125,6 +126,20 @@ TEST_F(fileMemChunk, read) {
     EXPECT_EQ(chunk2.chunk_size(2), chunk.chunk_size(2));
     EXPECT_EQ(chunk2.chunk_size(3), chunk.chunk_size(3));
 
+    EXPECT_EQ(visitA(), visitA());
+    EXPECT_EQ(visitB(), visitB());
+    EXPECT_EQ(visitC(), visitC());
+    EXPECT_EQ(visitD(), visitD());
+}
+
+TEST_F(fileMemChunk, clear) {
+    chunk.clear();
+    EXPECT_EQ(0, chunk.chunk_count());
+    EXPECT_THROW(chunk.chunk_size(0), std::out_of_range);
+    EXPECT_THROW(chunk.start_visit(0, 0), std::out_of_range);
+
+    SetUp();
+    EXPECT_EQ(4, chunk.chunk_count());
     EXPECT_EQ(visitA(), visitA());
     EXPECT_EQ(visitB(), visitB());
     EXPECT_EQ(visitC(), visitC());

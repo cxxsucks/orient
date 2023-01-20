@@ -1,3 +1,4 @@
+#pragma once
 #include <orient/fs/predef.hpp>
 #include <string>
 #include <vector>
@@ -67,11 +68,13 @@ public:
     // Move the memory file to `fpath`.
     // Throw runtime error if no permission, and the file is NOT moved
     void move_file(const char_t* fpath);
+    // Reset memory file and cache.
+    void clear();
 
     // Throw runtime error if no permission
-    file_mem_chunk(const char_t* fpath, uint8_t cached_chunk_cnt,
+    file_mem_chunk(sv_t fpath, uint8_t cached_chunk_cnt,
                    bool empty, bool rmfile_on_destroy);
-    ~file_mem_chunk() noexcept;
+    ~file_mem_chunk();
     file_mem_chunk(const file_mem_chunk&) = delete;
     file_mem_chunk(file_mem_chunk&&) = delete;
 };

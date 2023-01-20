@@ -1,5 +1,4 @@
 #include <orient/util/file_mem_chunk.hpp>
-#include <cassert>
 
 namespace orie {
 namespace dmp {
@@ -35,7 +34,8 @@ cache_write: {
             read_sz = end - beg;
     // C-style binary file read
     FILE *fp = fopen(_saving_path.c_str(), "rb"); 
-    assert(end != ~size_t() && fp != nullptr);
+    if (fp == nullptr || end == ~size_t())
+        throw std::runtime_error("Cannot read memory file.");
     // TODO: Magic number
     fseek(fp, sizeof(size_t) * 256 + beg, SEEK_SET);
 
@@ -73,7 +73,8 @@ void file_mem_chunk::add_last_chunk() {
     // Synchonize to file by writing data
     // TODO: Compress data and write result to file
     FILE *fp = fopen(_saving_path.c_str(), "rb+");
-    assert(fp != nullptr);
+    if (fp == nullptr)
+        throw std::runtime_error("Cannot write memory file.");
     // Write metadata first. TODO: Magic Number
     fseek(fp, (_chunk_num + 1) * sizeof(size_t), SEEK_SET);
     fwrite(_chunk_size_presum + _chunk_num + 1, sizeof(size_t), 1, fp);
@@ -87,22 +88,27 @@ void file_mem_chunk::add_last_chunk() {
     _unplaced_dat.clear();
 }
 
-file_mem_chunk::file_mem_chunk(const char_t* fpath, uint8_t cache_cnt,
+file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
                                bool empty, bool rm)
     : _chunkid_to_cacheid(new uint8_t[256 * (1 + sizeof(size_t))])
     , _chunk_size_presum(reinterpret_cast<size_t*>(_chunkid_to_cacheid + 256))
     , _reader_count(0), _saving_path(fpath), _chunk_num(0)
     , _next_overwrite(0), _cache_num(cache_cnt), _rmfile_on_dtor(rm)
 {
-    static size_t magic_num = 0;
     *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
     memset(_chunkid_to_cacheid, -1, 256 * (1 + sizeof(size_t)));
     _chunk_size_presum[0] = 0;
 
     // Open the file
-    FILE* fp = fopen(fpath, empty ? "wb" : "rb");
+    FILE* fp = nullptr;
+    if (!empty) 
+    // If the file does not exist(open failed), create a new one
+        if ((fp = fopen(_saving_path.c_str(), "rb")) == nullptr)
+            empty = true;
+    if (empty)
+        fp = fopen(_saving_path.c_str(), "wb");
     if (fp == nullptr)
-        throw std::runtime_error("Permission denied opening memory file");
+        throw std::runtime_error("Cannot open memory file");
 
     // No exception in this if statement
     if (empty) {
@@ -137,15 +143,36 @@ size_t file_mem_chunk::chunk_size(uint8_t at) const {
     return _chunk_size_presum[at + 1] - _chunk_size_presum[at];
 }
 
-file_mem_chunk::~file_mem_chunk() noexcept {
+void file_mem_chunk::clear() {
     std::lock_guard __lck(_writer_mut);
-    delete[] _chunkid_to_cacheid;
+    FILE* fp = fopen(_saving_path.c_str(), "wb");
+    if (fp == nullptr)
+        throw std::runtime_error("Cannot clear memory file");
+
+    _chunk_num = 0;
+    *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
+    memset(_chunkid_to_cacheid, -1, 256 * (1 + sizeof(size_t)));
+    _chunk_size_presum[0] = 0;
+    // TODO: magic num
+    fwrite(_chunk_size_presum, sizeof(size_t), 256, fp);
+    fclose(fp);
+
+    _unplaced_dat.clear();
+    for (uint8_t i = 0; i < _cache_num; ++i)
+        _cached_dat[i].clear();
+}
+
+file_mem_chunk::~file_mem_chunk() {
+    std::lock_guard __lck(_writer_mut);
     if (_rmfile_on_dtor)
 #ifdef _WIN32
         ::DeleteFileW(_saving_path.c_str());
 #else // unlink(2)
         ::unlink(_saving_path.c_str());
 #endif
+    else 
+        add_last_chunk();
+    delete[] _chunkid_to_cacheid;
 }
 
 // Reader Begin Reading
