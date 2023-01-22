@@ -31,12 +31,7 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
             return true;
         return orie::glob_match(_pattern.data(), linkat_path, _is_icase);
     } else {
-        // Strings matched by fnmatch(3) must be NULL-terminated
-        char_t name_buf[path_max];
-        sv_t name_sv = it.basename().substr(0, path_max - 1);
-        ::memcpy(name_buf, name_sv.data(), name_sv.size() * sizeof(char_t));
-        name_buf[name_sv.size()] = '\0';
-        return orie::glob_match(_pattern.data(), name_buf, _is_icase);
+        return orie::glob_match(_pattern.data(), it.basename().c_str(), _is_icase);
     }
     // Unreachable
 }
@@ -87,7 +82,7 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
     } 
     else if (_is_fullpath)
         haystack = it.path();
-    else haystack = it.basename();
+    else haystack = sv_t(it.basename());
     // And its ignore-case counterpart
     icase_sv_t icase_hs(haystack.data(), haystack.size());
 
@@ -106,8 +101,8 @@ bool regex_node::apply_blocked(fs_data_iter& it) {
     char_t linkat_path[path_max];
     if (!_is_full && !_is_lname) {
         // Just match basename
-        sv_t basename = it.record().file_name_view();
-        re_ptr = reinterpret_cast<PCRE2_SPTR>(basename.data());
+        const str_t& basename = it.basename();
+        re_ptr = reinterpret_cast<PCRE2_SPTR>(basename.c_str());
         re_len = basename.size();
     } else if (_is_full) {
         re_ptr = reinterpret_cast<PCRE2_SPTR>(it.path().c_str());
@@ -174,7 +169,7 @@ bool fuzz_node::apply_blocked(fs_data_iter& it) {
         throw orie::pred_tree::uninitialized_node(NATIVE_SV("-fuzz"));
 
     // TODO: readlink
-    sv_t to_match = _is_full ? sv_t(it.path()) : it.basename();
+    sv_t to_match = _is_full ? sv_t(it.path()) : sv_t(it.basename());
     if (to_match.size() < _min_haystack_len)
         return false;
     return _matcher.value().similarity(to_match, _cutoff) > _cutoff;

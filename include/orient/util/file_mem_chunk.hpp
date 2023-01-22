@@ -50,8 +50,9 @@ public:
     // Final block is not in file yet and can be freely modified
     // Modifications on this block is NOT thread safe to any functions
     std::vector<std::byte>& chunk_to_add() noexcept { return _unplaced_dat; };
-    size_t chunk_count() const noexcept { return _chunk_num; };
+    size_t chunk_count() const noexcept { return _chunk_num; }
     size_t chunk_size(uint8_t at) const;
+    const str_t& saving_path() const noexcept { return _saving_path; }
 
     // Write the chunk returned in `chunk_to_add` to file, making it unchangable.
     // Empty chunk will not be added (no-op in that case)

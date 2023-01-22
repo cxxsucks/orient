@@ -113,7 +113,7 @@ namespace orie {
     using icase_sv_t = std::basic_string_view<char_t, fs_icase_traits>;
 
     enum category_tag : uint8_t {
-        unknown_tag = 0,
+        unknown_tag = 0, data_end_tag = unknown_tag,
         next_chunk_tag = '+',
         file_tag = 'f', dir_tag = 'd',
         link_tag = 'l', char_tag = 'c',

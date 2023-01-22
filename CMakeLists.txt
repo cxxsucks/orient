@@ -41,7 +41,7 @@ endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
 set(orie_src
     ${s}/app.cpp ${s}/data_iter.cpp
-    ${s}/dumper_fs.cpp ${s}/dumper_mem.cpp)
+    ${s}/dumper.cpp)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp

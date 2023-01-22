@@ -1,8 +1,6 @@
 #pragma once
 #include "predef.hpp"
-#include <string>
-#include <string_view>
-#include <vector>
+#include "dumper.hpp"
 #include <optional>
 
 namespace orie {
@@ -17,9 +15,15 @@ public:
     using char_type = orie::char_t;
     using category_tag = orie::category_tag;
     using strview_type = std::basic_string_view<char_type>;
+
 private:
-    const void* _viewing;
+    dmp::file_mem_chunk* _dataref;
     size_t _cur_pos;
+    uint8_t _cur_chunk;
+
+    // Cached from dumped data
+    category_tag _tag;
+    str_t _basename;
 
 public:
     //! @brief Move to the next entry 
@@ -28,31 +32,27 @@ public:
     ptrdiff_t increment() noexcept;
 
     //! @brief Get the file name of current entry
-    //! @warning Returned string view is @b not null-terminated (end reached)
     //! @warning Undefined if @a file_type returns unknown_tag
-    strview_type file_name_view() const noexcept;
-    size_t file_name_len() const noexcept;
+    const str_t& basename() const noexcept { return _basename; }
+    size_t file_name_len() const noexcept { return _basename.size(); }
 
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.
-    //! @retval dir_tag Directory @retval link_tag Symbolic Link 
-    //! @retval file_tag Any other file
-    category_tag file_type() const noexcept;
+    category_tag file_type() const noexcept { return _tag; }
 
-    // Get internal position.
-    size_t pos() const noexcept {return _cur_pos;}
     // Compare equality of two records.
     bool operator==(const fs_data_record& rhs) const noexcept {
-        return rhs._viewing == _viewing && rhs._cur_pos == _cur_pos;
+        return rhs._cur_pos == _cur_pos && rhs._cur_chunk == _cur_chunk &&
+               rhs._dataref == _dataref;
     }
     // Compare inequality of two records.
     bool operator!=(const fs_data_record& rhs) const noexcept {
-        return rhs._viewing != _viewing || rhs._cur_pos != _cur_pos;
+        return rhs._cur_pos != _cur_pos || rhs._cur_chunk != _cur_chunk ||
+               rhs._dataref != _dataref;
     }
 
     // Construct a record. This simply assigns the two parameters
-    fs_data_record(const void* view = nullptr, size_t start_at = 0) noexcept
-        : _viewing(view), _cur_pos(start_at) {}
+    fs_data_record(dmp::file_mem_chunk* fsdb = nullptr) noexcept;
     ~fs_data_record() noexcept = default;
 };
 
@@ -66,11 +66,6 @@ public:
  * Will change in a distant release. */
 class fs_data_iter {
 public:
-    using char_type = orie::char_t;
-    using category_tag = orie::category_tag;
-    using string_type = std::basic_string<char_type>;
-    using strview_type = std::basic_string_view<char_type>;
-
     using iterator_category = std::input_iterator_tag;
     using iterator_concept = std::input_iterator_tag;
     using value_type = fs_data_iter;
@@ -85,11 +80,11 @@ private:
 
     fs_data_record _cur_record;
     std::vector<fs_data_record> _sub_recs;
-    ptrdiff_t _push_count;
-    string_type _prefix;
+    size_t _push_count;
+    str_t _prefix;
     has_recur_ _recur;
 
-    mutable std::optional<string_type> _opt_fullpath;
+    mutable std::optional<str_t> _opt_fullpath;
     mutable std::optional<orie::stat_t> _opt_stat;
 
     int _fetch_stat() const noexcept;
@@ -101,7 +96,7 @@ public:
     //! @brief Move the iterator to the given path.
     //! @param start_path The path to move to. Must be an unvisited
     //! entry of the data being iterated.
-    fs_data_iter& change_root(strview_type start_path);
+    fs_data_iter& change_root(sv_t start_path);
 
     // Get a non-recursive iterator over the parent directory of current entry.
     fs_data_iter current_dir_iter() const;
@@ -124,14 +119,14 @@ public:
 
     //! @brief Get a reference to current full path string.
     //! @warning The reference is valid until next @a operator++ call.
-    const string_type& path() const;
-    //! @brief Get the base name current path, as string_view.
-    //! @note Same as @code record().file_name_view() @endcode
-    strview_type basename() const { return record().file_name_view(); }
+    const str_t& path() const;
+    //! @brief Get the base name current path
+    //! @note Same as @code record().basename() @endcode
+    const str_t& basename() const { return record().basename(); }
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
-    const string_type& parent_path() const noexcept {return _prefix;}
+    const str_t& parent_path() const noexcept {return _prefix;}
     //! @brief Whether the directory is empty. @c true for non-dirs;
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     bool empty_dir() const noexcept;
@@ -188,11 +183,12 @@ public:
 
     // Construct using pointer to stored filesystem data and internal position
     // An end iterator will be constructed if the record is not a directory.
-    fs_data_iter(const void* fsdb = nullptr, size_t start = 0);
+    fs_data_iter(dmp::file_mem_chunk* fsdb = nullptr);
     // Construct using pointer to stored filesystem data and starting path.
     // An end iterator will be constructed if the path is not part of the data
     // or is not a directory.
-    fs_data_iter(const void* fsdb, strview_type start_path);
+    fs_data_iter(dmp::file_mem_chunk* fsdb, sv_t start_path)
+        : fs_data_iter(fsdb) { change_root(start_path); }
     // Copy the content of rhs. Cached stat will be copied, but path strings will not.
     fs_data_iter(const fs_data_iter& rhs);
     // Copy the content of rhs. Cached stat will be copied, but path strings will not.
