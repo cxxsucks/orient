@@ -35,6 +35,7 @@ bool downdir_node::apply_blocked(fs_data_iter& it) {
     if (!prev)
         return false;
     fs_data_iter down = it.current_dir_iter();
+    it.close_fsdb_view();
     // return min < std::count_if(down, down.end, prev->apply_blocked) < max
     // Unfortunately std::count_if will not stop prematurely
     // even if the result is determined.
@@ -92,7 +93,7 @@ bool updir_node::apply_blocked(fs_data_iter& it) {
     for (auto& done_item : _last_done_q)
         if (up_rec == done_item.first)
             return done_item.second;
-    if (!prev || up_rec.file_type() == unknown_tag)
+    if (!prev)
         return false;
 
     fs_data_iter up_iter = it;

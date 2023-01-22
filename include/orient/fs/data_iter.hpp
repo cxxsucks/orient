@@ -11,34 +11,42 @@ namespace orie {
  * Requires no heap allocation, but has less utility compared to
  * @c fs_data_iter */
 class fs_data_record {
-public:
-    using char_type = orie::char_t;
-    using category_tag = orie::category_tag;
-    using strview_type = std::basic_string_view<char_type>;
-
 private:
     dmp::file_mem_chunk* _dataref;
     size_t _cur_pos;
+    const std::byte* _viewing;
     uint8_t _cur_chunk;
-
-    // Cached from dumped data
-    category_tag _tag;
-    str_t _basename;
+    bool _is_viewing;
 
 public:
-    //! @brief Move to the next entry 
+    //! @brief Open views to filesystem database 
+    //! making all methods return valid data and @c increment work
+    //! @note @c finish_visit auto called on dtor after calling it
+    void start_visit();
+    //! @brief Close views to filesystem database
+    //! @warning Invalidates @c increment and @c file_* methods
+    //! and existing string view from @c file_name_view
+    void finish_visit() noexcept;
+    bool is_visiting() const noexcept { return _is_viewing; }
+
+    //! @brief Move to the next entry. @c start_visit must be called beforehand
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     //! @return Change of current depth inside the filesystem.
-    ptrdiff_t increment() noexcept;
+    //! @throw std::out_of_range when encountering incomplete data
+    ptrdiff_t increment();
 
     //! @brief Get the file name of current entry
+    //! @c start_visit must be called beforehand 
+    //! @warning Returned string view is @b not null-terminated
     //! @warning Undefined if @a file_type returns unknown_tag
-    const str_t& basename() const noexcept { return _basename; }
-    size_t file_name_len() const noexcept { return _basename.size(); }
+    sv_t file_name_view() const noexcept;
+    //! @brief Get the file name length of current entry
+    //! @c start_visit must be called beforehand 
+    size_t file_name_len() const noexcept;
 
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.
-    category_tag file_type() const noexcept { return _tag; }
+    category_tag file_type() const noexcept;
 
     // Compare equality of two records.
     bool operator==(const fs_data_record& rhs) const noexcept {
@@ -51,9 +59,14 @@ public:
                rhs._dataref != _dataref;
     }
 
-    // Construct a record. This simply assigns the two parameters
+    // Constructed record does NOT obtain a view
     fs_data_record(dmp::file_mem_chunk* fsdb = nullptr) noexcept;
-    ~fs_data_record() noexcept = default;
+    // Copied record does NOT obtain a view
+    fs_data_record(const fs_data_record& rhs) noexcept;
+    fs_data_record& operator=(const fs_data_record& res) noexcept;
+    ~fs_data_record() noexcept;
+    // Move ctor IS copy ctor
+    // fs_data_record(fs_data_record&& rhs) noexcept;
 };
 
 /*! @class fs_data_iter
@@ -84,11 +97,21 @@ private:
     str_t _prefix;
     has_recur_ _recur;
 
+    // Cached file type, done in operator++
+    category_tag _tag;
+    // Cached fullpath
     mutable std::optional<str_t> _opt_fullpath;
+    // Cached stat
     mutable std::optional<orie::stat_t> _opt_stat;
-
     int _fetch_stat() const noexcept;
+
 public:
+    // Disable view to database. Re-established on ++ call.
+    void close_fsdb_view() noexcept {
+        path(); // Call path() to construct full path string
+        _cur_record.finish_visit();
+    }
+
     // Move *this one level up in filesystem hierchary. Return *this.
     // Invalidates *this (== end) if already at top level.
     fs_data_iter& updir();
@@ -120,9 +143,14 @@ public:
     //! @brief Get a reference to current full path string.
     //! @warning The reference is valid until next @a operator++ call.
     const str_t& path() const;
-    //! @brief Get the base name current path
-    //! @note Same as @code record().basename() @endcode
-    const str_t& basename() const { return record().basename(); }
+    //! @brief Get the base name current path.
+    //! @note Same as @code record().basename() @endcode when iter mode on
+    sv_t basename() const {
+        if (_cur_record.is_visiting())
+            return _cur_record.file_name_view();
+        sv_t res(_opt_fullpath.value());
+        return res.substr(_opt_fullpath.value().find_last_of(separator) + 1);
+    }
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
@@ -158,16 +186,16 @@ public:
     size_t depth() const noexcept;
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()
-    category_tag file_type() const noexcept { return _cur_record.file_type(); }
+    category_tag file_type() const noexcept { return _tag; }
 
     // Simply return a copy of *this.
-    fs_data_iter begin() const {return *this;}
+    fs_data_iter begin() const { return *this; }
     // An invalid fs_data_iter. All end iterators are equal.
-    static fs_data_iter end() {return fs_data_iter();}
+    static fs_data_iter end() { return fs_data_iter(); }
     // Simply return a reference of *this. May change in the distant future.
-    reference operator*() noexcept {return *this;}
+    reference operator*() noexcept { return *this; }
     // Simply return a pointer to *this. May change in the distant future.
-    pointer operator->() noexcept {return this;}
+    pointer operator->() noexcept { return this; }
 
     // Increment the iterator.
     fs_data_iter& operator++();
@@ -183,18 +211,25 @@ public:
 
     // Construct using pointer to stored filesystem data and internal position
     // An end iterator will be constructed if the record is not a directory.
+    // Constructed iterator has iteration mode on.
     fs_data_iter(dmp::file_mem_chunk* fsdb = nullptr);
     // Construct using pointer to stored filesystem data and starting path.
     // An end iterator will be constructed if the path is not part of the data
     // or is not a directory.
+    // Constructed iterator has iteration mode on.
     fs_data_iter(dmp::file_mem_chunk* fsdb, sv_t start_path)
         : fs_data_iter(fsdb) { change_root(start_path); }
-    // Copy the content of rhs. Cached stat will be copied, but path strings will not.
+
+    // Copy the content of rhs.
+    // Copied or moved iterator has iteration mode OFF!!!
     fs_data_iter(const fs_data_iter& rhs);
     // Copy the content of rhs. Cached stat will be copied, but path strings will not.
+    // Copied or moved iterator has iteration mode OFF!!!
     fs_data_iter& operator=(const fs_data_iter& rhs);
-    fs_data_iter(fs_data_iter&& rhs) = default;
-    fs_data_iter& operator=(fs_data_iter&& rhs) = default;
+    // Copied or moved iterator has iteration mode OFF!!!
+    fs_data_iter(fs_data_iter&& rhs) noexcept;
+    // Copied or moved iterator has iteration mode OFF!!!
+    fs_data_iter& operator=(fs_data_iter&& rhs) noexcept;
     ~fs_data_iter() noexcept = default;
 };
 
