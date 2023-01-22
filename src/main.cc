@@ -61,10 +61,9 @@ try {
     }
 
     // Parsing arguments finished; start doing stuff
-    if (updatedb_flag)  { // Updatedb first
-        if (!app.update_db())
-            ERR_N_DIE("Updatedb Failed\n", 4);
-    } else if (!app.read_db())
+    if (updatedb_flag)
+        app.update_db();
+    if (!app.has_data())
         ERR_N_DIE("Database not initialized. Please run with "
                   "-updatedb first.\n", 4);
 

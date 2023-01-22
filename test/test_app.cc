@@ -27,8 +27,8 @@ struct orieApp : public testing::Test {
 
 protected:
     void SetUp() override {
-        _app.add_root_path(info().tmpPath.native())
-            .add_root_path((info().tmpPath / "dir11").native())
+        _app.set_root_path(info().tmpPath.native())
+            .set_root_path((info().tmpPath / "dir11").native())
             // Empty path is root path
             .add_start_path(orie::str_t());
     }
@@ -40,8 +40,8 @@ protected:
 };
 
 TEST_F(orieApp, replicateRoot) {
-    _app.add_root_path((info().tmpPath).native())
-        .add_root_path((info().tmpPath).native())
+    _app.set_root_path((info().tmpPath).native())
+        .set_root_path((info().tmpPath).native())
         .update_db();
     ASSERT_FALSE(_app); // No write to database file
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
@@ -65,8 +65,8 @@ TEST_F(orieApp, prunedPath) {
 }
 
 TEST_F(orieApp, overlapRoot) {
-    _app.add_root_path((info().tmpPath / "dir10").native())
-        .add_root_path((info().tmpPath / "dir11" / "dir10").native())
+    _app.set_root_path((info().tmpPath / "dir10").native())
+        .set_root_path((info().tmpPath / "dir11" / "dir10").native())
         .update_db();
     ASSERT_FALSE(_app); // No write to database file
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
