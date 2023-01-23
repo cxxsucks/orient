@@ -1,5 +1,6 @@
 #pragma once
 #include <orient/fs/predef.hpp>
+#include <zstd.h>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -18,6 +19,11 @@ private:
     // Presum of size in bytes of each chunk
     // 256-size heap-alloced array
     size_t* _chunk_size_presum;
+
+    // Compression Context
+    ZSTD_CCtx* _cctx;
+    // Decompression Context
+    ZSTD_DCtx* _dctx;
 
     // Content of each cache
     std::vector<std::byte> _cached_dat[8];

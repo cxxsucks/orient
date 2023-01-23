@@ -64,7 +64,8 @@ endif(WIN32)
 add_library(orie ${orie_src})
 add_library(orie::orie ALIAS orie)
 add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-target_link_libraries(orie PUBLIC ${orie_pcre2_libname} rapidfuzz::rapidfuzz)
+target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
+target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
 target_include_directories(orie PUBLIC 
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

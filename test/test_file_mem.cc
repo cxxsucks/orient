@@ -120,7 +120,7 @@ TEST_F(fileMemChunk, moveFile) {
 TEST_F(fileMemChunk, read) {
     orie::dmp::file_mem_chunk chunk2(tmpPath.c_str(), 3, false, false);
 
-    EXPECT_EQ(4, chunk2.chunk_count());
+    ASSERT_EQ(4, chunk2.chunk_count());
     EXPECT_EQ(chunk2.chunk_size(0), chunk.chunk_size(0));
     EXPECT_EQ(chunk2.chunk_size(1), chunk.chunk_size(1));
     EXPECT_EQ(chunk2.chunk_size(2), chunk.chunk_size(2));

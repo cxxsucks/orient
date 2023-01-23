@@ -45,12 +45,19 @@ cache_write: {
     _cacheid_to_chunkid[in_which_cache] = chunk_idx;
     _chunkid_to_cacheid[chunk_idx] = in_which_cache;
 
-    // Read file content and place it to cache
-    // TODO: Read file content, decompress and place it to cache
-    // TODO: assign may throw when out of memory
-    _cached_dat[in_which_cache].assign(read_sz, std::byte());
-    fread(_cached_dat[in_which_cache].data(), 1, read_sz, fp);
+    // TODO: May throw when out of memory
+    // Temporary buffer for Decompression
+    std::vector<std::byte> cmprs_buf(read_sz, std::byte());
+    // Read file data
+    if (fread(cmprs_buf.data(), 1, read_sz, fp) != read_sz)
+        throw std::runtime_error("Bad memory file data encountered.");
     fclose(fp);
+    
+    // Decompress and place it to cache TODO: error handling
+    size_t cmprs_sz = ZSTD_getFrameContentSize(cmprs_buf.data(), read_sz);
+    _cached_dat[in_which_cache].assign(cmprs_sz, std::byte());
+    ZSTD_decompressDCtx(_dctx, _cached_dat[in_which_cache].data(), cmprs_sz,
+                        cmprs_buf.data(), cmprs_buf.size());
 }
     goto cache_read;
 }
@@ -67,24 +74,33 @@ void file_mem_chunk::add_last_chunk() {
     _chunkid_to_cacheid[_cacheid_to_chunkid[in_which_cache]] = ~uint8_t();
     _cacheid_to_chunkid[in_which_cache] = _chunk_num;
     _chunkid_to_cacheid[_chunk_num] = in_which_cache;
-    _chunk_size_presum[_chunk_num + 1] = 
-        _chunk_size_presum[_chunk_num] + _unplaced_dat.size();
 
     // Synchonize to file by writing data
-    // TODO: Compress data and write result to file
+    // Move RAW data to cache
+    auto& c = _cached_dat[in_which_cache]; // aliase to cache dest
+    c = std::move(_unplaced_dat);
+    _unplaced_dat.clear();
+
+    // Make `unplaced_dat` temporarily store compressed dat
+    _unplaced_dat.assign(ZSTD_compressBound(c.size()), std::byte());
+    size_t cmprs_sz = ZSTD_compressCCtx(_cctx,
+        _unplaced_dat.data(), _unplaced_dat.size(),
+        c.data(), c.size(), 1);
+    _chunk_size_presum[_chunk_num + 1] = 
+        _chunk_size_presum[_chunk_num] + cmprs_sz;
+    if (ZSTD_isError(cmprs_sz))
+        throw std::runtime_error(ZSTD_getErrorName(cmprs_sz));
+
+    // Write metadata first. TODO: Magic Number
     FILE *fp = fopen(_saving_path.c_str(), "rb+");
     if (fp == nullptr)
         throw std::runtime_error("Cannot write memory file.");
-    // Write metadata first. TODO: Magic Number
     fseek(fp, (_chunk_num + 1) * sizeof(size_t), SEEK_SET);
     fwrite(_chunk_size_presum + _chunk_num + 1, sizeof(size_t), 1, fp);
     fseek(fp, 0, SEEK_END);
-    fwrite(_unplaced_dat.data(), 1, _unplaced_dat.size(), fp);
+    fwrite(_unplaced_dat.data(), 1, cmprs_sz, fp);
     fclose(fp);
     ++_chunk_num;
-
-    // Write RAW data to cache
-    _cached_dat[in_which_cache] = std::move(_unplaced_dat);
     _unplaced_dat.clear();
 }
 
@@ -92,6 +108,7 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
                                bool empty, bool rm)
     : _chunkid_to_cacheid(new uint8_t[256 * (1 + sizeof(size_t))])
     , _chunk_size_presum(reinterpret_cast<size_t*>(_chunkid_to_cacheid + 256))
+    , _cctx(ZSTD_createCCtx()), _dctx(ZSTD_createDCtx())
     , _reader_count(0), _saving_path(fpath), _chunk_num(0)
     , _next_overwrite(0), _cache_num(cache_cnt), _rmfile_on_dtor(rm)
 {
@@ -173,6 +190,8 @@ file_mem_chunk::~file_mem_chunk() {
     else 
         add_last_chunk();
     delete[] _chunkid_to_cacheid;
+    ZSTD_freeCCtx(_cctx);
+    ZSTD_freeDCtx(_dctx);
 }
 
 // Reader Begin Reading
