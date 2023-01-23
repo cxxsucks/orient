@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
+enable_language(CXX)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
@@ -81,12 +82,13 @@ endif(NOT ORIE_SYSTEM_PCRE2)
 
 add_library(orie ${orie_src})
 add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-target_link_libraries(orie PUBLIC ${orie_pcre2_libname} rapidfuzz)
+target_link_libraries(orie PUBLIC ${orie_pcre2_libname} rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
 target_include_directories(orie PUBLIC 
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_include_directories(orient PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(orie::orie ALIAS orie)
 
 if(ORIE_TEST)
 add_subdirectory(test)
