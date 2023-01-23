@@ -28,14 +28,15 @@ app& app::update_db() {
     dumper_new->_noconcur_paths = _dumper->_noconcur_paths;
     dumper_new->_root_path = _dumper->_root_path;
     dumper_new->_pruned_paths = _dumper->_pruned_paths;
+    // Destroy old (pointer to) dumper
+    // No lock; shared_ptr is internally thread safe
+    _dumper = std::move(dumper_new);
+#ifndef _WIN32
+    chmod(db_path.c_str(), 0600);
+#endif
 
     // Dump with the new dumper. While dumping, old dumper remain functional
-    dumper_new->rebuild_database();
-    // No lock; shared_ptr is internally thread safe
-    dumper_new.swap(_dumper);
-#ifndef _WIN32
-    chmod(_dumper->_data_dumped.saving_path().c_str(), 0600);
-#endif
+    _dumper->rebuild_database();
     return *this;
 }
 

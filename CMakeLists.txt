@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
+option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
 option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
 option(ORIE_LINK_STATIC "Statically link orient executable" OFF)
 
@@ -27,6 +28,24 @@ if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_MakeAvailable(pcre2)
 endif(NOT ORIE_SYSTEM_PCRE2)
 set(orie_pcre2_libname pcre2-)
+
+# zstd CMake file is in build/cmake
+if (NOT ORIE_SYSTEM_ZSTD)
+    FetchContent_Declare(zstd
+        GIT_REPOSITORY https://github.com/facebook/zstd.git
+        GIT_TAG v1.5.1)
+    FetchContent_GetProperties(zstd)
+    if (NOT zstd_POPULATED)
+        FetchContent_Populate(zstd)
+        set(ZSTD_BUILD_SHARED OFF CACHE INTERNAL "")
+        set(ZSTD_LEGACY_SUPPORT OFF CACHE INTERNAL "")
+        set(ZSTD_BUILD_PROGRAMS OFF CACHE INTERNAL "")
+        set(ZSTD_BUILD_TESTS OFF CACHE INTERNAL "")
+        add_subdirectory(${zstd_SOURCE_DIR}/build/cmake
+                         ${zstd_BINARY_DIR})
+    endif (NOT zstd_POPULATED)
+    add_library(zstd ALIAS libzstd_static)
+endif (NOT ORIE_SYSTEM_ZSTD)
 
 if (NOT ORIE_SYSTEM_RAPIDFUZZ)
     FetchContent_Declare(rapidfuzz
