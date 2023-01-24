@@ -181,15 +181,40 @@ void dumper::rebuild_database() {
     _data_dumped.clear();
 
     if (_root_path == NATIVE_PATH("/")) {
-        // TODO: On Windows, if root path is '\', dump all drives;
-        // if it is a drive letter, append '\' and fetch
+#ifdef _WIN32
+        // On Windows, if root path is '\', dump all drives;
+        for (str_t dri = L"\\C:\\"; dri[1] <= L'Z'; ++dri[1]) {
+            if (::GetDriveTypeW(dri.c_str()) != DRIVE_FIXED)
+                continue;
+            // For Windows drives only, '\' must be present to fetch info
+            dir_info_t dri_info = fetch_dir_info(dri);
+            dri.pop_back(); // dump_*concur must start without '\'
+            if (is_noconcur(dri))
+                dump_noconcur(dri, 3, dri_info);
+            else dump_concur(dri, 3, dri_info);
+            dri.push_back(separator);
+        }
+
+#else
         dir_info_t root_info = fetch_dir_info(_root_path);
         str_t dummy;
         if (is_noconcur(_root_path))
             dump_noconcur(dummy, 0, root_info);
         else dump_concur(dummy, 0, root_info);
+#endif
+
     } else {
         dir_info_t root_info = fetch_dir_info(_root_path);
+#ifdef _WIN32
+        // on Windows, if failed, append '\' and try again
+        // since for Windows drives only, '\' must be present to fetch info
+        if (root_info.first.empty() && root_info.second.empty()) {
+            _root_path.push_back(separator);
+            root_info = fetch_dir_info(_root_path);
+            _root_path.pop_back();
+        }
+#endif
+
         if (is_noconcur(_root_path))
             dump_noconcur(_root_path, _root_path.size(), root_info);
         else dump_concur(_root_path, _root_path.size(), root_info);
