@@ -21,6 +21,7 @@ int main(int argc, const char* const* argv) noexcept {
 #endif
     // No C-style buffered write to stdout in all of the code
     std::ios_base::sync_with_stdio(false);
+    ::srand(::time(nullptr));
 
 try {
     int expr_since = 1;

@@ -83,11 +83,22 @@ unset(s)
 if(WIN32)
     set(orie_src ${orie_src}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/util/dirent_win.c)
-    install(FILES include/dirent_win.h DESTINATION include)
+    install(FILES include/orient/util/dirent_win.h 
+            DESTINATION include/orient/util)
     set(orie_pcre2_libname ${orie_pcre2_libname}16)
 else(WIN32)
     set(orie_pcre2_libname ${orie_pcre2_libname}8)
 endif(WIN32)
+
+add_library(orie ${orie_src})
+add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
+target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
+target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
+target_link_libraries(orient PRIVATE orie)
+target_include_directories(orie PUBLIC 
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+add_library(orie::orie ALIAS orie)
 
 # On most systems PCRE2 libs are known as pcre2-{8,16,32}
 # But on PCRE2's CMakeLists.txt, they are called pcre2-*-{static,shared}
@@ -97,21 +108,17 @@ if (NOT ORIE_SYSTEM_PCRE2)
                           INTERFACE_INCLUDE_DIRECTORIES 
                           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
     set(targs_to_install ${targs_to_install} ${orie_pcre2_libname})
+    target_include_directories(orie PUBLIC 
+                               $<BUILD_INTERFACE:${pcre2_BINARY_DIR}>)
 endif(NOT ORIE_SYSTEM_PCRE2)
 
-add_library(orie ${orie_src})
-add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
-target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
-target_link_libraries(orient PRIVATE orie)
-target_include_directories(orie PUBLIC 
-                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-                           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_include_directories(orient PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-add_library(orie::orie ALIAS orie)
+if(NOT ORIE_SYSTEM_ZSTD)
+    target_include_directories(orie PUBLIC 
+                               $<BUILD_INTERFACE:${zstd_SOURCE_DIR}/lib>)
+endif(NOT ORIE_SYSTEM_ZSTD)
 
 if(ORIE_TEST)
-add_subdirectory(test)
+    add_subdirectory(test)
 endif(ORIE_TEST)
 unset(orie_pcre2_libname)
 

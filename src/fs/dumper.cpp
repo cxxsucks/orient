@@ -180,21 +180,28 @@ void dumper::rebuild_database() {
     std::for_each(_noconcur_paths.begin(), _noconcur_paths.end(), __rectify_path);
     _data_dumped.clear();
 
-    if (_root_path == NATIVE_PATH("/")) {
+    if (_root_path.size() == 1) {
 #ifdef _WIN32
         // On Windows, if root path is '\', dump all drives;
+        // Dump fake root dir's metadata first
+        _data_dumped._unplaced_dat.assign({
+            std::byte(dir_tag), std::byte(), std::byte()
+        }); // Tag and name length (0)
+
+        // All drives are its sub dir
         for (str_t dri = L"\\C:\\"; dri[1] <= L'Z'; ++dri[1]) {
-            if (::GetDriveTypeW(dri.c_str()) != DRIVE_FIXED)
+            if (::GetDriveTypeW(dri.c_str() + 1) != DRIVE_FIXED)
                 continue;
             // For Windows drives only, '\' must be present to fetch info
             dir_info_t dri_info = fetch_dir_info(dri);
             dri.pop_back(); // dump_*concur must start without '\'
-            if (is_noconcur(dri))
-                dump_noconcur(dri, 3, dri_info);
-            else dump_concur(dri, 3, dri_info);
+            if (is_noconcur(dri) || is_noconcur(_root_path))
+                dump_noconcur(dri, 2, dri_info);
+            else dump_concur(dri, 2, dri_info);
             dri.push_back(separator);
         }
 
+        _data_dumped._unplaced_dat.push_back(std::byte(dir_pop_tag));
 #else
         dir_info_t root_info = fetch_dir_info(_root_path);
         str_t dummy;

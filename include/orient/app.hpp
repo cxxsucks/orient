@@ -105,6 +105,8 @@ public:
 
 template <class cb_t>
 void app::run(fsearch_expr& expr, cb_t callback) {
+    if (!has_data())
+        return;
     std::lock_guard __lck(_paths_mut);
     for (sv_t p : _start_paths) {
         fs_data_iter it(&_dumper->_data_dumped, p), end(it.end());

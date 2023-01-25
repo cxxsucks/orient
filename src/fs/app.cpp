@@ -316,7 +316,7 @@ app app::os_default(fifo_thpool& pool) {
         res.read_conf(confDir + L"\\.orie\\default.txt");
         return res;
     } catch (std::runtime_error& e) {
-        std::cerr << e.what() << "; Initializing default configuration.\n";
+        std::cerr << e.what() << "; initializing default configuration.\n";
     }
 
     ::CreateDirectoryW((confDir += L"\\.orie").c_str(), nullptr);
@@ -326,7 +326,7 @@ app app::os_default(fifo_thpool& pool) {
     if (pathLen != 0 && pathLen < 255)
         res.add_ignored_path(pathBuf);
     res.add_ignored_path(L"C:\\Windows")
-       .add_ignored_path(L"C:\\Windows.old");
+       .add_ignored_path(L"C:\\Windows.old")
        .write_conf();
     return res;
 }

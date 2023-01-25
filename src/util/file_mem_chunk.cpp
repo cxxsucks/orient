@@ -1,4 +1,7 @@
 #include <orient/util/file_mem_chunk.hpp>
+#ifdef _WIN32
+#define fopen _wfopen
+#endif
 
 namespace orie {
 namespace dmp {
@@ -33,7 +36,7 @@ cache_write: {
             end = _chunk_size_presum[chunk_idx + 1],
             read_sz = end - beg;
     // C-style binary file read
-    FILE *fp = fopen(_saving_path.c_str(), "rb"); 
+    FILE *fp = fopen(_saving_path.c_str(), NATIVE_PATH("rb")); 
     if (fp == nullptr || end == ~size_t())
         throw std::runtime_error("Cannot read database");
     // TODO: Magic number
@@ -92,7 +95,7 @@ void file_mem_chunk::add_last_chunk() {
         throw std::runtime_error(ZSTD_getErrorName(cmprs_sz));
 
     // Write metadata first. TODO: Magic Number
-    FILE *fp = fopen(_saving_path.c_str(), "rb+");
+    FILE *fp = fopen(_saving_path.c_str(), NATIVE_PATH("rb+"));
     if (fp == nullptr)
         throw std::runtime_error("Cannot write database");
     fseek(fp, (_chunk_num + 1) * sizeof(size_t), SEEK_SET);
@@ -120,10 +123,10 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
     FILE* fp = nullptr;
     if (!empty) 
     // If the file does not exist(open failed), create a new one
-        if ((fp = fopen(_saving_path.c_str(), "rb")) == nullptr)
+        if ((fp = fopen(_saving_path.c_str(), NATIVE_PATH("rb"))) == nullptr)
             empty = true;
     if (empty)
-        fp = fopen(_saving_path.c_str(), "wb");
+        fp = fopen(_saving_path.c_str(), NATIVE_PATH("wb"));
     if (fp == nullptr)
         throw std::runtime_error("Cannot open database");
 
@@ -162,7 +165,7 @@ size_t file_mem_chunk::chunk_size(uint8_t at) const {
 
 void file_mem_chunk::clear() {
     std::lock_guard __lck(_writer_mut);
-    FILE* fp = fopen(_saving_path.c_str(), "wb");
+    FILE* fp = fopen(_saving_path.c_str(), NATIVE_PATH("wb"));
     if (fp == nullptr)
         throw std::runtime_error("Cannot clear database");
 
@@ -194,6 +197,11 @@ file_mem_chunk::~file_mem_chunk() {
     ZSTD_freeDCtx(_dctx);
 }
 
+#ifdef _MSC_VER
+// Lock/unlock mismatch; intended here
+#pragma warning(disable: 26110 26115 26117)
+#endif
+
 // Reader Begin Reading
 void file_mem_chunk::__writer_lock() noexcept {
     std::lock_guard __lck(_cnt_mut);
@@ -207,6 +215,10 @@ void file_mem_chunk::finish_visit() noexcept {
     if (--_reader_count == 0)
         _writer_mut.unlock();
 }
+
+#ifdef _MSC_VER
+#pragma warning(default: 26110 26115 26117)
+#endif
 
 }
 }
