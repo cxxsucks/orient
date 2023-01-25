@@ -35,7 +35,7 @@ cache_write: {
     // C-style binary file read
     FILE *fp = fopen(_saving_path.c_str(), "rb"); 
     if (fp == nullptr || end == ~size_t())
-        throw std::runtime_error("Cannot read memory file.");
+        throw std::runtime_error("Cannot read database");
     // TODO: Magic number
     fseek(fp, sizeof(size_t) * 256 + beg, SEEK_SET);
 
@@ -50,7 +50,7 @@ cache_write: {
     std::vector<std::byte> cmprs_buf(read_sz, std::byte());
     // Read file data
     if (fread(cmprs_buf.data(), 1, read_sz, fp) != read_sz)
-        throw std::runtime_error("Bad memory file data encountered.");
+        throw std::runtime_error("Encountered bad data within database");
     fclose(fp);
     
     // Decompress and place it to cache TODO: error handling
@@ -94,7 +94,7 @@ void file_mem_chunk::add_last_chunk() {
     // Write metadata first. TODO: Magic Number
     FILE *fp = fopen(_saving_path.c_str(), "rb+");
     if (fp == nullptr)
-        throw std::runtime_error("Cannot write memory file.");
+        throw std::runtime_error("Cannot write database");
     fseek(fp, (_chunk_num + 1) * sizeof(size_t), SEEK_SET);
     fwrite(_chunk_size_presum + _chunk_num + 1, sizeof(size_t), 1, fp);
     fseek(fp, 0, SEEK_END);
@@ -125,7 +125,7 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
     if (empty)
         fp = fopen(_saving_path.c_str(), "wb");
     if (fp == nullptr)
-        throw std::runtime_error("Cannot open memory file");
+        throw std::runtime_error("Cannot open database");
 
     // No exception in this if statement
     if (empty) {
@@ -134,7 +134,7 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
     } else {
         if (fread(_chunk_size_presum, sizeof(size_t), 256, fp) != 256
             || _chunk_size_presum[0] != magic_num)
-            throw std::runtime_error("Not a valid memory file");
+            throw std::runtime_error("Not a valid database");
         size_t nc = 0;
         while (nc < 256 && _chunk_size_presum[nc] != ~uint64_t())
             ++nc;
@@ -150,7 +150,7 @@ void file_mem_chunk::move_file(const char_t* fpath) {
 #else // C89 rename(2)
     if (::rename(_saving_path.c_str(), fpath) != 0)
 #endif
-        throw std::runtime_error("Permission denied moving memory file");
+        throw std::runtime_error("Permission denied moving database");
     _saving_path.assign(fpath);
 }
 
@@ -164,7 +164,7 @@ void file_mem_chunk::clear() {
     std::lock_guard __lck(_writer_mut);
     FILE* fp = fopen(_saving_path.c_str(), "wb");
     if (fp == nullptr)
-        throw std::runtime_error("Cannot clear memory file");
+        throw std::runtime_error("Cannot clear database");
 
     _chunk_num = 0;
     *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();

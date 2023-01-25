@@ -1,8 +1,6 @@
 #pragma once
 #include <orient/pred_tree/async_job.hpp>
-#include <orient/fs/dumper.hpp>
 #include <orient/fs/data_iter.hpp>
-#include <shared_mutex>
 #include <cassert>
 
 namespace orie {
@@ -36,12 +34,7 @@ public:
 
     // Scan filesystem, update database and write to the db file
     app& update_db();
-    app& set_db_path(const char_t* path) {
-        if (_dumper != nullptr)
-            _dumper->_data_dumped.move_file(path);
-        else _dumper.reset(new dmp::dumper(path, _pool));
-        return *this;
-    }
+    app& set_db_path(const char_t* path);
 
     // Auto updating
     template <class Rep, class Period>
@@ -63,13 +56,15 @@ public:
     const str_t& db_path() const noexcept {
         return _dumper->_data_dumped.saving_path();
     }
+    const str_t& root_path() const noexcept { return _dumper->_root_path; }
     const str_t& conf_path() const noexcept { return _conf_path; }
 
+    const std::vector<str_t>& 
+    slow_paths() const noexcept { return _dumper->_noconcur_paths; }
     const std::vector<str_t>& 
     ignored_paths() const noexcept { return _dumper->_pruned_paths; }
     const std::vector<str_t>& 
     start_paths() const noexcept { return _start_paths; }
-    const str_t& root_path() const noexcept { return _dumper->_root_path; }
 
     // Read or write config files. Use the most recently passed
     // parameter if it is empty. THREAD UNSAFE
@@ -147,8 +142,14 @@ app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
             // Do not update if first time inside the loop and
             // an immediate updatedb is not requested
             if (not_first || immediate) {
-                read_conf();
-                update_db();
+                try {
+                    read_conf();
+                    update_db();
+                } catch(const std::runtime_error& e) {
+                    // Cannot throw here
+                    NATIVE_STDERR << "Error during orient auto updatedb: "
+                                  << e.what() << NATIVE_PATH('\n');
+                }
             }
             not_first = true;
             std::unique_lock __lck(_paths_mut);

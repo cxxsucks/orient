@@ -2,20 +2,27 @@
 #include <orient/fs/dumper.hpp>
 #include <fstream>
 #include <algorithm>
-#include <cassert>
 
 namespace orie {
 
+app& app::set_db_path(const char_t* path) {
+    std::lock_guard __lck(_paths_mut);
+    _dumper.reset(new dmp::dumper(path, _pool));
+    return *this;
+}
+
 app& app::update_db() {
     if (_dumper == nullptr)
-        return *this;
+        throw std::runtime_error("orient database not set with `set_db_path`"
+                                 " or `read_conf`");
+    str_t db_path = _dumper->_data_dumped.saving_path();
+
     // Having multiple dumpers running gets no performance gain
     static std::mutex global_dump_lock;
     std::lock_guard __lck(global_dump_lock);
 
     // Move current dumper to a temporary location in case it is being used by
     // jobs. Old database is also scheduled to be deleted on job finish.
-    str_t db_path = _dumper->_data_dumped.saving_path();
 #ifdef _WIN32
     _dumper->_data_dumped.move_file((db_path + std::to_wstring(::rand())).c_str());
 #else
@@ -28,15 +35,15 @@ app& app::update_db() {
     dumper_new->_noconcur_paths = _dumper->_noconcur_paths;
     dumper_new->_root_path = _dumper->_root_path;
     dumper_new->_pruned_paths = _dumper->_pruned_paths;
-    // Destroy old (pointer to) dumper
-    // No lock; shared_ptr is internally thread safe
-    _dumper = std::move(dumper_new);
 #ifndef _WIN32
     chmod(db_path.c_str(), 0600);
 #endif
 
     // Dump with the new dumper. While dumping, old dumper remain functional
-    _dumper->rebuild_database();
+    dumper_new->rebuild_database();
+    // Destroy old (pointer to) dumper
+    std::lock_guard __lck2(_paths_mut);
+    _dumper = std::move(dumper_new);
     return *this;
 }
 
@@ -121,7 +128,7 @@ app& app::read_conf(str_t path) {
     std::basic_ifstream<char_t> ifs(orie::xxstrcpy(sv_t(_conf_path)));
 #endif
     if (!ifs.is_open())
-        return *this;
+        throw std::runtime_error("Cannot read orient conf file");
 
 #ifdef _MSC_VER
     ifs.imbue(std::locale("en_US.UTF-8"));
@@ -170,6 +177,8 @@ app& app::read_conf(str_t path) {
                           << cur_tok << NATIVE_PATH('\n');
         }
     }
+    if (_dumper == nullptr)
+        throw std::runtime_error("Invalid conf file: must contain DB_PATH");
     return *this;
 }
 
@@ -200,6 +209,8 @@ app& app::write_conf(str_t path) {
 
 app::job_list app::get_jobs(fsearch_expr& expr) {
     job_list jobs;
+    if (!has_data())
+        return jobs;
     jobs.reserve(_start_paths.size());
     // A lock must be introduced or an updatedb may alter data_dumped between
     // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
@@ -253,10 +264,16 @@ app app::os_default(fifo_thpool& pool) {
     ::mkdir((conf_dir += "/.config").c_str(), 0755);
     ::mkdir((conf_dir += "/orie").c_str(), 0700);
     app res(pool);
-    // Use existing conf file when possible
-    if (res.read_conf(conf_dir + "/default.txt"))
-        return res;
 
+    try {
+        // Use existing conf file when possible
+        res.read_conf(conf_dir + "/default.txt");
+        return res;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << "; initializing default configuration.\n";
+    }
+
+    // What if setting default db path throws for reasons like unreadable HOME?
     res.set_db_path((conf_dir + "/default.db").c_str())
        .set_root_path("/")
 #ifdef MAC_OS_X_VERSION_10_0
@@ -295,8 +312,12 @@ app app::os_default(fifo_thpool& pool) {
 
     app res(pool);
     std::wstring confDir = pathBuf;
-    if (res.read_conf(confDir + L"\\.orie\\default.txt"))
+    try {
+        res.read_conf(confDir + L"\\.orie\\default.txt");
         return res;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << "; Initializing default configuration.\n";
+    }
 
     ::CreateDirectoryW((confDir += L"\\.orie").c_str(), nullptr);
     res.set_db_path((confDir + L"\\default.db").c_str());
@@ -311,4 +332,4 @@ app app::os_default(fifo_thpool& pool) {
 }
 #endif
 
-}
+} // namespace orie
