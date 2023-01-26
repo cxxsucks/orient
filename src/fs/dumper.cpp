@@ -2,13 +2,6 @@
 #include <orient/util/charconv_t.hpp>
 #include <algorithm>
 
-static void __rectify_path(orie::str_t& p) {
-    while (!p.empty() && p.back() == orie::separator)
-        p.pop_back();
-    if (p.empty() || p.front() != orie::separator)
-        p.insert(p.cbegin(), orie::separator);
-}
-
 static orie::char_t
 __handle_unknown_dtype(const orie::char_t* fullp) noexcept {
     orie::stat_t stbuf;
@@ -175,9 +168,6 @@ void dumper::dump_concur(str_t& fullpath, size_t basename_len,
 }
 
 void dumper::rebuild_database() {
-    __rectify_path(_root_path);
-    std::for_each(_pruned_paths.begin(), _pruned_paths.end(), __rectify_path);
-    std::for_each(_noconcur_paths.begin(), _noconcur_paths.end(), __rectify_path);
     _data_dumped.clear();
 
     if (_root_path.size() == 1) {

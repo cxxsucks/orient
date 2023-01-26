@@ -27,6 +27,7 @@ private:
 
 public:
     static app os_default(fifo_thpool& pool);
+    static void rectify_path(orie::str_t& path);
 
     // Set path to database and read from it
     // 0.4: No more read_db; reading is handled on the fly by dumper
@@ -91,8 +92,6 @@ public:
     >> job_list;
     template <class callback_t>
     void run(fsearch_expr& expr, callback_t callback);
-    template <class callback_t> 
-    void run_pooled(fsearch_expr& expr, callback_t callback);
     job_list get_jobs(fsearch_expr& expr);
 
     app(fifo_thpool& pool);
@@ -103,25 +102,8 @@ public:
     ~app();
 };
 
-template <class cb_t>
-void app::run(fsearch_expr& expr, cb_t callback) {
-    if (!has_data())
-        return;
-    std::lock_guard __lck(_paths_mut);
-    for (sv_t p : _start_paths) {
-        fs_data_iter it(&_dumper->_data_dumped, p), end(it.end());
-        try {
-            while (it != end) {
-                if (expr.apply_blocked(it))
-                    callback(it);
-                ++it;
-            }
-        } catch(const pred_tree::quitted&) { }
-    }
-}
-
 template <class callback_t> 
-void app::run_pooled(fsearch_expr& expr, callback_t callback) {
+void app::run(fsearch_expr& expr, callback_t callback) {
     job_list jobs = get_jobs(expr);
     for (auto& j : jobs)
         j.second->start(_pool, callback);
@@ -145,7 +127,8 @@ app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
             // an immediate updatedb is not requested
             if (not_first || immediate) {
                 try {
-                    read_conf();
+                    if (!_conf_path.empty())
+                        read_conf();
                     update_db();
                 } catch(const std::runtime_error& e) {
                     // Cannot throw here

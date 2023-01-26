@@ -41,8 +41,7 @@ class fs_expr_builder : public builder<fs_data_iter, sv_t>
     // The most recently built expression contain action nodes like
     // -print -exec, meaning that "printing result" after matching is
     // not needed. TODO: mutable is too dumb.
-    mutable bool _has_action = false,
-                 _has_async = false;
+    mutable bool _has_action = false;
 
 protected:
     node_type* pred_dispatch(strview_t cmd) const override;
@@ -51,7 +50,6 @@ protected:
 public:
     void clear() noexcept override;
     bool has_action() const noexcept { return _has_action; }
-    bool has_async() const noexcept { return _has_async; }
 
     fs_expr_builder() noexcept = default;
     fs_expr_builder(const fs_expr_builder&) = delete;

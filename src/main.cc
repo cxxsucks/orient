@@ -98,9 +98,7 @@ try {
         app.add_start_path(::getcwd(cwd_buf, orie::path_max));
 #endif
     }
-    if (builder.has_async()) 
-        app.run_pooled(*builder.get(), callback);
-    else app.run(*builder.get(), callback);
+    app.run(*builder.get(), callback);
 
 } catch (std::exception& e) {
     std::cerr << e.what() << '\n';

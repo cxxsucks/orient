@@ -63,27 +63,26 @@ app& app::stop_auto_update() {
 }
 
 app& app::set_root_path(str_t path) {
+    rectify_path(path);
     std::unique_lock __lck(_paths_mut);
     _dumper->_root_path = std::move(path);
     return *this;
 }
 
 app& app::add_ignored_path(str_t path) {
+    rectify_path(path);
     std::lock_guard __lck(_paths_mut);
     _dumper->_pruned_paths.push_back(std::move(path));
     return *this;
 }
 app& app::add_slow_path(str_t path) {
+    rectify_path(path);
     std::lock_guard __lck(_paths_mut);
     _dumper->_noconcur_paths.push_back(std::move(path));
     return *this;
 }
 app& app::add_start_path(str_t path) {
-    // Start paths are managed by orie::app and must be rectified
-    if (path.empty())
-        path = separator;
-    else if (path.front() != separator)
-        path = separator + path;
+    rectify_path(path);
     std::lock_guard __lck(_paths_mut);
     _start_paths.push_back(std::move(path));
     return *this;
@@ -119,7 +118,6 @@ app& app::read_conf(str_t path) {
     // Members are modified across the function, therefore
     // the lock applies from start to finish
     std::lock_guard __lck(_paths_mut);
-    _dumper.reset();
     if (!path.empty())
         _conf_path = std::move(path);
 #if !defined(_WIN32) || defined(_MSC_VER)
@@ -133,6 +131,7 @@ app& app::read_conf(str_t path) {
 #ifdef _MSC_VER
     ifs.imbue(std::locale("en_US.UTF-8"));
 #endif
+    _dumper.reset();
     str_t conf_cont;
     // Conf file are small enough to be loaded to memory entirely
     std::getline(ifs, conf_cont, NATIVE_PATH('\0'));
@@ -197,8 +196,7 @@ app& app::write_conf(str_t path) {
     ofs.imbue(std::locale("en_US.UTF-8"));
 #endif
     ofs << NATIVE_PATH("DB_PATH `") << db_path() << char_t('`');
-    for (const auto& p : _dumper->_root_path) 
-        ofs << NATIVE_PATH("\nROOT_PATH `") << p << char_t('`');
+    ofs << NATIVE_PATH("\nROOT_PATH `") << _dumper->_root_path << char_t('`');
     for (const auto& p : _dumper->_noconcur_paths)
         ofs << NATIVE_PATH("\nSLOW_PATH `") << p << char_t('`');
     for (const auto& p : _dumper->_pruned_paths)
@@ -218,6 +216,12 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
 
     // Construct jobs
     for (sv_t p : _start_paths) {
+        // _root_path.starts_with(p)
+        if (_dumper->_root_path.size() >= p.size() &&
+            memcmp(p.data(), _dumper->_root_path.data(),
+                   sizeof(char_t) * p.size()) == 0)
+            p = _dumper->_root_path;
+
         fs_data_iter it(&_dumper->_data_dumped, p);
         if (it == it.end()) // Invalid starting path
             continue;
@@ -331,5 +335,12 @@ app app::os_default(fifo_thpool& pool) {
     return res;
 }
 #endif
+
+void app::rectify_path(orie::str_t& p) {
+    while (!p.empty() && p.back() == orie::separator)
+        p.pop_back();
+    if (p.empty() || p.front() != orie::separator)
+        p.insert(p.cbegin(), orie::separator);
+}
 
 } // namespace orie
