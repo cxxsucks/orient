@@ -7,7 +7,7 @@ struct fsExprBuilder : public testing::Test {
     ABunchOfDirs info;
 
     size_t _do_tests(orie::pred_tree::fs_node& matcher) {
-        fs_data_iter iter(info.dat.get());
+        fs_data_iter iter(&info.dmp->_data_dumped);
         matcher.update_cost();
         size_t cnt = 0;
         try {

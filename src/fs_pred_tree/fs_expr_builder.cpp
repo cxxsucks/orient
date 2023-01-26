@@ -69,12 +69,8 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
     case 36: return new baduser_node(false);
 
     // content
-    case 37: 
-        _has_async = true;
-        return new content_strstr_node;
-    case 38: 
-        _has_async = true;
-        return new content_regex_node;
+    case 37: return new content_strstr_node;
+    case 38: return new content_regex_node;
 
     // action
     case 41: return new print_node(true, '\n');
@@ -94,9 +90,7 @@ fs_node *fs_expr_builder::pred_dispatch(orie::sv_t cmd) const {
 
     // -fuzz -content-fuzz -quit v0.3.0
     case 55: return new fuzz_node;
-    case 56: 
-        _has_async = true;
-        return new content_fuzz_node;
+    case 56: return new content_fuzz_node;
     case 57: return new quitmod_node<fs_data_iter, sv_t>;
     }
     return nullptr;
@@ -118,7 +112,6 @@ fs_node *fs_expr_builder::modifier_dispatch(orie::sv_t cmd) const {
 void fs_expr_builder::clear() noexcept {
     _base_ty::clear();
     _has_action = false;
-    _has_async = false;
 }
 
 }

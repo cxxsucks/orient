@@ -9,7 +9,7 @@ struct actionNode : public ::testing::Test {
     ABunchOfDirs info;
 
     size_t _do_tests(orie::pred_tree::fs_node& matcher) {
-        fs_data_iter iter(info.dat.get());
+        fs_data_iter iter(&info.dmp->_data_dumped);
         matcher.update_cost();
         return std::count_if(iter, iter.end(), [&matcher] (auto& dat_it)
                              { return matcher.apply_blocked(dat_it); });

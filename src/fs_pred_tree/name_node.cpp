@@ -106,7 +106,7 @@ bool regex_node::apply_blocked(fs_data_iter& it) {
     char_t linkat_path[path_max];
     if (!_is_full && !_is_lname) {
         // Just match basename
-        sv_t basename = it.record().file_name_view();
+        sv_t basename = it.basename();
         re_ptr = reinterpret_cast<PCRE2_SPTR>(basename.data());
         re_len = basename.size();
     } else if (_is_full) {
