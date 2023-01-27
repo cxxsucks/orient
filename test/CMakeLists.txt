@@ -13,8 +13,8 @@ enable_testing()
 
 add_executable(orientest 
     test_action_node.cc test_app.cc test_builder.cc
-    test_content_node.cc test_data_iter.cc test_dumper.cc
-    test_fs_builder.cc test_node_base.cc test_stat_node.cc
+    test_content_node.cc test_data_iter.cc test_fs_builder.cc
+    test_file_mem.cc test_node_base.cc test_stat_node.cc
     test_tokenize.cc
 )
 

@@ -3,8 +3,7 @@ enable_language(CXX)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
-# Compression is implemented in 0.4.0
-# option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
+option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
 option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
 option(ORIE_LINK_STATIC "Statically link orient executable" OFF)
 
@@ -32,6 +31,24 @@ if (NOT ORIE_SYSTEM_PCRE2)
 endif(NOT ORIE_SYSTEM_PCRE2)
 set(orie_pcre2_libname pcre2-)
 
+# zstd CMake file is in build/cmake
+if (NOT ORIE_SYSTEM_ZSTD)
+    FetchContent_Declare(zstd
+        GIT_REPOSITORY https://github.com/facebook/zstd.git
+        GIT_TAG v1.5.1)
+    FetchContent_GetProperties(zstd)
+    if (NOT zstd_POPULATED)
+        FetchContent_Populate(zstd)
+        set(ZSTD_BUILD_SHARED OFF CACHE INTERNAL "")
+        set(ZSTD_LEGACY_SUPPORT OFF CACHE INTERNAL "")
+        set(ZSTD_BUILD_PROGRAMS OFF CACHE INTERNAL "")
+        set(ZSTD_BUILD_TESTS OFF CACHE INTERNAL "")
+        add_subdirectory(${zstd_SOURCE_DIR}/build/cmake
+                         ${zstd_BINARY_DIR})
+    endif (NOT zstd_POPULATED)
+    add_library(zstd ALIAS libzstd_static)
+endif (NOT ORIE_SYSTEM_ZSTD)
+
 if (NOT ORIE_SYSTEM_RAPIDFUZZ)
     FetchContent_Declare(rapidfuzz
         GIT_REPOSITORY https://github.com/maxbachmann/rapidfuzz-cpp.git
@@ -44,7 +61,7 @@ endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
 
 # A bug in rapidfuzz cmake stopped it from installing if project name is set
 # therefore set project name here.
-project(orient VERSION 0.3.1)
+project(orient VERSION 0.4.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -52,12 +69,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
 set(orie_src
     ${s}/app.cpp ${s}/data_iter.cpp
-    ${s}/dumper_fs.cpp ${s}/dumper_mem.cpp)
+    ${s}/dumper.cpp)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp
     ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
-    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp)
+    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp
+    src/util/file_mem_chunk.cpp
+)
 unset(s)
 
 # Platform specific settings
@@ -74,9 +93,7 @@ endif(WIN32)
 add_library(orie ${orie_src})
 add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
-# Compression is implemented in 0.4.0
-# target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
-target_link_libraries(orie PRIVATE rapidfuzz::rapidfuzz)
+target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
 target_include_directories(orie PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -94,6 +111,11 @@ if (NOT ORIE_SYSTEM_PCRE2)
     target_include_directories(orie PUBLIC 
                                $<BUILD_INTERFACE:${pcre2_BINARY_DIR}>)
 endif(NOT ORIE_SYSTEM_PCRE2)
+
+if(NOT ORIE_SYSTEM_ZSTD)
+    target_include_directories(orie PUBLIC 
+                               $<BUILD_INTERFACE:${zstd_SOURCE_DIR}/lib>)
+endif(NOT ORIE_SYSTEM_ZSTD)
 
 if(ORIE_TEST)
     add_subdirectory(test)

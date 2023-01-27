@@ -6,7 +6,7 @@
 #include <orient/util/fifo_thpool.hpp>
 
 using namespace std::filesystem;
-using orie::dmp::dir_dumper;
+using orie::dmp::dumper;
 using orie::fs_data_iter;
 
 #ifdef _WIN32
@@ -15,42 +15,35 @@ using orie::fs_data_iter;
 
 inline orie::fifo_thpool __dummy_pool(0);
 struct dataIter : public ::testing::Test {
-    path tmpPath;
-    dir_dumper* dmp = nullptr;
-    int8_t* dat = nullptr;
-    bool ok = true;
+    path tmpPath, dbPath;
+    dumper* dmp = nullptr;
 
     dataIter() {
         tmpPath = std::filesystem::temp_directory_path() 
             / ("dataIter_tst_tmpdir"  + std::to_string(::time(nullptr)));
-        ok &= create_directories(tmpPath / "dirA");
-        ok &= create_directories(tmpPath / "dirB/dirBA");
-        ok &= create_directories(tmpPath / "dirEmpty");
+        dbPath = temp_directory_path() 
+            / ("dataIter_tst_tmpdir_db" + std::to_string(::time(nullptr)));
+        create_directories(tmpPath / "dirA");
+        create_directories(tmpPath / "dirB/dirBA");
+        create_directories(tmpPath / "dirEmpty");
         create_symlink("..", tmpPath / "dirB" / "dirBA" / "linkBAB");
 
-        ok &= std::ofstream(tmpPath / "fileA").is_open();
-        ok &= std::ofstream(tmpPath / "fileB").is_open();
-        ok &= std::ofstream(tmpPath / "dirA" / "fileAA").is_open();
-        ok &= std::ofstream(tmpPath / "dirA" / "fileAB").is_open();
-        ok &= std::ofstream(tmpPath / "dirB" / "fileBA").is_open();
-        ok &= std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA").is_open();
+        std::ofstream(tmpPath / "fileA").is_open();
+        std::ofstream(tmpPath / "fileB").is_open();
+        std::ofstream(tmpPath / "dirA" / "fileAA").is_open();
+        std::ofstream(tmpPath / "dirA" / "fileAB").is_open();
+        std::ofstream(tmpPath / "dirB" / "fileBA").is_open();
+        std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA").is_open();
 
-        if (ok) {
-            dmp = new dir_dumper(tmpPath.native(), 0, nullptr);
-            dmp->from_fs(__dummy_pool);
-            if (dmp->n_bytes() > 20) {
-                dat = new int8_t[dmp->n_bytes() + 1];
-                dat[dmp->n_bytes()] = 0;
-                dmp->to_raw(dat);
-            }
-            else ok = false;
-        }
+        dmp = new dumper(dbPath.c_str(), __dummy_pool);
+        dmp->_root_path = tmpPath.native();
+        dmp->_noconcur_paths.push_back(tmpPath.native());
+        dmp->rebuild_database();
     }
 
     ~dataIter() {
         remove_all(tmpPath);
         delete dmp;
-        delete []dat;
     }
 };
 
@@ -64,42 +57,32 @@ static size_t _count_dataIt(fs_data_iter& it) {
 }
 
 TEST_F(dataIter, increment) {
-    if (!ok)
-        FAIL() << "Unable to set temp directory";
-
-    fs_data_iter it(dat);
+    fs_data_iter it(&dmp->_data_dumped);
     EXPECT_EQ(_count_dataIt(it), 11);
     EXPECT_THROW(++it, std::out_of_range);
     EXPECT_THROW(it++, std::out_of_range);
 }
 
 TEST_F(dataIter, updir) {
-    if (!ok)
-        FAIL() << "Unable to set temp directory";
-
-    for (fs_data_iter it(dat); it != it.end(); ++it) {
+    for (fs_data_iter it(&dmp->_data_dumped); it != it.end(); ++it) {
         if (it.record().file_name_view() == NATIVE_PATH("fileAA")) {
-            EXPECT_EQ(it.record(1).file_name_view(), NATIVE_PATH("dirA"));
-
             auto tmp = it; tmp.updir();
-            EXPECT_EQ(tmp.record().file_name_view(), NATIVE_PATH("dirA"));
+            EXPECT_EQ(tmp.basename(), NATIVE_SV("dirA"));
             EXPECT_EQ(tmp.parent_path(), tmpPath.native() + orie::separator);
         }
 
         if (it.record().file_name_view() == NATIVE_PATH("fileBAA")) {
-            EXPECT_EQ(it.record(1).file_name_view(), NATIVE_PATH("dirBA"));
-            EXPECT_EQ(it.record(2).file_name_view(), NATIVE_PATH("dirB"));
-            EXPECT_EQ(it.record(3).file_name_view(), tmpPath.native());
-            EXPECT_EQ(it.record(4).file_type(), orie::unknown_tag);
+            auto tmp = it;
+            EXPECT_EQ(tmp.updir().basename(), NATIVE_SV("dirBA"));
+            EXPECT_EQ(tmp.updir().basename(), NATIVE_SV("dirB"));
+            EXPECT_EQ(tmp.updir().basename(), tmpPath.filename().native());
+            EXPECT_EQ(tmp.updir(), fs_data_iter::end());
         }        
     }
 }
 
 TEST_F(dataIter, downdir) {
-    if (!ok)
-        FAIL() << "Unable to set temp directory";
-
-    fs_data_iter it(dat), tmp;
+    fs_data_iter it(&dmp->_data_dumped), tmp;
     while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     tmp = it.current_dir_iter();
@@ -107,10 +90,7 @@ TEST_F(dataIter, downdir) {
 }
 
 TEST_F(dataIter, stat) {
-    if (!ok)
-        FAIL() << "Unable to set temp directory";
-
-    fs_data_iter it(dat);
+    fs_data_iter it(&dmp->_data_dumped);
     while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     time_t orig = it->mtime();
@@ -122,19 +102,16 @@ TEST_F(dataIter, stat) {
 }
 
 TEST_F(dataIter, changeRoot) {
-    if (!ok)
-        FAIL() << "Unable to set temp directory";
-
-    fs_data_iter it(dat);
+    fs_data_iter it(&dmp->_data_dumped);
     it.change_root((tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);
-    it = fs_data_iter(dat, (tmpPath / "dirB").c_str());
+    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);
-    it = fs_data_iter(dat, (tmpPath / "nonExistent").c_str());
+    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "nonExistent").c_str());
     EXPECT_EQ(it, it.end());
-    it = fs_data_iter(dat, (tmpPath / "fileA").c_str());
+    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "fileA").c_str());
     EXPECT_EQ(it, it.end());
-    it = fs_data_iter(nullptr, 0);
+    it = fs_data_iter(nullptr);
     EXPECT_EQ(it, it.end());
     it = fs_data_iter(nullptr, (tmpPath / "dirB").c_str());
     EXPECT_EQ(it, it.end());

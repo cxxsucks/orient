@@ -18,14 +18,15 @@ using orie::fs_data_iter;
 
 inline orie::fifo_thpool __dummy_pool(0);
 struct ABunchOfDirs {
-    path tmpPath;
-    std::unique_ptr<dir_dumper> dmp = nullptr;
-    std::unique_ptr<int8_t[]> dat = nullptr;
+    path tmpPath, dbPath;
+    std::unique_ptr<dumper> dmp = nullptr;
     time_t since;
 
     ABunchOfDirs(size_t depth = 5) {
         tmpPath = temp_directory_path() 
             / ("ABunchOfDirs_" + std::to_string(std::random_device()()));
+        dbPath = temp_directory_path() 
+            / ("ABunchOfDirDb" + std::to_string(std::random_device()()));
         if (!directory_entry(tmpPath).exists()) {
             create_directories(tmpPath);
             _prep_dir(depth, tmpPath);
@@ -48,14 +49,10 @@ struct ABunchOfDirs {
     }
 
     void refreshDat() {
-        dat.reset();
-        dmp.reset(new dir_dumper(tmpPath.native(), 0, nullptr));
-        dmp->from_fs(__dummy_pool);
-        if (dmp->n_bytes() > 20) {
-            dat.reset(new int8_t[dmp->n_bytes() + 1]);
-            dat[dmp->n_bytes()] = 0;
-            dmp->to_raw(dat.get());
-        }
+        dmp.reset(new dumper(dbPath.c_str(), __dummy_pool));
+        dmp->_root_path = tmpPath.native();
+        dmp->_noconcur_paths.push_back(tmpPath.native());
+        dmp->rebuild_database();
     }
 
     ~ABunchOfDirs() { 

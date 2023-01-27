@@ -1,8 +1,6 @@
 #pragma once
 #include "predef.hpp"
-#include <string>
-#include <string_view>
-#include <vector>
+#include "dumper.hpp"
 #include <optional>
 
 namespace orie {
@@ -13,47 +11,62 @@ namespace orie {
  * Requires no heap allocation, but has less utility compared to
  * @c fs_data_iter */
 class fs_data_record {
-public:
-    using char_type = orie::char_t;
-    using category_tag = orie::category_tag;
-    using strview_type = std::basic_string_view<char_type>;
 private:
-    const void* _viewing;
+    dmp::file_mem_chunk* _dataref;
     size_t _cur_pos;
+    const std::byte* _viewing;
+    uint8_t _cur_chunk;
+    bool _is_viewing;
 
 public:
-    //! @brief Move to the next entry 
+    //! @brief Open views to filesystem database 
+    //! making all methods return valid data and @c increment work
+    //! @note @c finish_visit auto called on dtor after calling it
+    void start_visit();
+    //! @brief Close views to filesystem database
+    //! @warning Invalidates @c increment and @c file_* methods
+    //! and existing string view from @c file_name_view
+    void finish_visit() noexcept;
+    bool is_visiting() const noexcept { return _is_viewing; }
+
+    //! @brief Move to the next entry. @c start_visit must be called beforehand
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     //! @return Change of current depth inside the filesystem.
-    ptrdiff_t increment() noexcept;
+    //! @throw std::out_of_range when encountering incomplete data
+    ptrdiff_t increment();
 
     //! @brief Get the file name of current entry
-    //! @warning Returned string view is @b not null-terminated (end reached)
+    //! @c start_visit must be called beforehand 
+    //! @warning Returned string view is @b not null-terminated
     //! @warning Undefined if @a file_type returns unknown_tag
-    strview_type file_name_view() const noexcept;
+    sv_t file_name_view() const noexcept;
+    //! @brief Get the file name length of current entry
+    //! @c start_visit must be called beforehand 
     size_t file_name_len() const noexcept;
 
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.
-    //! @retval dir_tag Directory @retval link_tag Symbolic Link 
-    //! @retval file_tag Any other file
     category_tag file_type() const noexcept;
 
-    // Get internal position.
-    size_t pos() const noexcept {return _cur_pos;}
     // Compare equality of two records.
     bool operator==(const fs_data_record& rhs) const noexcept {
-        return rhs._viewing == _viewing && rhs._cur_pos == _cur_pos;
+        return rhs._cur_pos == _cur_pos && rhs._cur_chunk == _cur_chunk &&
+               rhs._dataref == _dataref;
     }
     // Compare inequality of two records.
     bool operator!=(const fs_data_record& rhs) const noexcept {
-        return rhs._viewing != _viewing || rhs._cur_pos != _cur_pos;
+        return rhs._cur_pos != _cur_pos || rhs._cur_chunk != _cur_chunk ||
+               rhs._dataref != _dataref;
     }
 
-    // Construct a record. This simply assigns the two parameters
-    fs_data_record(const void* view = nullptr, size_t start_at = 0) noexcept
-        : _viewing(view), _cur_pos(start_at) {}
-    ~fs_data_record() noexcept = default;
+    // Constructed record does NOT obtain a view
+    fs_data_record(dmp::file_mem_chunk* fsdb = nullptr) noexcept;
+    // Copied record does NOT obtain a view
+    fs_data_record(const fs_data_record& rhs) noexcept;
+    fs_data_record& operator=(const fs_data_record& res) noexcept;
+    ~fs_data_record() noexcept;
+    // Move ctor IS copy ctor
+    // fs_data_record(fs_data_record&& rhs) noexcept;
 };
 
 /*! @class fs_data_iter
@@ -66,11 +79,6 @@ public:
  * Will change in a distant release. */
 class fs_data_iter {
 public:
-    using char_type = orie::char_t;
-    using category_tag = orie::category_tag;
-    using string_type = std::basic_string<char_type>;
-    using strview_type = std::basic_string_view<char_type>;
-
     using iterator_category = std::input_iterator_tag;
     using iterator_concept = std::input_iterator_tag;
     using value_type = fs_data_iter;
@@ -85,15 +93,25 @@ private:
 
     fs_data_record _cur_record;
     std::vector<fs_data_record> _sub_recs;
-    ptrdiff_t _push_count;
-    string_type _prefix;
+    size_t _push_count;
+    str_t _prefix;
     has_recur_ _recur;
 
-    mutable std::optional<string_type> _opt_fullpath;
+    // Cached file type, done in operator++
+    category_tag _tag;
+    // Cached fullpath
+    mutable std::optional<str_t> _opt_fullpath;
+    // Cached stat
     mutable std::optional<orie::stat_t> _opt_stat;
-
     int _fetch_stat() const noexcept;
+
 public:
+    // Disable view to database. Re-established on ++ call.
+    void close_fsdb_view() noexcept {
+        path(); // Call path() to construct full path string
+        _cur_record.finish_visit();
+    }
+
     // Move *this one level up in filesystem hierchary. Return *this.
     // Invalidates *this (== end) if already at top level.
     fs_data_iter& updir();
@@ -101,7 +119,7 @@ public:
     //! @brief Move the iterator to the given path.
     //! @param start_path The path to move to. Must be an unvisited
     //! entry of the data being iterated.
-    fs_data_iter& change_root(strview_type start_path);
+    fs_data_iter& change_root(sv_t start_path);
 
     // Get a non-recursive iterator over the parent directory of current entry.
     fs_data_iter current_dir_iter() const;
@@ -124,14 +142,19 @@ public:
 
     //! @brief Get a reference to current full path string.
     //! @warning The reference is valid until next @a operator++ call.
-    const string_type& path() const;
-    //! @brief Get the base name current path, as string_view.
-    //! @note Same as @code record().file_name_view() @endcode
-    strview_type basename() const { return record().file_name_view(); }
+    const str_t& path() const;
+    //! @brief Get the base name current path.
+    //! @note Same as @code record().basename() @endcode when iter mode on
+    sv_t basename() const {
+        if (_cur_record.is_visiting())
+            return _cur_record.file_name_view();
+        sv_t res(_opt_fullpath.value());
+        return res.substr(_opt_fullpath.value().find_last_of(separator) + 1);
+    }
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
-    const string_type& parent_path() const noexcept {return _prefix;}
+    const str_t& parent_path() const noexcept {return _prefix;}
     //! @brief Whether the directory is empty. @c true for non-dirs;
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     bool empty_dir() const noexcept;
@@ -163,16 +186,16 @@ public:
     size_t depth() const noexcept;
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()
-    category_tag file_type() const noexcept { return _cur_record.file_type(); }
+    category_tag file_type() const noexcept { return _tag; }
 
     // Simply return a copy of *this.
-    fs_data_iter begin() const {return *this;}
+    fs_data_iter begin() const { return *this; }
     // An invalid fs_data_iter. All end iterators are equal.
-    static fs_data_iter end() {return fs_data_iter();}
+    static fs_data_iter end() { return fs_data_iter(); }
     // Simply return a reference of *this. May change in the distant future.
-    reference operator*() noexcept {return *this;}
+    reference operator*() noexcept { return *this; }
     // Simply return a pointer to *this. May change in the distant future.
-    pointer operator->() noexcept {return this;}
+    pointer operator->() noexcept { return this; }
 
     // Increment the iterator.
     fs_data_iter& operator++();
@@ -188,17 +211,25 @@ public:
 
     // Construct using pointer to stored filesystem data and internal position
     // An end iterator will be constructed if the record is not a directory.
-    fs_data_iter(const void* fsdb = nullptr, size_t start = 0);
+    // Constructed iterator has iteration mode on.
+    fs_data_iter(dmp::file_mem_chunk* fsdb = nullptr);
     // Construct using pointer to stored filesystem data and starting path.
     // An end iterator will be constructed if the path is not part of the data
     // or is not a directory.
-    fs_data_iter(const void* fsdb, strview_type start_path);
-    // Copy the content of rhs. Cached stat will be copied, but path strings will not.
+    // Constructed iterator has iteration mode on.
+    fs_data_iter(dmp::file_mem_chunk* fsdb, sv_t start_path)
+        : fs_data_iter(fsdb) { change_root(start_path); }
+
+    // Copy the content of rhs.
+    // Copied or moved iterator has iteration mode OFF!!!
     fs_data_iter(const fs_data_iter& rhs);
     // Copy the content of rhs. Cached stat will be copied, but path strings will not.
+    // Copied or moved iterator has iteration mode OFF!!!
     fs_data_iter& operator=(const fs_data_iter& rhs);
-    fs_data_iter(fs_data_iter&& rhs) = default;
-    fs_data_iter& operator=(fs_data_iter&& rhs) = default;
+    // Copied or moved iterator has iteration mode OFF!!!
+    fs_data_iter(fs_data_iter&& rhs) noexcept;
+    // Copied or moved iterator has iteration mode OFF!!!
+    fs_data_iter& operator=(fs_data_iter&& rhs) noexcept;
     ~fs_data_iter() noexcept = default;
 };
 

@@ -164,12 +164,8 @@ bool num_node::next_param(sv_t param) {
 }
 
 bool empty_node::apply_blocked(fs_data_iter& it) {
-    if (it.file_type() == dir_tag) {
-        fs_data_record rec = it.record();
-        // Non-empty dirs would descend into itself when
-        // incremented, resulting in a positive return value.
-        return rec.increment() <= 0;
-    }
+    if (it.file_type() == dir_tag) 
+        return it.empty_dir();
     return it.file_size() == 0;
 }
 

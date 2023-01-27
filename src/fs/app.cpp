@@ -2,108 +2,55 @@
 #include <orient/fs/dumper.hpp>
 #include <fstream>
 #include <algorithm>
-#include <cassert>
 
 namespace orie {
 
-app& app::read_db(str_t path) {
-    std::unique_lock __lck(_member_mut);
-    if (!path.empty())
-        _db_path = std::move(path);
-// Only MSVC provides std::fstream ctor accepting wchar
-#if !defined(_WIN32) || defined(_MSC_VER)
-    std::ifstream ifs(_db_path, std::ios_base::binary);
-#else
-    std::ifstream ifs(orie::xxstrcpy(sv_t(_db_path)), std::ios_base::binary);
-#endif // !_WIN32 || _MSC_VER
-
-    // Check whether the file is a legit database for orient
-    uint64_t magic_read = 0;
-    ifs.read(reinterpret_cast<char*>(&magic_read), sizeof(uint64_t));
-    if (magic_read != magic_num) {
-        _conf_path_valid = false;
-        return *this; // Stop reading if magic number mismatch
-    }
-
-    assert(ifs.tellg() == sizeof(uint64_t));
-    size_t db_sz = ifs.seekg(0, std::ios_base::end).tellg();
-    db_sz -= sizeof(uint64_t);
-    _data_dumped.reset(new std::byte[db_sz + 1]);
-    ifs.seekg(sizeof(uint64_t));
-    ifs.read(reinterpret_cast<char*>(_data_dumped.get()), db_sz);
-    _data_dumped[db_sz] = std::byte(0);
-    _conf_path_valid = true;
+app& app::set_db_path(const char_t* path) {
+    // No lock since std::shared_ptr is thread safe
+    _dumper.reset(new dmp::dumper(path, _pool));
     return *this;
 }
 
-app& app::update_db(str_t path) {
-    dumper dump_worker;
-{   if (!path.empty())
-        _db_path = std::move(path);
-    // Read and reuse the old dumped data
-    std::shared_lock __lck(_member_mut);
+app& app::update_db() {
+    if (_dumper == nullptr)
+        throw std::runtime_error("orient database not set with `set_db_path`"
+                                 " or `read_conf`");
+    str_t db_path = _dumper->_data_dumped.saving_path();
 
-    for (const str_t& p : _ignored_paths) {
-        auto* to_dump = dump_worker.visit_dir(p);
-        if (!to_dump) {
-            NATIVE_STDERR << NATIVE_PATH("Invalid pruned path:")
-                          << p << NATIVE_PATH('\n');
-            continue;
-        }
-        to_dump->clear();
-        to_dump->set_ignored(true);
-    }
+    // Having multiple dumpers running gets no performance gain
+    static std::mutex global_dump_lock;
+    std::lock_guard __lck(global_dump_lock);
 
-    // All root paths must be pruned along with ignored ones,
-    // Sort root paths from the deepest to the shallowest, preventing
-    // rescanning if there are overlapping root paths.
-    std::sort(_root_paths.begin(), _root_paths.end(), 
-        [] (const auto& a, const auto& b) {
-            return a.first.size() > b.first.size();
-    });
-    for (const auto& p : _root_paths) {
-        auto* to_dump = dump_worker.visit_dir(p.first);
-        if (!to_dump) {
-            NATIVE_STDERR << NATIVE_PATH("Invalid root path:")
-                          << p.first << NATIVE_PATH('\n');
-            continue;
-        }
-        to_dump->from_fs(_pool, p.second);
-        to_dump->compact();
-        to_dump->set_ignored(true);
-    }
-}
-
-    // Write updated data back to `data_dumped`
-    std::unique_lock __lck(_member_mut);
-    size_t sz = dump_worker.n_bytes();
-    _data_dumped.reset(new std::byte[sz + 1]);
-    dump_worker.to_raw(_data_dumped.get());
-    _data_dumped[sz] = std::byte(0);
-
-    // And then into database file
-#if !defined(_WIN32) || defined(_MSC_VER)
-    std::ofstream ofs(_db_path, std::ios_base::binary);
+    // Move current dumper to a temporary location in case it is being used by
+    // jobs. Old database is also scheduled to be deleted on job finish.
+#ifdef _WIN32
+    _dumper->_data_dumped.move_file((db_path + std::to_wstring(::rand())).c_str());
 #else
-    std::ofstream ofs(orie::xxstrcpy(sv_t(_db_path)), std::ios_base::binary);
+    _dumper->_data_dumped.move_file((db_path + std::to_string(::rand())).c_str());
 #endif
-    if (!ofs.is_open()) {
-        _conf_path_valid = false;
-        return *this;
-    }
-    ofs.write(reinterpret_cast<const char*>(&magic_num), sizeof(uint64_t));
-    ofs.write(reinterpret_cast<const char*>(_data_dumped.get()), sz);
-    _conf_path_valid = ofs.good();
+    _dumper->_data_dumped._rmfile_on_dtor = true;
+
+    // Setup the new dumper
+    std::shared_ptr<dmp::dumper> dumper_new(new dmp::dumper(db_path, _pool));
+    dumper_new->_noconcur_paths = _dumper->_noconcur_paths;
+    dumper_new->_root_path = _dumper->_root_path;
+    dumper_new->_pruned_paths = _dumper->_pruned_paths;
 #ifndef _WIN32
-    ::chmod(_db_path.c_str(), 0600);
+    chmod(db_path.c_str(), 0600);
 #endif
+
+    // Dump with the new dumper. While dumping, old dumper remain functional
+    dumper_new->rebuild_database();
+    // Destroy old (pointer to) dumper
+    std::lock_guard __lck2(_paths_mut);
+    _dumper = std::move(dumper_new);
     return *this;
 }
 
 app& app::stop_auto_update() {
     if (_auto_update_thread != nullptr) {
     {
-        std::unique_lock __lck(_member_mut);
+        std::unique_lock __lck(_paths_mut);
         _auto_update_stopped = true;
     }
         // In the worst case, update starts right before notification
@@ -115,56 +62,50 @@ app& app::stop_auto_update() {
     return *this;
 }
 
-app& app::add_ignored_path(str_t path) {
-    if (path.empty())
-        path = separator;
-    else if (path.front() != separator)
-        path = separator + path;
-    std::unique_lock __lck(_member_mut);
-    _ignored_paths.push_back(std::move(path));
+app& app::set_root_path(str_t path) {
+    rectify_path(path);
+    std::unique_lock __lck(_paths_mut);
+    _dumper->_root_path = std::move(path);
     return *this;
 }
-app& app::add_root_path(str_t path, bool concur) {
-    if (path.empty())
-        path = separator;
-    else if (path.front() != separator)
-        path = separator + path;
-    std::unique_lock __lck(_member_mut);
-    _root_paths.emplace_back(std::move(path), concur);
+
+app& app::add_ignored_path(str_t path) {
+    rectify_path(path);
+    std::lock_guard __lck(_paths_mut);
+    _dumper->_pruned_paths.push_back(std::move(path));
+    return *this;
+}
+app& app::add_slow_path(str_t path) {
+    rectify_path(path);
+    std::lock_guard __lck(_paths_mut);
+    _dumper->_noconcur_paths.push_back(std::move(path));
     return *this;
 }
 app& app::add_start_path(str_t path) {
-    if (path.empty())
-        path = separator;
-    else if (path.front() != separator)
-        path = separator + path;
-    std::unique_lock __lck(_member_mut);
+    rectify_path(path);
+    std::lock_guard __lck(_paths_mut);
     _start_paths.push_back(std::move(path));
     return *this;
 }
 
 app& app::erase_ignored_path(const str_t& path) {
-    std::unique_lock __lck(_member_mut);
-    _ignored_paths.erase(
-        std::remove_if(_ignored_paths.begin(), _ignored_paths.end(), 
+    std::lock_guard __lck(_paths_mut);
+    auto& d = _dumper->_pruned_paths;
+    d.erase(std::remove_if(d.begin(), d.end(), 
             [&path] (const str_t& p) {return p == path || p.c_str() + 1 == path;}),
-        _ignored_paths.end()
-    );
+            d.end());
     return *this;
 }
-app& app::erase_root_path(const str_t& path) {
-    std::unique_lock __lck(_member_mut);
-    _root_paths.erase(
-        std::remove_if(_root_paths.begin(), _root_paths.end(), 
-            [&path] (const auto& p) {
-                return p.first == path || p.first.c_str() + 1 == path;
-            }),
-        _root_paths.end()
-    );
+app& app::erase_slow_path(const str_t& path) {
+    std::lock_guard __lck(_paths_mut);
+    auto& d = _dumper->_noconcur_paths;
+    d.erase(std::remove_if(d.begin(), d.end(), 
+            [&path] (const str_t& p) {return p == path || p.c_str() + 1 == path;}),
+            d.end());
     return *this;
 }
 app& app::erase_start_path(const str_t& path) {
-    std::unique_lock __lck(_member_mut);
+    std::lock_guard __lck(_paths_mut);
     _start_paths.erase(
         std::remove_if(_start_paths.begin(), _start_paths.end(), 
             [&path] (const str_t& p) {return p == path || p.c_str() + 1 == path;}),
@@ -174,9 +115,6 @@ app& app::erase_start_path(const str_t& path) {
 }
 
 app& app::read_conf(str_t path) {
-    // Members are modified across the function, therefore
-    // the lock applies from start to finish
-    std::unique_lock __lck(_member_mut);
     if (!path.empty())
         _conf_path = std::move(path);
 #if !defined(_WIN32) || defined(_MSC_VER)
@@ -184,104 +122,109 @@ app& app::read_conf(str_t path) {
 #else
     std::basic_ifstream<char_t> ifs(orie::xxstrcpy(sv_t(_conf_path)));
 #endif
-    if (!ifs.is_open()) {
-        _conf_path_valid = false;
-        return *this;
-    }
+    if (!ifs.is_open())
+        throw std::runtime_error("Cannot read orient conf file");
 
 #ifdef _MSC_VER
     ifs.imbue(std::locale("en_US.UTF-8"));
 #endif
+    _dumper.reset();
     str_t conf_cont;
-    std::getline(ifs, conf_cont, NATIVE_PATH('\0')); // TODO: Paths with '\0'?
+    // Conf file are small enough to be loaded to memory entirely
+    std::getline(ifs, conf_cont, NATIVE_PATH('\0'));
     sv_t conf_sv(conf_cont);
-    _root_paths.clear();
-    _ignored_paths.clear();
 
+    int last_at = -1;
     while (!conf_sv.empty()) {
         auto [cur_sz, cur_tok] =
             orie::next_token(conf_sv.data(), conf_sv.size());
         conf_sv.remove_prefix(cur_sz);
-        if (cur_tok == NATIVE_PATH("DB_PATH")) {
-            std::tie(cur_sz, cur_tok) =
-                orie::next_token(conf_sv.data(), conf_sv.size());
-            conf_sv.remove_prefix(cur_sz);
-            _db_path = std::move(cur_tok);
-        } else if (cur_tok == NATIVE_PATH("IGNORED")) {
-            std::tie(cur_sz, cur_tok) =
-                orie::next_token(conf_sv.data(), conf_sv.size());
-            conf_sv.remove_prefix(cur_sz);
-            _ignored_paths.emplace_back(std::move(cur_tok));
-        } else if (cur_tok == NATIVE_PATH("ROOT")) {
-            std::tie(cur_sz, cur_tok) =
-                orie::next_token(conf_sv.data(), conf_sv.size());
-            conf_sv.remove_prefix(cur_sz);
-            _root_paths.emplace_back(std::move(cur_tok), false);
-            std::tie(cur_sz, cur_tok) =
-                orie::next_token(conf_sv.data(), conf_sv.size());
-            // SSD field is optional
-            if (cur_tok == NATIVE_PATH("SSD")) {
-                conf_sv.remove_prefix(cur_sz);
-                _root_paths.back().second = true;
-            }
-        } // Ignore all others
-    }
 
-    // Provide a default database name if there isn't one in conf file
-    if (_db_path.empty())
-        _db_path = _conf_path + NATIVE_PATH(".db");
-    _conf_path_valid = true;
+        switch (last_at) {
+        case 0: // DB_PATH
+            _dumper.reset(new dmp::dumper(cur_tok, _pool)); 
+            last_at = -1; break;
+        case 1: // ROOT_PATH
+            set_root_path(cur_tok);
+            last_at = -1; break;
+        case 2: // IGNORED_PATH
+            add_ignored_path(cur_tok);
+            last_at = -1; break;
+        case 3: // SLOW_PATH
+            add_slow_path(cur_tok);
+            last_at = -1; break;
+
+        default:
+            if (cur_tok == NATIVE_PATH("DB_PATH")) {
+                last_at = 0;
+            } else if (cur_tok == NATIVE_PATH("ROOT_PATH")) {
+                if (_dumper == nullptr) goto warning;
+                last_at = 1;
+            } else if (cur_tok == NATIVE_PATH("IGNORED_PATH")) {
+                if (_dumper == nullptr) goto warning;
+                last_at = 2;
+            } else if (cur_tok == NATIVE_PATH("SLOW_PATH")) {
+                if (_dumper == nullptr) goto warning;
+                last_at = 3;
+            }  // Ignore all others
+            break;
+    warning:
+            NATIVE_STDERR << NATIVE_PATH("DB_PATH must precede all paths. Found")
+                          << cur_tok << NATIVE_PATH('\n');
+        }
+    }
+    if (_dumper == nullptr)
+        throw std::runtime_error("Invalid conf file: must contain DB_PATH");
     return *this;
 }
 
 app& app::write_conf(str_t path) {
     if (!path.empty())
         _conf_path = std::move(path);
-    // Provide a default database name if not set, 
-    // before printing anything to conf file.
-    if (_db_path.empty())
-        _db_path = _conf_path + NATIVE_PATH(".db");
 #if !defined(_WIN32) || defined(_MSC_VER)
     std::basic_ofstream<char_t> ofs(_conf_path);
 #else
     std::basic_ofstream<char_t> ofs(orie::xxstrcpy(sv_t(_conf_path)));
 #endif
-    if (!ofs.is_open()) {
-        _conf_path_valid = false;
+    if (!ofs.is_open())
         return *this;
-    }
 
 #ifdef _MSC_VER
     ofs.imbue(std::locale("en_US.UTF-8"));
 #endif
-    ofs << NATIVE_PATH("DB_PATH `") << _db_path << char_t('`');
-    for (const auto& p : _root_paths) {
-        ofs << NATIVE_PATH("\nROOT `") << p.first << char_t('`');
-        if (p.second)
-            ofs << NATIVE_PATH(" SSD");
-    }
-    for (const auto& p : _ignored_paths)
-        ofs << NATIVE_PATH("\nIGNORED `") << p << char_t('`');
+    ofs << NATIVE_PATH("DB_PATH `") << db_path() << char_t('`');
+    ofs << NATIVE_PATH("\nROOT_PATH `") << _dumper->_root_path << char_t('`');
+    for (const auto& p : _dumper->_noconcur_paths)
+        ofs << NATIVE_PATH("\nSLOW_PATH `") << p << char_t('`');
+    for (const auto& p : _dumper->_pruned_paths)
+        ofs << NATIVE_PATH("\nIGNORED_PATH `") << p << char_t('`');
     ofs.put(char_t('\n'));
-    _conf_path_valid = true;
     return *this;
 }
 
 app::job_list app::get_jobs(fsearch_expr& expr) {
     job_list jobs;
+    if (!has_data())
+        return jobs;
     jobs.reserve(_start_paths.size());
     // A lock must be introduced or an updatedb may alter data_dumped between
     // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
-    std::shared_lock __lck(_member_mut);
+    std::lock_guard __lck(_paths_mut);
 
     // Construct jobs
     for (sv_t p : _start_paths) {
-        fs_data_iter it(_data_dumped.get(), p);
+        // _root_path.starts_with(p)
+        if (_dumper->_root_path.size() >= p.size() &&
+            memcmp(p.data(), _dumper->_root_path.data(),
+                   sizeof(char_t) * p.size()) == 0)
+            p = _dumper->_root_path;
+
+        fs_data_iter it(&_dumper->_data_dumped, p);
         if (it == it.end()) // Invalid starting path
             continue;
 
         jobs.emplace_back(
-            _data_dumped, // std::shared_ptr is internally thread safe
+            _dumper, // std::shared_ptr is internally thread safe
             std::make_unique<
                 pred_tree::async_job<fs_data_iter, sv_t>
             >(it, it.end(), expr)
@@ -292,19 +235,14 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
 
 app::app(fifo_thpool& p) : _pool(p) {}
 app::app(app&& rhs) noexcept
-    : _conf_path_valid(rhs._conf_path_valid), _pool(rhs._pool)
+    : _conf_path(std::move(rhs._conf_path))
+    , _start_paths(std::move(rhs._start_paths))
+    // COPY rhs's dumper ptr since rhs's jobs are not finished
+    , _dumper(rhs._dumper), _pool(rhs._pool)
 {
     rhs.stop_auto_update();
     // Wait all rhs's jobs to finish
-    std::unique_lock __lck(rhs._member_mut);
-    
-    // Move as usual
-    _conf_path = std::move(rhs._conf_path);
-    _db_path = std::move(rhs._db_path);
-    _ignored_paths = std::move(rhs._ignored_paths);
-    _root_paths = std::move(rhs._root_paths);
-    _start_paths = std::move(rhs._start_paths);
-    _data_dumped = std::move(rhs._data_dumped);
+    std::unique_lock __lck(rhs._paths_mut);
 }
 
 app& app::operator=(app&& r) noexcept {
@@ -318,7 +256,7 @@ app& app::operator=(app&& r) noexcept {
 app::~app() { 
     stop_auto_update(); 
     // Wait for other jobs to finish
-    std::unique_lock __lck(_member_mut);
+    std::unique_lock __lck(_paths_mut);
 }
 
 #ifndef _WIN32
@@ -327,18 +265,19 @@ app app::os_default(fifo_thpool& pool) {
     ::mkdir((conf_dir += "/.config").c_str(), 0755);
     ::mkdir((conf_dir += "/orie").c_str(), 0700);
     app res(pool);
-    // Use existing conf file when possible
-    if (res.read_conf(conf_dir + "/default.txt"))
-        return res;
 
+    try {
+        // Use existing conf file when possible
+        res.read_conf(conf_dir + "/default.txt");
+        return res;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << "; initializing default configuration.\n";
+    }
+
+    // What if setting default db path throws for reasons like unreadable HOME?
+    res.set_db_path((conf_dir + "/default.db").c_str())
+       .set_root_path("/")
 #ifdef MAC_OS_X_VERSION_10_0
-    res.read_db(conf_dir + "/default.db")
-       .add_root_path("", true)
-       .add_root_path("/usr", true)
-       .add_root_path("/Library", true)
-       .add_root_path("/Applications", true)
-       .add_root_path("/Users", true)
-       .add_root_path("/private", true)
        .add_ignored_path("/System/Library")
        .add_ignored_path("/Volumes")
        .add_ignored_path("/System/Volumes/Data")
@@ -349,10 +288,6 @@ app app::os_default(fifo_thpool& pool) {
        .write_conf();
 
 #else // GNU/Linux
-    res.read_db(conf_dir + "/default.db")
-       .add_root_path("/", true)
-       .add_root_path("/usr", true)
-       .add_root_path("/home", true)
        .add_ignored_path("/proc")
        .add_ignored_path("/run")
        .add_ignored_path("/media")
@@ -378,42 +313,32 @@ app app::os_default(fifo_thpool& pool) {
 
     app res(pool);
     std::wstring confDir = pathBuf;
-    if (res.read_conf(confDir + L"\\.orie\\default.txt"))
+    try {
+        res.read_conf(confDir + L"\\.orie\\default.txt");
         return res;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << "; initializing default configuration.\n";
+    }
 
     ::CreateDirectoryW((confDir += L"\\.orie").c_str(), nullptr);
-    res.read_db(confDir + L"\\default.db");
+    res.set_db_path((confDir + L"\\default.db").c_str());
 
-    pathLen = ::GetEnvironmentVariableW(L"UserProfile", pathBuf, 255);
-    if (pathLen != 0 && pathLen < 255)
-        res.add_root_path(pathBuf, true);
     pathLen = ::GetEnvironmentVariableW(L"TEMP", pathBuf, 255);
     if (pathLen != 0 && pathLen < 255)
         res.add_ignored_path(pathBuf);
     res.add_ignored_path(L"C:\\Windows")
-       .add_ignored_path(L"C:\\Windows.old");
-
-    // Add a root for each drive and its "Program File" directory
-    for (wchar_t dri[4] = L"C:\\"; dri[0] <= L'Z'; ++dri[0]) {
-        if (::GetDriveTypeW(dri) != DRIVE_FIXED)
-            continue;
-        dri[2] = L'\0';
-        res.add_root_path(dri, true);
-        ::wcscpy(pathBuf, dri);
-        ::wcscat(pathBuf, L"\\Program Files");
-        DWORD ftyp = ::GetFileAttributesW(pathBuf);
-        if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf, true);
-
-        ::wcscat(pathBuf, L" (x86)");
-        ftyp = ::GetFileAttributesW(pathBuf);
-        if (ftyp != INVALID_FILE_ATTRIBUTES && ftyp & FILE_ATTRIBUTE_DIRECTORY)
-            res.add_root_path(pathBuf, true);
-        dri[2] = L'\\';
-    }
-    res.write_conf();
+       .add_ignored_path(L"C:\\Windows.old")
+       .set_root_path(L"\\")
+       .write_conf();
     return res;
 }
 #endif
 
+void app::rectify_path(orie::str_t& p) {
+    while (!p.empty() && p.back() == orie::separator)
+        p.pop_back();
+    if (p.empty() || p.front() != orie::separator)
+        p.insert(p.cbegin(), orie::separator);
 }
+
+} // namespace orie

@@ -21,6 +21,7 @@ int main(int argc, const char* const* argv) noexcept {
 #endif
     // No C-style buffered write to stdout in all of the code
     std::ios_base::sync_with_stdio(false);
+    ::srand(::time(nullptr));
 
 try {
     int expr_since = 1;
@@ -61,10 +62,9 @@ try {
     }
 
     // Parsing arguments finished; start doing stuff
-    if (updatedb_flag)  { // Updatedb first
-        if (!app.update_db())
-            ERR_N_DIE("Updatedb Failed\n", 4);
-    } else if (!app.read_db())
+    if (updatedb_flag)
+        app.update_db();
+    if (!app.has_data())
         ERR_N_DIE("Database not initialized. Please run with "
                   "-updatedb first.\n", 4);
 
@@ -98,9 +98,7 @@ try {
         app.add_start_path(::getcwd(cwd_buf, orie::path_max));
 #endif
     }
-    if (builder.has_async()) 
-        app.run_pooled(*builder.get(), callback);
-    else app.run(*builder.get(), callback);
+    app.run(*builder.get(), callback);
 
 } catch (std::exception& e) {
     std::cerr << e.what() << '\n';

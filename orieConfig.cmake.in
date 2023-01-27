@@ -3,6 +3,7 @@
 # Avoid repeatedly including the targets
 if(NOT TARGET orie::orie)
     find_package(rapidfuzz)
+    find_package(zstd)
     # Provide path for scripts
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 

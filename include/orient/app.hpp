@@ -1,7 +1,6 @@
 #pragma once
 #include <orient/pred_tree/async_job.hpp>
 #include <orient/fs/data_iter.hpp>
-#include <shared_mutex>
 #include <cassert>
 
 namespace orie {
@@ -9,14 +8,11 @@ namespace orie {
 using fsearch_expr = orie::pred_tree::node<fs_data_iter, sv_t>;
 
 class app {
-    bool _conf_path_valid = false, 
-         _auto_update_stopped = false;
+    bool _auto_update_stopped = false;
 
-    str_t _conf_path, _db_path;
-    std::vector<str_t> _ignored_paths,
-                       _start_paths;
-    std::vector<std::pair<str_t, bool>> _root_paths;
-    std::shared_ptr<std::byte[]> _data_dumped;
+    str_t _conf_path;
+    std::vector<str_t> _start_paths;
+    std::shared_ptr<dmp::dumper> _dumper;
 
 public:
     // Since _pool is a reference which cannot be modified to point to
@@ -25,25 +21,21 @@ public:
 
 private:
     std::unique_ptr<std::thread> _auto_update_thread;
-    // Mutex of all members, mainly for "_data_dumped"
-    std::shared_mutex _member_mut;
-    std::condition_variable_any _auto_update_cv;
+    // Mutex of special paths
+    std::mutex _paths_mut;
+    std::condition_variable _auto_update_cv;
 
 public:
-    // Magic number of database file. 32bit and 64bit versions are different.
-    static constexpr uint64_t magic_num = 0x44f8a1ef44f8a1ef + sizeof(long);
-
     static app os_default(fifo_thpool& pool);
+    static void rectify_path(orie::str_t& path);
 
     // Set path to database and read from it
-    app& read_db(str_t path = str_t());
+    // 0.4: No more read_db; reading is handled on the fly by dumper
+    // app& read_db(str_t path = str_t());
+
     // Scan filesystem, update database and write to the db file
-    app& update_db(str_t path = str_t());
-    app& set_db_path(str_t path) {
-        std::unique_lock __lck(_member_mut);
-        _db_path = path;
-        return *this;
-    }
+    app& update_db();
+    app& set_db_path(const char_t* path);
 
     // Auto updating
     template <class Rep, class Period>
@@ -52,44 +44,54 @@ public:
     // CANNOT BE CALLED SIMUTANEOUSLY ON MULTIPLE THREADS!
     app& stop_auto_update();
 
-    // Set pruned paths, i.e., paths that are skipped; thread safe
+    // Set special paths; thread safe
     app& add_ignored_path(str_t path);
     app& erase_ignored_path(const str_t& path);
-    app& add_root_path(str_t path, bool multithreaded = false);
-    app& erase_root_path(const str_t& path);
+    app& add_slow_path(str_t path);
+    app& erase_slow_path(const str_t& path);
+    app& set_root_path(str_t path);
     app& add_start_path(str_t path);
     app& erase_start_path(const str_t& path);
 
     // Getters
-    const str_t& db_path() const noexcept { return _db_path; }
+    const str_t& db_path() const noexcept {
+        return _dumper->_data_dumped.saving_path();
+    }
+    const str_t& root_path() const noexcept { return _dumper->_root_path; }
     const str_t& conf_path() const noexcept { return _conf_path; }
 
     const std::vector<str_t>& 
-    ignored_paths() const noexcept { return _ignored_paths; }
+    slow_paths() const noexcept { return _dumper->_noconcur_paths; }
+    const std::vector<str_t>& 
+    ignored_paths() const noexcept { return _dumper->_pruned_paths; }
     const std::vector<str_t>& 
     start_paths() const noexcept { return _start_paths; }
-    const std::vector<std::pair<str_t, bool>>&
-    root_paths() const noexcept { return _root_paths; }
 
     // Read or write config files. Use the most recently passed
     // parameter if it is empty. THREAD UNSAFE
     app& read_conf(str_t path = str_t());
     app& write_conf(str_t path = str_t());
-    // Returns whether the config path is valid
-    operator bool() const noexcept { return _conf_path_valid; }
+
+    // Returns whether the app object is in valid state
+    // Paths can only be set in valid state
+    operator bool() const noexcept { return _dumper != nullptr; }
+    // Returns whether the app object is in valid state
+    // Paths can only be set in valid state
+    bool valid() const noexcept { return _dumper != nullptr; }
+    bool has_data() const noexcept {
+        return _dumper != nullptr && _dumper->_data_dumped.chunk_count() != 0;
+    }
 
     // To keep jobs safe after updatedb, which resets dumped data in
     // app class, shared pointer to originally dumped data is stored
     // along with the job itself.
     typedef std::vector<std::pair<
-        std::shared_ptr<std::byte[]>, 
+        std::shared_ptr<dmp::dumper>, 
         // Use unique_ptr simply because async_job is not movable
         std::unique_ptr<pred_tree::async_job<fs_data_iter, sv_t>>
     >> job_list;
     template <class callback_t>
     void run(fsearch_expr& expr, callback_t callback);
-    template <class callback_t> 
-    void run_pooled(fsearch_expr& expr, callback_t callback);
     job_list get_jobs(fsearch_expr& expr);
 
     app(fifo_thpool& pool);
@@ -100,25 +102,8 @@ public:
     ~app();
 };
 
-template <class cb_t>
-void app::run(fsearch_expr& expr, cb_t callback) {
-    std::shared_lock __lck(_member_mut);
-    for (sv_t p : _start_paths) {
-        fs_data_iter it(_data_dumped.get(), p);
-        if (it == it.end())
-            continue;
-        try {
-            while (it != it.end()) {
-                if (expr.apply_blocked(it))
-                    callback(it);
-                ++it;
-            }
-        } catch(const pred_tree::quitted&) { }
-    }
-}
-
 template <class callback_t> 
-void app::run_pooled(fsearch_expr& expr, callback_t callback) {
+void app::run(fsearch_expr& expr, callback_t callback) {
     job_list jobs = get_jobs(expr);
     for (auto& j : jobs)
         j.second->start(_pool, callback);
@@ -141,11 +126,18 @@ app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
             // Do not update if first time inside the loop and
             // an immediate updatedb is not requested
             if (not_first || immediate) {
-                read_conf();
-                update_db();
+                try {
+                    if (!_conf_path.empty())
+                        read_conf();
+                    update_db();
+                } catch(const std::runtime_error& e) {
+                    // Cannot throw here
+                    NATIVE_STDERR << "Error during orient auto updatedb: "
+                                  << e.what() << NATIVE_PATH('\n');
+                }
             }
             not_first = true;
-            std::unique_lock __lck(_member_mut);
+            std::unique_lock __lck(_paths_mut);
             _auto_update_cv.wait_for(__lck, interval, 
                 [this] () {return _auto_update_stopped;});
         }
