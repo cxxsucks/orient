@@ -221,7 +221,8 @@ void dumper::rebuild_database() {
 }
 
 dumper::dumper(sv_t database_path, fifo_thpool& pool)
-    : _data_dumped(database_path, 4, false, false), _pool(pool) {}
+    : _root_path({ separator })
+    , _data_dumped(database_path, 4, false, false), _pool(pool) {}
 
 bool dumper::is_pruned(const str_t& fullp) {
     return std::find(_pruned_paths.cbegin(), _pruned_paths.cend(),

@@ -25,7 +25,7 @@ cache_read:
 
 cache_write: {
     finish_visit();
-    std::lock_guard __lck(_writer_mut);
+    std::lock_guard __lck(_buf_mut);
     // Needed data may already been filled during waiting
     in_which_cache = _chunkid_to_cacheid[chunk_idx];
     if (in_which_cache < 8)
@@ -71,7 +71,7 @@ void file_mem_chunk::add_last_chunk() {
     if (_chunk_num == 255)
         throw std::out_of_range("Max chunk count reached");
 
-    std::lock_guard __lck(_writer_mut);
+    std::lock_guard __lck(_buf_mut);
     // Remove previous cache info
     uint8_t in_which_cache = (_next_overwrite++ % _cache_num);
     _chunkid_to_cacheid[_cacheid_to_chunkid[in_which_cache]] = ~uint8_t();
@@ -112,8 +112,8 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
     : _chunkid_to_cacheid(new uint8_t[256 * (1 + sizeof(size_t))])
     , _chunk_size_presum(reinterpret_cast<size_t*>(_chunkid_to_cacheid + 256))
     , _cctx(ZSTD_createCCtx()), _dctx(ZSTD_createDCtx())
-    , _reader_count(0), _saving_path(fpath), _chunk_num(0)
-    , _next_overwrite(0), _cache_num(cache_cnt), _rmfile_on_dtor(rm)
+    , _saving_path(fpath), _chunk_num(0) , _next_overwrite(0)
+    , _cache_num(cache_cnt), _rmfile_on_dtor(rm)
 {
     *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
     memset(_chunkid_to_cacheid, -1, 256 * (1 + sizeof(size_t)));
@@ -147,7 +147,7 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
 }
 
 void file_mem_chunk::move_file(const char_t* fpath) {
-    std::lock_guard __lck(_writer_mut);
+    std::lock_guard __lck(_buf_mut);
 #ifdef _WIN32
     if (::MoveFileW(_saving_path.c_str(), fpath) == FALSE)
 #else // C89 rename(2)
@@ -164,7 +164,7 @@ size_t file_mem_chunk::chunk_size(uint8_t at) const {
 }
 
 void file_mem_chunk::clear() {
-    std::lock_guard __lck(_writer_mut);
+    std::lock_guard __lck(_buf_mut);
     FILE* fp = fopen(_saving_path.c_str(), NATIVE_PATH("wb"));
     if (fp == nullptr)
         throw std::runtime_error("Cannot clear database");
@@ -183,7 +183,7 @@ void file_mem_chunk::clear() {
 }
 
 file_mem_chunk::~file_mem_chunk() {
-    std::lock_guard __lck(_writer_mut);
+    std::lock_guard __lck(_buf_mut);
     if (_rmfile_on_dtor)
 #ifdef _WIN32
         ::DeleteFileW(_saving_path.c_str());
@@ -204,16 +204,12 @@ file_mem_chunk::~file_mem_chunk() {
 
 // Reader Begin Reading
 void file_mem_chunk::__writer_lock() noexcept {
-    std::lock_guard __lck(_cnt_mut);
-    if (++_reader_count == 1)
-        _writer_mut.lock();
+    _buf_mut.lock_shared();
 }
 
 // Reader Finish Reading
 void file_mem_chunk::finish_visit() noexcept {
-    std::lock_guard __lck(_cnt_mut);
-    if (--_reader_count == 0)
-        _writer_mut.unlock();
+    _buf_mut.unlock_shared();
 }
 
 #ifdef _MSC_VER

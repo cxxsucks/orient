@@ -6,7 +6,7 @@
 namespace orie {
 
 app& app::set_db_path(const char_t* path) {
-    std::lock_guard __lck(_paths_mut);
+    // No lock since std::shared_ptr is thread safe
     _dumper.reset(new dmp::dumper(path, _pool));
     return *this;
 }
@@ -115,9 +115,6 @@ app& app::erase_start_path(const str_t& path) {
 }
 
 app& app::read_conf(str_t path) {
-    // Members are modified across the function, therefore
-    // the lock applies from start to finish
-    std::lock_guard __lck(_paths_mut);
     if (!path.empty())
         _conf_path = std::move(path);
 #if !defined(_WIN32) || defined(_MSC_VER)
@@ -148,13 +145,13 @@ app& app::read_conf(str_t path) {
             _dumper.reset(new dmp::dumper(cur_tok, _pool)); 
             last_at = -1; break;
         case 1: // ROOT_PATH
-            _dumper->_root_path = cur_tok;
+            set_root_path(cur_tok);
             last_at = -1; break;
         case 2: // IGNORED_PATH
-            _dumper->_pruned_paths.push_back(std::move(cur_tok));
+            add_ignored_path(cur_tok);
             last_at = -1; break;
         case 3: // SLOW_PATH
-            _dumper->_noconcur_paths.push_back(std::move(cur_tok)); 
+            add_slow_path(cur_tok);
             last_at = -1; break;
 
         default:
@@ -331,6 +328,7 @@ app app::os_default(fifo_thpool& pool) {
         res.add_ignored_path(pathBuf);
     res.add_ignored_path(L"C:\\Windows")
        .add_ignored_path(L"C:\\Windows.old")
+       .set_root_path(L"\\")
        .write_conf();
     return res;
 }

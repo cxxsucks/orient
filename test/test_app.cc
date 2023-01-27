@@ -77,7 +77,7 @@ TEST_F(orieApp, slowRoot) {
 
 TEST_F(orieApp, manyStartPath) {
     _app.add_start_path(info().tmpPath.native())
-        .add_start_path(temp_directory_path().native())
+        .add_start_path(canonical(temp_directory_path()).native())
         .update_db();
     // Root, /tmp and /tmp/ABunchOfDirs, 4 results each
     EXPECT_EQ(12, _do_tests(NATIVE_SV("-name dir9")));

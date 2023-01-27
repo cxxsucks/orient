@@ -65,20 +65,21 @@ public:
 
         // Produce `min_result_sync` synchorous results
         while (_begin != _end && min_result_sync > 0 && !_cancelled) {
-            tribool_bad res = _expression.apply(_begin);
+            tribool_bad res;
+            try {
+                res = _expression.apply(_begin);
+            } catch (pred_tree::quitted&) {
+                _cancelled = true;
+            }
             if (res.is_uncertain()) {
                 ++_cnt_running;
                 pool.enqueue(pool_job, _begin);
             } else if (res == tribool_bad::True) {
-                try {
                     // TODO: Async callback?
                     if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
                         callback(false, _begin);
                     else callback(_begin);
                     --min_result_sync;
-                } catch (pred_tree::quitted&) {
-                    _cancelled = true;
-                }
             }
             ++_begin;
         }
@@ -119,8 +120,8 @@ public:
     // }
         join(); // cnt_running == 0 after joining
         // _cancel_cv.notify_all(); // Stop timed cancelling thread
-		// if (_cancel_thread.joinable())
-			// _cancel_thread.join();
+        // if (_cancel_thread.joinable())
+            // _cancel_thread.join();
     }
 };
 

@@ -3,8 +3,7 @@
 #include <zstd.h>
 #include <string>
 #include <vector>
-#include <mutex>
-#include <atomic>
+#include <shared_mutex>
 
 namespace orie {
 namespace dmp {
@@ -36,8 +35,7 @@ public:
 
 private:
     // For reader-writer synchonization
-    size_t _reader_count;
-    std::mutex _writer_mut, _cnt_mut;
+    std::shared_mutex _buf_mut;
 
     // File to save memory not in cache
     str_t _saving_path;
