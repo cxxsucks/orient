@@ -3,7 +3,7 @@ enable_language(CXX)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_DOCX_CONTENT "Enable searching for contents of .docx" ON)
-# option(ORIE_PDF_CONTENT "Enable searching for contents of .pdf" OFF)
+option(ORIE_PDF_CONTENT "Enable searching for contents of .pdf" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
 option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
 option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
@@ -30,6 +30,22 @@ if (ORIE_DOCX_CONTENT)
     endif (NOT ORIE_SYSTEM_DUCKX)
     set(libs_to_link ${libs_to_link} duckx::duckx)
 endif (ORIE_DOCX_CONTENT)
+
+if (ORIE_PDF_CONTENT)
+    add_compile_definitions(_ORIE_PDF_CONTENT)
+    set(PODOFO_BUILD_LIB_ONLY ON CACHE INTERNAL "")
+    if (ORIE_LINK_STATIC)
+        set(PODOFO_STATIC ON CACHE INTERNAL "")
+        set(libs_to_link ${libs_to_link} podofo_static)
+        set(targs_to_install ${targs_to_install} podofo_static)
+        add_compile_definitions(PODOFO_STATIC)
+    else (ORIE_LINK_STATIC)
+        set(libs_to_link ${libs_to_link} podofo_shared)
+        set(targs_to_install ${targs_to_install} podofo_shared)
+        add_compile_definitions(PODOFO_SHARED)
+    endif (ORIE_LINK_STATIC)
+    add_subdirectory(podofo)
+endif (ORIE_PDF_CONTENT)
 
 if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_Declare(pcre2
@@ -133,6 +149,12 @@ if(NOT ORIE_SYSTEM_ZSTD)
     target_include_directories(orie PUBLIC 
                                $<BUILD_INTERFACE:${zstd_SOURCE_DIR}/lib>)
 endif(NOT ORIE_SYSTEM_ZSTD)
+
+if(ORIE_PDF_CONTENT)
+    target_include_directories(orie PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/podofo/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/podofo/src/podofo>)
+endif(ORIE_PDF_CONTENT)
 
 if(ORIE_TEST)
     add_subdirectory(test)

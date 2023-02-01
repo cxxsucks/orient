@@ -1,0 +1,3 @@
+[submodule "podofo"]
+	path = podofo
+	url = https://github.com/podofo/podofo

@@ -1,6 +1,9 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <cassert>
 #include <variant>
+#ifdef _ORIE_PDF_CONTENT
+#include <podofo/podofo.h>
+#endif
 #ifdef _ORIE_DOCX_CONTENT
 #include <duckx.hpp>
 #endif
@@ -82,6 +85,26 @@ private:
     }
 #endif
 
+#ifdef _ORIE_PDF_CONTENT
+    bool _do_pdf_match(const fs_data_iter& it, pcre2_match_data* match_dat) const {
+        try {
+            PoDoFo::PdfMemDocument doc;
+            doc.Load(it.path().c_str());
+            for (unsigned i = 0; i < doc.GetPages().GetCount(); i++) {
+                std::vector<PoDoFo::PdfTextEntry> textents;
+                str_t pagetext;
+                doc.GetPages().GetPageAt(i).ExtractTextTo(textents);
+                for (PoDoFo::PdfTextEntry& textent : textents)
+                    pagetext.append(textent.Text);
+                // Search one page at a time
+                if (_do_one_match(sv_t(pagetext), match_dat))
+                    return true;
+            }
+        } catch(PoDoFo::PdfError& e) { }
+        return false;
+    }
+#endif
+
 public:
     __match_helper(sv_t needle, bool icase, bool allow_bin)
         : _needle(std::in_place_index<0>, needle, icase)
@@ -104,12 +127,15 @@ public:
         );
 
     if (it.path().size() >= 5) {
-        sv_t p = it.path();
+        icase_sv_t p(it.path().c_str(), it.path().size());
         p.remove_prefix(p.size() - 5);
     #ifdef _ORIE_DOCX_CONTENT
-        if (p == NATIVE_SV(".docx"))
+        if (p == icase_sv_t(NATIVE_PATH(".docx")))
             return _do_docx_match(it, match_dat.get());
     #endif
+        p.remove_prefix(1);
+        if (p == icase_sv_t(NATIVE_PATH(".pdf")))
+            return _do_pdf_match(it, match_dat.get());
     }
 
     #ifdef _WIN32
