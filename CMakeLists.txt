@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.14)
 enable_language(CXX)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
+option(ORIE_DOCX_CONTENT "Enable searching for contents of .docx" ON)
+# option(ORIE_PDF_CONTENT "Enable searching for contents of .pdf" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
 option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
 option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
@@ -13,6 +15,21 @@ include(FetchContent)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 set(targs_to_install orie)
+set(libs_to_link zstd rapidfuzz::rapidfuzz)
+
+if (ORIE_DOCX_CONTENT)
+    option(ORIE_SYSTEM_DUCKX "Use System DuckX Library" OFF)
+    add_compile_definitions(_ORIE_DOCX_CONTENT)
+    if (NOT ORIE_SYSTEM_DUCKX)
+        FetchContent_Declare(duckx
+            GIT_REPOSITORY https://github.com/amiremohamadi/DuckX
+            GIT_TAG master)
+        FetchContent_MakeAvailable(duckx)
+    else (NOT ORIE_SYSTEM_DUCKX)
+        find_package(duckx REQUIRED)
+    endif (NOT ORIE_SYSTEM_DUCKX)
+    set(libs_to_link ${libs_to_link} duckx::duckx)
+endif (ORIE_DOCX_CONTENT)
 
 if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_Declare(pcre2
@@ -89,11 +106,11 @@ if(WIN32)
 else(WIN32)
     set(orie_pcre2_libname ${orie_pcre2_libname}8)
 endif(WIN32)
+set(libs_to_link ${libs_to_link} ${orie_pcre2_libname})
 
 add_library(orie ${orie_src})
 add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
-target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
-target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
+target_link_libraries(orie PRIVATE ${libs_to_link})
 target_link_libraries(orient PRIVATE orie)
 target_include_directories(orie PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

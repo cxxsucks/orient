@@ -1,6 +1,9 @@
 #include <orient/fs_pred_tree/fs_nodes.hpp>
 #include <cassert>
 #include <variant>
+#ifdef _ORIE_DOCX_CONTENT
+#include <duckx.hpp>
+#endif
 
 #ifndef _WIN32
 extern "C" {
@@ -65,6 +68,20 @@ private:
         }
     }
 
+#ifdef _ORIE_DOCX_CONTENT
+    bool _do_docx_match(const fs_data_iter& it, pcre2_match_data* match_dat) const {
+        duckx::Document doc(it.path());
+        doc.open();
+        for (duckx::Paragraph p : doc.paragraphs())
+            for (const duckx::Run& r : p.runs()) {
+                str_t t(r.get_text());
+                if (_do_one_match(sv_t(t), match_dat))
+                    return true;
+            }
+        return false;
+    }
+#endif
+
 public:
     __match_helper(sv_t needle, bool icase, bool allow_bin)
         : _needle(std::in_place_index<0>, needle, icase)
@@ -85,6 +102,15 @@ public:
             _needle.index() == 1 ? pcre2_match_data_create(16, nullptr) : nullptr,
             &pcre2_match_data_free
         );
+
+    if (it.path().size() >= 5) {
+        sv_t p = it.path();
+        p.remove_prefix(p.size() - 5);
+    #ifdef _ORIE_DOCX_CONTENT
+        if (p == NATIVE_SV(".docx"))
+            return _do_docx_match(it, match_dat.get());
+    #endif
+    }
 
     #ifdef _WIN32
         // Read files with std::wifstream, which handles utf-8 gracefully.
