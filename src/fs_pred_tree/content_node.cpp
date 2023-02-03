@@ -8,11 +8,14 @@
 #include <duckx.hpp>
 #endif
 
-#ifndef _WIN32
 extern "C" {
-#include <sys/mman.h>
-}
+#ifdef _ORIE_DOC_CONTENT
+#include <orient/util/docpptxls_to_text.h>
 #endif
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
+}
 
 namespace orie {
 
@@ -70,6 +73,36 @@ private:
         default: std::terminate(); // Unreachable
         }
     }
+
+#ifdef _ORIE_DOC_CONTENT
+    bool _do_doc_match(const fs_data_iter& it, pcre2_match_data* match_dat) const {
+        str_t to_match;
+        to_match.reserve(5000);
+        doctotext doc = doctotext_alloc();
+        if (0 != doctotext_setfile(&doc, it.path().c_str())) {
+            doctotext_free(&doc);
+            return false;
+        }
+
+        char_t* ch; size_t sz;
+        while ((ch = doctotext_next_u8(&doc, &sz)) != nullptr) {
+            to_match += sv_t(ch, sz);
+            if (to_match.size() >= 4096) {
+                // Match in 4096B blocks
+                if (_do_one_match(sv_t(to_match), match_dat)) {
+                    doctotext_free(&doc);
+                    return true;
+                }
+                to_match.clear();
+            }
+        }
+
+        // Match the remaining
+        bool res = _do_one_match(sv_t(to_match), match_dat);
+        doctotext_free(&doc);
+        return res;
+    }
+#endif
 
 #ifdef _ORIE_DOCX_CONTENT
     bool _do_docx_match(const fs_data_iter& it, pcre2_match_data* match_dat) const {
@@ -134,8 +167,16 @@ public:
             return _do_docx_match(it, match_dat.get());
     #endif
         p.remove_prefix(1);
+    #ifdef _ORIE_PDF_CONTENT
         if (p == icase_sv_t(NATIVE_PATH(".pdf")))
             return _do_pdf_match(it, match_dat.get());
+    #endif
+    #ifdef _ORIE_DOC_CONTENT
+        if (p == icase_sv_t(NATIVE_PATH(".doc")) ||
+            p == icase_sv_t(NATIVE_PATH(".ppt")) ||
+            p == icase_sv_t(NATIVE_PATH(".xls")))
+            return _do_doc_match(it, match_dat.get());
+    #endif
     }
 
     #ifdef _WIN32

@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
-enable_language(CXX)
+enable_language(CXX C)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_DOCX_CONTENT "Enable searching for contents of .docx" ON)
+option(ORIE_DOC_CONTENT "Enable searching for contents of .doc .ppt .xls" ON)
 option(ORIE_PDF_CONTENT "Enable searching for contents of .pdf" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
 option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
@@ -19,7 +20,6 @@ set(libs_to_link zstd rapidfuzz::rapidfuzz)
 
 if (ORIE_DOCX_CONTENT)
     option(ORIE_SYSTEM_DUCKX "Use System DuckX Library" OFF)
-    add_compile_definitions(_ORIE_DOCX_CONTENT)
     if (NOT ORIE_SYSTEM_DUCKX)
         FetchContent_Declare(duckx
             GIT_REPOSITORY https://github.com/amiremohamadi/DuckX
@@ -32,7 +32,6 @@ if (ORIE_DOCX_CONTENT)
 endif (ORIE_DOCX_CONTENT)
 
 if (ORIE_PDF_CONTENT)
-    add_compile_definitions(_ORIE_PDF_CONTENT)
     set(PODOFO_BUILD_LIB_ONLY ON CACHE INTERNAL "")
     if (ORIE_LINK_STATIC)
         set(PODOFO_STATIC ON CACHE INTERNAL "")
@@ -107,9 +106,13 @@ set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp
     ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
-    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp
-    src/util/file_mem_chunk.cpp
-)
+    ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp)
+set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/util)
+if(ORIE_DOC_CONTENT)
+    set(orie_src ${orie_src} 
+        ${s}/cjk_hg_freqs.c ${s}/docpptxls_to_text.c)
+endif(ORIE_DOC_CONTENT)
+set(orie_src ${orie_src} ${s}/file_mem_chunk.cpp)
 unset(s)
 
 # Platform specific settings
@@ -132,6 +135,18 @@ target_include_directories(orie PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 add_library(orie::orie ALIAS orie)
+
+if(ORIE_DOC_CONTENT)
+    target_compile_definitions(orie PUBLIC _ORIE_DOC_CONTENT)
+    install(FILES include/orient/util/docpptxls_to_text.h
+            DESTINATION include/orient/util)
+endif(ORIE_DOC_CONTENT)
+if(ORIE_DOCX_CONTENT)
+    target_compile_definitions(orie PUBLIC _ORIE_DOCX_CONTENT)
+endif(ORIE_DOCX_CONTENT)
+if(ORIE_PDF_CONTENT)
+    target_compile_definitions(orie PUBLIC _ORIE_PDF_CONTENT)
+endif(ORIE_PDF_CONTENT)
 
 # On most systems PCRE2 libs are known as pcre2-{8,16,32}
 # But on PCRE2's CMakeLists.txt, they are called pcre2-*-{static,shared}
