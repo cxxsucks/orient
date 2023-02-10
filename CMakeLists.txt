@@ -75,7 +75,13 @@ set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp
     ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
     ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp
-    src/util/file_mem_chunk.cpp
+)
+set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/util/compresslib)
+set(orie_src ${orie_src}
+    ${s}/bitpacking.cpp
+    ${s}/integratedbitpacking.cpp
+    ${s}/intersection.cpp
+    ${s}/../file_mem_chunk.cpp
 )
 unset(s)
 
@@ -163,4 +169,7 @@ endif(ORIE_LINK_STATIC)
 target_compile_options(orie PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+)
+target_compile_options(orie PUBLIC
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-mssse3 -mpopcnt>
 )

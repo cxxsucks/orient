@@ -192,7 +192,7 @@ TEST_F(statNode, size) {
 
 #ifndef _WIN32
 TEST_F(statNode, ugid) {
-    char uid_cstr[10] = "", gid_cstr[10] = "";
+    char uid_cstr[20] = "", gid_cstr[20] = "";
     orie::to_char_t(uid_cstr, ::getuid());
     orie::to_char_t(gid_cstr, ::getgid());
     num_node matcher(num_node::stamp::UID);
