@@ -82,6 +82,7 @@ set(orie_src ${orie_src}
     ${s}/integratedbitpacking.cpp
     ${s}/intersection.cpp
     ${s}/../file_mem_chunk.cpp
+    ${s}/../arr2d.cpp
 )
 unset(s)
 

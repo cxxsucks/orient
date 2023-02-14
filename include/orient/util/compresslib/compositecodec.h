@@ -41,7 +41,6 @@ public:
   }
   const uint32_t *decodeArray(const uint32_t *in, const size_t length,
                               uint32_t *out, size_t &nvalue) {
-    const uint32_t *const initin(in);
     size_t mynvalue1 = nvalue;
     const uint32_t *in2 = codec1.decodeArray(in, length, out, mynvalue1);
     if (length + in > in2) {

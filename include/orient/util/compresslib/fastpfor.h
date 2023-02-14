@@ -175,10 +175,9 @@ namespace compressionLib {
         ScalarSortedBitPacker bpacker;
         std::vector<uint8_t> bytescontainer;
 
-        const uint32_t *decodeArray(const uint32_t *in, const size_t length,
+        const uint32_t *decodeArray(const uint32_t *in, const size_t,
                                     uint32_t *out, size_t &nvalue)
         {
-            const uint32_t *const initin(in);
             const size_t mynvalue = *in;
             ++in;
             if (mynvalue > nvalue)
@@ -212,7 +211,6 @@ namespace compressionLib {
                          size_t &nvalue)
         {
             check_divisible(length, BlockSize);
-            const uint32_t *const initout(out);
             const uint32_t *const finalin(in + length);
 
             *out++ = static_cast<uint32_t>(length);
