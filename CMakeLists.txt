@@ -69,7 +69,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
 set(orie_src
     ${s}/app.cpp ${s}/data_iter.cpp
-    ${s}/dumper.cpp)
+    ${s}/dumper.cpp ${s}/trigram.cpp
+)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp

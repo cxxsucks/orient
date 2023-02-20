@@ -16,6 +16,7 @@ add_executable(orientest
     test_content_node.cc test_data_iter.cc test_fs_builder.cc
     test_file_mem.cc test_node_base.cc test_stat_node.cc
     test_tokenize.cc test_cmprslib.cc test_arr2d.cc
+    test_trigram.cc
 )
 
 target_include_directories(orientest PRIVATE ${GTEST_INCLUDE_DIRS})
