@@ -42,8 +42,9 @@ struct dataIter : public ::testing::Test {
     }
 
     ~dataIter() {
-        remove_all(tmpPath);
         delete dmp;
+        remove_all(tmpPath);
+        remove_all(dbPath);
     }
 };
 
