@@ -56,8 +56,8 @@ struct ABunchOfDirs {
     }
 
     ~ABunchOfDirs() { 
-        if (!tmpPath.empty())
-            remove_all(tmpPath);
+        remove_all(tmpPath);
+        remove(dbPath);
     }
 
     ABunchOfDirs(ABunchOfDirs&& rhs) = delete;
