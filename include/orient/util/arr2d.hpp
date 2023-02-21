@@ -17,6 +17,9 @@ struct arr2d_writer {
 };
 
 class arr2d_reader {
+public:
+    bool rm_on_dtor;
+private:
 #ifdef _WIN32
     HANDLE _map_descriptor;
 #else
@@ -46,7 +49,9 @@ public:
 
     // Move the database file elsewhere. Thread safe but poorly implemented
     void move_file(orie::str_t path);
-    // void refresh();
+    // Call this after some numbers are appended with
+    // `arr2d_writer::append_to_file` to maniefst recent changes
+    void refresh();
 
     // Throws system error if open failed
     arr2d_reader(orie::str_t invidx_path);

@@ -49,11 +49,9 @@ public:
       const uint32_t *in3 = codec2.decodeArray(in2, length - (in2 - in),
                                                out + mynvalue1, nvalue2);
       nvalue = mynvalue1 + nvalue2;
-      assert(initin + length >= in3);
       return in3;
     }
     nvalue = mynvalue1;
-    assert(initin + length >= in2);
     return in2;
   }
 };

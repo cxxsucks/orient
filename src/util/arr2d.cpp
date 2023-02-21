@@ -79,25 +79,56 @@ void arr2d_reader::move_file(orie::str_t path) {
     // the file is unmapped.
 }
 
-arr2d_reader::arr2d_reader(orie::str_t fpath) : _map_path(std::move(fpath)) {
-    _map_descriptor = open(_map_path.c_str(), O_RDONLY);
-    if (_map_descriptor == -1)
-        goto fail;
+void arr2d_reader::refresh() {
+    const uint32_t* old_dat = _mapped_data;
     struct stat stbuf;
     if (fstat(_map_descriptor, &stbuf) != 0)
         goto fail;
-    _mapped_sz = static_cast<size_t>(stbuf.st_size);
-    _mapped_data = static_cast<const uint32_t*>(
-        mmap(nullptr, _mapped_sz, PROT_READ, MAP_SHARED, _map_descriptor, 0));
-    if (_mapped_data != MAP_FAILED)
+
+    if (stbuf.st_size == 0) {
+        static const uint32_t dummy[2] = {0, 0};
+        _mapped_data = dummy; // Fake page with 0 lines and no next page
         return;
+    }
+
+    _mapped_data = static_cast<const uint32_t*>(
+        mmap(nullptr, static_cast<size_t>(stbuf.st_size),
+             PROT_READ, MAP_SHARED, _map_descriptor, 0)
+    );
+    if (_mapped_data == MAP_FAILED)
+        goto fail;
+    // Here is a window in which _mapped_sz is not equal to actual mapped
+    // size but as long as the file is appended (with arr2d_writer), the
+    // first `_mapped_sz` bytes are valid so no undefined behavior happen.
+
+    if (_mapped_sz != 0) // Previous map was not empty
+        if (munmap(const_cast<uint32_t*>(old_dat), _mapped_sz) != 0)
+            goto fail;
+    _mapped_sz = static_cast<size_t>(stbuf.st_size);
+    return;
 fail:
+    _mapped_data = old_dat;
     THROW_SYS_ERROR;
 }
 
+arr2d_reader::arr2d_reader(orie::str_t fpath)
+    : rm_on_dtor(false), _map_path(std::move(fpath))
+    , _mapped_data(nullptr) , _mapped_sz(0)
+    , _cache_page_idx(0), _cache_page_offset(0)
+{
+    _map_descriptor = open(_map_path.c_str(), O_RDONLY | O_CREAT, 0600);
+    if (_map_descriptor == -1)
+        THROW_SYS_ERROR;
+    refresh();
+}
+
 arr2d_reader::~arr2d_reader() noexcept {
-    munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
-    close(_map_descriptor);
+    if (_mapped_sz != 0)
+        munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
+    if (_map_descriptor >= 0)
+        close(_map_descriptor);
+    if (rm_on_dtor)
+        unlink(_map_path.c_str());
 }
 
 uint32_t arr2d_reader::page_offset(size_t page) const noexcept {

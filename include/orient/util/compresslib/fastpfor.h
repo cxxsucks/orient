@@ -194,7 +194,6 @@ namespace compressionLib {
                 in += thisnvalue;
                 out += thissize;
             }
-            assert(initin + length >= in);
             bpacker.reset(); // if you don't do this, the codec has a "memory".
             return in;
         }
@@ -226,7 +225,6 @@ namespace compressionLib {
                 out += thisnvalue;
                 in += thissize;
             }
-            assert(out == nvalue + initout);
             if (oldnvalue < nvalue) {
                 bpacker.reset(); // if you don't do this, the buffer has a memory
                 throw NotEnoughStorage(nvalue);

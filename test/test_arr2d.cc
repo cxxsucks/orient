@@ -56,6 +56,7 @@ TEST_F(arr2d, writeSimple) {
         << "Start of Page 2 must be end of data";
     ASSERT_NE(0xefefefef, dat_buf[pg1_off + dat_buf[pg1_off + 5] - 1])
         << "1 Position Before Start of Page 2 must NOT be end of data";
+    fclose(st);
 }
 
 TEST_F(arr2d, appendSimple) {
@@ -97,6 +98,22 @@ TEST_F(arr2d, moveFile) {
     reader.move_file(tmpPath);
     for (size_t i = 0; i < 15; ++i)
         ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
+}
+
+TEST_F(arr2d, emptyFile) {
+    std::filesystem::remove(tmpPath);
+    arr2d_reader reader(tmpPath.c_str());
+    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 0));
+    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(15, 0));
+    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
+    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
+    SetUp();
+    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 0));
+    reader.refresh();
+    for (size_t i = 0; i < 15; ++i)
+        ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
+    ASSERT_EQ(reader.uncmprs_size(2, 1), 0);
+    ASSERT_EQ(reader.uncmprs_size(3, 1), 1000);
 }
 
 TEST_F(arr2d, uncmprsOneLine) {
