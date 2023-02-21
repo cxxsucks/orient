@@ -190,8 +190,7 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
         ::perror("pipe");
         return false;
     }
-    if (0 != ::fcntl(pipe_fds[1], F_SETFD, 
-                     ::fcntl(pipe_fds[1], F_GETFD) | FD_CLOEXEC)) {
+    if (0 != ::fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC)) {
         ::perror("fcntl");
         return false;
     }
@@ -227,6 +226,7 @@ bool exec_node::apply_blocked(fs_data_iter& it) {
         while ((count = ::read(pipe_fds[0], &err, sizeof(errno))) != -1)
             if (errno != EAGAIN && errno != EINTR)
                 break;
+        ::close(pipe_fds[0]); // Read child error finished
         if (count != 0) {
             // Child wrote to err. 
             NATIVE_STDERR << argv_to_exec[0] << ": " << strerror(err) << '\n';
