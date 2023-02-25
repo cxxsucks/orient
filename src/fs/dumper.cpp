@@ -1,6 +1,16 @@
 #include <orient/fs/dumper.hpp>
+#include <orient/fs/trigram.hpp> // for `place_trigram`
 #include <orient/util/charconv_t.hpp>
 #include <algorithm>
+
+static void __place_a_name(orie::sv_t str, std::vector<std::byte>& d)
+{
+    uint16_t len16 = static_cast<uint16_t>(str.size());
+    const std::byte* ptr = reinterpret_cast<const std::byte*>(&len16);
+    d.insert(d.cend(), ptr, ptr + sizeof(uint16_t));
+    ptr = reinterpret_cast<const std::byte*>(str.data());
+    d.insert(d.cend(), ptr, ptr + sizeof(orie::char_t) * str.size());
+}
 
 static orie::char_t
 __handle_unknown_dtype(const orie::char_t* fullp) noexcept {
@@ -70,55 +80,87 @@ dumper::fetch_dir_info(str_t& fullpath) {
                       << static_cast<int>(ent->d_type) << '\n';
             continue; // Do not add it
         }
-        // Category, name length and name
-        uint16_t name_len = static_cast<uint16_t>(orie::strlen(ent->d_name));
-        res.second.push_back(static_cast<std::byte>(tag));
-        const std::byte* ptr = reinterpret_cast<const std::byte*>(&name_len);
-        res.second.insert(res.second.cend(), ptr, ptr + sizeof(uint16_t));
-        ptr = reinterpret_cast<const std::byte*>(&ent->d_name);
-        res.second.insert(res.second.cend(), ptr, 
-                          ptr + sizeof(char_t) * name_len);
+        res.second.emplace_back(1, orie::char_t(tag)) += ent->d_name;
     }
 
     orie::closedir(dirp);
     return res;
 }
 
-void dumper::dump_noconcur(str_t& fullpath, size_t basename_len, 
-                           const dir_info_t& info)
-{   // Dump dir tag, basename len, basename and sub files first 
-    uint16_t len16(basename_len);
-    auto& d = _data_dumped._unplaced_dat; // aliase
-    d.push_back(std::byte(orie::dir_tag));
-    const std::byte* ptr = reinterpret_cast<const std::byte*>(&len16);
-    d.insert(d.cend(), ptr, ptr + sizeof(uint16_t));
-    ptr = reinterpret_cast<const std::byte*>(fullpath.c_str() + fullpath.size()
-                                             - basename_len);
-    d.insert(d.cend(), ptr, ptr + sizeof(char_t) * basename_len);
-    d.insert(d.cend(), info.second.cbegin(), info.second.cend());
+size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                        const dir_info_t& info, size_t nth_file)
+{  
+    auto& d = _index._unplaced_dat; // aliase
+    sv_t basename_view(fullpath.c_str() + fullpath.size() - basename_len,
+                       basename_len);
 
+    // Dumps full path len and full path if group counter reaches 24
+    if (nth_file % nfile_in_batch == 0) {
+        uint32_t pos = (_index.chunk_count() << 25) | d.size();
+        _pos_of_batches.push_back(pos);
+        w.add_int(0, pos);
+        sv_t parent_view(fullpath.c_str(), fullpath.size() == basename_len ?
+                         0 : fullpath.size() - basename_len - 1);
+        d.push_back(std::byte(orie::next_group_tag));
+        __place_a_name(parent_view, d);
+    }
+
+    // Dump dir tag, basename len and basename first 
+    d.push_back(std::byte(orie::dir_tag));
+    __place_a_name(basename_view, d);
+    place_trigram(basename_view, nth_file / nfile_in_batch, w);
+    ++nth_file;
+
+    // For each sub file, dump its file type, name length and name and
+    // dump parent path (which is `fullpath` here) if group counter reaches 24
+    for (const str_t& subfile_basename : info.second) {
+        if (nth_file % nfile_in_batch == 0) {
+            uint32_t pos = (_index.chunk_count() << 25) | d.size();
+            _pos_of_batches.push_back(pos);
+            w.add_int(0, pos);
+            d.push_back(std::byte(orie::next_group_tag));
+            __place_a_name(sv_t(fullpath), d);
+        }
+
+        d.push_back(std::byte(subfile_basename.front()));
+        basename_view = sv_t(subfile_basename.c_str() + 1,
+                             subfile_basename.size() - 1);
+        __place_a_name(basename_view, d);
+        place_trigram(basename_view, nth_file / nfile_in_batch, w);
+        ++nth_file;
+    }
+    return nth_file;
+}
+
+size_t dumper::dump_noconcur(str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                             const dir_info_t& info, size_t nth_file)
+{
+    nth_file = dump_one(fullpath, basename_len, w, info, nth_file);
     // Dump sub directories
     fullpath.push_back(separator);
     size_t subname_since = fullpath.size();
     for (const str_t& subdir_basename : info.first) {
         fullpath += subdir_basename;
         if (!is_pruned(fullpath)) 
-            dump_noconcur(fullpath, subdir_basename.size(), 
-                          fetch_dir_info(fullpath));
+            nth_file = dump_noconcur(fullpath, subdir_basename.size(), w,
+                                     fetch_dir_info(fullpath), nth_file);
         fullpath.erase(subname_since);
     }
 
     // Dump dir pop tag
     fullpath.pop_back(); // Pop separator
+    auto& d = _index._unplaced_dat; // aliase
     d.push_back(std::byte(dir_pop_tag));
     if (d.size() >= chunk_size_hint) {
         d.push_back(std::byte(next_chunk_tag));
-        _data_dumped.add_last_chunk();
+        _index.add_last_chunk();
+        w.append_pending_to_file();
     }
+    return nth_file;
 }
 
-void dumper::dump_concur(str_t& fullpath, size_t basename_len, 
-                         const dir_info_t& info)
+size_t dumper::dump_concur(str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                           const dir_info_t& info, size_t nth_file)
 {
     std::vector<std::future<dir_info_t>> sub_dir_infos(info.first.size());
     str_t fullpath_cpy(fullpath + separator);
@@ -134,16 +176,7 @@ void dumper::dump_concur(str_t& fullpath, size_t basename_len,
 
     // Dump dir tag, basename len, basename and sub files
     // while `fetch_dir_info` are running in background
-    uint16_t len16(basename_len);
-    auto& d = _data_dumped._unplaced_dat; // aliase
-    d.push_back(std::byte(orie::dir_tag));
-    const std::byte* ptr = reinterpret_cast<const std::byte*>(&len16);
-    d.insert(d.cend(), ptr, ptr + sizeof(uint16_t));
-    ptr = reinterpret_cast<const std::byte*>(fullpath.c_str() + fullpath.size()
-                                             - basename_len);
-    d.insert(d.cend(), ptr, ptr + sizeof(char_t) * basename_len);
-    d.insert(d.cend(), info.second.cbegin(), info.second.cend());
-
+    nth_file = dump_one(fullpath, basename_len, w, info, nth_file);
     // Dump sub directories
     fullpath.push_back(separator);
     size_t subname_since = fullpath.size();
@@ -152,52 +185,63 @@ void dumper::dump_concur(str_t& fullpath, size_t basename_len,
         fullpath += subdir_basename;
         dir_info_t subdir_info = sub_dir_infos[i].get();
         if (is_noconcur(fullpath))
-            dump_noconcur(fullpath, subdir_basename.size(), subdir_info);
+            nth_file = dump_noconcur(fullpath, subdir_basename.size(), w,
+                                     subdir_info, nth_file);
         else
-            dump_concur(fullpath, subdir_basename.size(), subdir_info);
+            nth_file = dump_concur(fullpath, subdir_basename.size(), w,
+                                   subdir_info, nth_file);
         fullpath.erase(subname_since);
     }
 
     // Dump dir pop tag
+    auto& d = _index._unplaced_dat; // aliase
     fullpath.pop_back(); // Pop separator
     d.push_back(std::byte(dir_pop_tag));
     if (d.size() >= chunk_size_hint) {
         d.push_back(std::byte(next_chunk_tag));
-        _data_dumped.add_last_chunk();
+        _index.add_last_chunk();
+        w.append_pending_to_file();
     }
+    return nth_file;
 }
 
 void dumper::rebuild_database() {
-    _data_dumped.clear();
+    _index.clear();
+    _invidx.clear();
+    _pos_of_batches.clear();
+    arr2d_writer w(_invidx.file_path());
+    size_t n_file;
 
     if (_root_path.size() == 1) {
 #ifdef _WIN32
         // On Windows, if root path is '\', dump all drives;
         // Dump fake root dir's metadata first
-        _data_dumped._unplaced_dat.assign({
-            std::byte(dir_tag), std::byte(), std::byte()
-        }); // Tag and name length (0)
+        _index._unplaced_dat.assign({
+            std::byte(), std::byte()
+            std::byte(dir_tag), std::byte(), std::byte(),
+        }); // Parent path length (0), tag and name length (0)
 
         // All drives are its sub dir
-        for (str_t dri = L"\\C:\\"; dri[1] <= L'Z'; ++dri[1]) {
+        for (str_t dri = L"\\A:\\"; dri[1] <= L'Z'; ++dri[1]) {
             if (::GetDriveTypeW(dri.c_str() + 1) != DRIVE_FIXED)
                 continue;
-            // For Windows drives only, '\' must be present to fetch info
+            // For Windows drives only, '\' must be present 
+            // for its `stat` to return without error
             dir_info_t dri_info = fetch_dir_info(dri);
-            dri.pop_back(); // dump_*concur must start without '\'
+            dri.pop_back(); // dump_*concur must NOT have ending '\\'
             if (is_noconcur(dri) || is_noconcur(_root_path))
-                dump_noconcur(dri, 2, dri_info);
-            else dump_concur(dri, 2, dri_info);
+                dump_noconcur(dri, 2, dri_info, 1);
+            else dump_concur(dri, 2, dri_info, 1);
             dri.push_back(separator);
         }
 
-        _data_dumped._unplaced_dat.push_back(std::byte(dir_pop_tag));
+        _index._unplaced_dat.push_back(std::byte(dir_pop_tag));
 #else
         dir_info_t root_info = fetch_dir_info(_root_path);
         str_t dummy;
         if (is_noconcur(_root_path))
-            dump_noconcur(dummy, 0, root_info);
-        else dump_concur(dummy, 0, root_info);
+            n_file = dump_noconcur(dummy, 0, w, root_info, 0);
+        else n_file = dump_concur(dummy, 0, w, root_info, 0);
 #endif
 
     } else {
@@ -213,16 +257,31 @@ void dumper::rebuild_database() {
 #endif
 
         if (is_noconcur(_root_path))
-            dump_noconcur(_root_path, _root_path.size(), root_info);
-        else dump_concur(_root_path, _root_path.size(), root_info);
+            n_file = dump_noconcur(_root_path, _root_path.size(), w, root_info, 0);
+        else n_file = dump_concur(_root_path, _root_path.size(), w, root_info, 0);
     }
-    _data_dumped._unplaced_dat.push_back(std::byte(data_end_tag));
-    _data_dumped.add_last_chunk();
+
+    if (n_file % nfile_in_batch == 0) {
+        _index._unplaced_dat.push_back(std::byte(next_group_tag));
+        _index._unplaced_dat.push_back(std::byte());
+        _index._unplaced_dat.push_back(std::byte());
+    }
+    _index._unplaced_dat.push_back(std::byte(data_end_tag));
+    _index.add_last_chunk();
+    w.append_pending_to_file();
+    _invidx.refresh();
 }
 
 dumper::dumper(sv_t database_path, fifo_thpool& pool)
-    : _root_path({ separator })
-    , _data_dumped(database_path, 4, false, false), _pool(pool) {}
+    : _root_path({ separator }), _pool(pool)
+    , _index(database_path, 4, false, false)
+    , _invidx(str_t(database_path) + NATIVE_PATH("_inv"))
+    , _pos_of_batches(arr2d_intersect::decompress_entire_line(0, &_invidx)) {}
+
+void dumper::move_file(str_t path) {
+    _index.move_file(path.c_str());
+    _invidx.move_file(std::move(path += NATIVE_PATH("_inv")));
+}
 
 bool dumper::is_pruned(const str_t& fullp) {
     return std::find(_pruned_paths.cbegin(), _pruned_paths.cend(),

@@ -18,7 +18,7 @@ struct arr2d_writer {
 
 class arr2d_reader {
 public:
-    bool rm_on_dtor;
+    bool rmfile_on_dtor;
 private:
 #ifdef _WIN32
     HANDLE _map_descriptor;
@@ -46,12 +46,14 @@ public:
     // ~uint32_t() if page or line is out of bound
     // no throw because out ogf bound is common :)
     uint32_t uncmprs_size(size_t line, size_t page) const noexcept;
+    const orie::str_t& file_path() const noexcept { return _map_path; }
 
     // Move the database file elsewhere. Thread safe but poorly implemented
     void move_file(orie::str_t path);
     // Call this after some numbers are appended with
     // `arr2d_writer::append_to_file` to maniefst recent changes
     void refresh();
+    void clear();
 
     // Throws system error if open failed
     arr2d_reader(orie::str_t invidx_path);

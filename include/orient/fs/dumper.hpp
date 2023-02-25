@@ -1,6 +1,7 @@
 #pragma once
-#include <orient/util/file_mem_chunk.hpp>
+#include <orient/util/arr2d.hpp>
 #include <orient/util/fifo_thpool.hpp>
+#include <orient/util/file_mem_chunk.hpp>
 
 namespace orie {
 namespace dmp {
@@ -13,6 +14,8 @@ struct dumper {
     static constexpr size_t chunk_size_hint = 15000000;
     // Number of chunks loaded into memory
     static constexpr uint8_t cached_chunk_cnt = 4;
+    // Number of files in a batch
+    static constexpr uint8_t nfile_in_batch = 24;
 
     // The path to start scanning filesystem
     str_t _root_path;
@@ -25,32 +28,43 @@ struct dumper {
     // All path must be absolute (start with slash) and have no extra slash
     // or they will be made so during database rebuild.
     std::vector<str_t> _noconcur_paths;
+    fifo_thpool& _pool;
 
     // The filesystem database
     // Outside the class, its _unplaced_dat field MUST NOT BE
     // MODIFIED and shall REMAIN EMPTY
-    file_mem_chunk _data_dumped;
-    fifo_thpool& _pool;
+    file_mem_chunk _index;
+    arr2d_reader _invidx;
+
+    // Map from batch subscript to the batch's position in index
+    // (inverted index to index)
+    // Higher 7 bits are page number; Lower 25 bits are pos inside that page
+    std::vector<uint32_t> _pos_of_batches;
 
     dumper(sv_t database_path, fifo_thpool& pool);
     void rebuild_database();
+    void move_file(str_t path);
 
 private:
     // Simple std::find
     bool is_pruned(const str_t& fullp);
     bool is_noconcur(const str_t& fullp);
 
-    // Basename of child dirs and raw child file data ready to be dumped
+    // Basename of child dirs and basenames of child files
     // dir_fullpath may change inside, but remain unchanged on return
-    typedef std::pair<std::vector<str_t>, std::vector<std::byte>> dir_info_t;
+    typedef std::pair<std::vector<str_t>, std::vector<str_t>> dir_info_t;
     dir_info_t fetch_dir_info(str_t& dir_fullpath);
 
+    // Helper function that serilizes a directory whose contents
+    // are already read into `info`
+    size_t dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                    const dir_info_t& info, size_t nth_file);
     // fullpath may change inside, but remain unchanged on return
-    void dump_concur(str_t& fullpath, size_t basename_len, 
-                     const dir_info_t& info);
+    size_t dump_concur(str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                       const dir_info_t& info, size_t nth_file);
     // fullpath may change inside, but remain unchanged on return
-    void dump_noconcur(str_t& fullpath, size_t basename_len, 
-                       const dir_info_t& info);
+    size_t dump_noconcur(str_t& fullpath, size_t basename_len, arr2d_writer& w,
+                         const dir_info_t& info, size_t nth_file);
 };
 
 }

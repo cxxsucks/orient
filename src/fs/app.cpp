@@ -15,7 +15,7 @@ app& app::update_db() {
     if (_dumper == nullptr)
         throw std::runtime_error("orient database not set with `set_db_path`"
                                  " or `read_conf`");
-    str_t db_path = _dumper->_data_dumped.saving_path();
+    str_t db_path = _dumper->_index.saving_path();
 
     // Having multiple dumpers running gets no performance gain
     static std::mutex global_dump_lock;
@@ -24,11 +24,12 @@ app& app::update_db() {
     // Move current dumper to a temporary location in case it is being used by
     // jobs. Old database is also scheduled to be deleted on job finish.
 #ifdef _WIN32
-    _dumper->_data_dumped.move_file((db_path + std::to_wstring(::rand())).c_str());
+    _dumper->move_file(db_path + std::to_wstring(::rand()));
 #else
-    _dumper->_data_dumped.move_file((db_path + std::to_string(::rand())).c_str());
+    _dumper->move_file(db_path + std::to_string(::rand()));
 #endif
-    _dumper->_data_dumped._rmfile_on_dtor = true;
+    _dumper->_index._rmfile_on_dtor = true;
+    _dumper->_invidx.rmfile_on_dtor = true;
 
     // Setup the new dumper
     std::shared_ptr<dmp::dumper> dumper_new(new dmp::dumper(db_path, _pool));
@@ -219,7 +220,7 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
                    sizeof(char_t) * p.size()) == 0)
             p = _dumper->_root_path;
 
-        fs_data_iter it(&_dumper->_data_dumped, p);
+        fs_data_iter it(_dumper.get(), p);
         if (it == it.end()) // Invalid starting path
             continue;
 

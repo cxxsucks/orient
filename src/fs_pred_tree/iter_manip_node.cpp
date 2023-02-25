@@ -89,9 +89,8 @@ bool downdir_node::next_param(sv_t param) {
 }
 
 bool updir_node::apply_blocked(fs_data_iter& it) {
-    fs_data_record up_rec = it.record(1);
     for (auto& done_item : _last_done_q)
-        if (up_rec == done_item.first)
+        if (it.parent_path() == done_item.first)
             return done_item.second;
     if (!prev)
         return false;
@@ -101,7 +100,7 @@ bool updir_node::apply_blocked(fs_data_iter& it) {
     bool ret = prev->apply_blocked(up_iter);
     
     std::lock_guard<std::mutex> _lck(_last_done_mut);
-    _last_done_q[_last_idx] = std::make_pair(up_rec, ret);
+    _last_done_q[_last_idx] = std::make_pair(it.parent_path(), ret);
     ++_last_idx; _last_idx &= 7;
     return ret;
 }

@@ -113,8 +113,8 @@ uint32_t char_to_trigram(uint32_t low, uint32_t mid, uint32_t high) noexcept {
 }
 
 void place_trigram(sv_t name, uint32_t batch, arr2d_writer& w) {
-    for (size_t i = 0; i < name.size() - 2; ++i) {
-        uint32_t to_add = char_to_trigram(name[i], name[i+1], name[i+2]);
+    for (size_t i = 2; i < name.size(); ++i) {
+        uint32_t to_add = char_to_trigram(name[i-2], name[i-1], name[i]);
         if (to_add != 0)
             w.add_int(to_add, batch);
     }

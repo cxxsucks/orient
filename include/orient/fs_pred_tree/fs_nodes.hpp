@@ -568,7 +568,7 @@ public:
  */
 class updir_node : public fs_mod_node {
     // Circular array queue caching recently judged results
-    std::array<std::pair<fs_data_record, bool>, 8> _last_done_q;
+    std::array<std::pair<str_t, bool>, 8> _last_done_q;
     size_t _last_idx = 0;
     // Lock for the queue.
     std::mutex _last_done_mut;

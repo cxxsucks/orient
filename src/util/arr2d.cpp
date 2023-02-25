@@ -79,6 +79,18 @@ void arr2d_reader::move_file(orie::str_t path) {
     // the file is unmapped.
 }
 
+void arr2d_reader::clear() {
+    if (_mapped_sz == 0)
+        return;
+    if (_map_descriptor >= 0)
+        close(_map_descriptor);
+    unlink(_map_path.c_str());
+    _map_descriptor = open(_map_path.c_str(), O_RDONLY | O_CREAT, 0600);
+    if (_map_descriptor == -1)
+        THROW_SYS_ERROR;
+    refresh();
+}
+
 void arr2d_reader::refresh() {
     const uint32_t* old_dat = _mapped_data;
     struct stat stbuf;
@@ -88,6 +100,7 @@ void arr2d_reader::refresh() {
     if (stbuf.st_size == 0) {
         static const uint32_t dummy[2] = {0, 0};
         _mapped_data = dummy; // Fake page with 0 lines and no next page
+        _mapped_sz = 0;
         return;
     }
 
@@ -112,7 +125,7 @@ fail:
 }
 
 arr2d_reader::arr2d_reader(orie::str_t fpath)
-    : rm_on_dtor(false), _map_path(std::move(fpath))
+    : rmfile_on_dtor(false), _map_path(std::move(fpath))
     , _mapped_data(nullptr) , _mapped_sz(0)
     , _cache_page_idx(0), _cache_page_offset(0)
 {
@@ -127,7 +140,7 @@ arr2d_reader::~arr2d_reader() noexcept {
         munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
     if (_map_descriptor >= 0)
         close(_map_descriptor);
-    if (rm_on_dtor)
+    if (rmfile_on_dtor)
         unlink(_map_path.c_str());
 }
 
