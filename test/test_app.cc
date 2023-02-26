@@ -33,6 +33,7 @@ protected:
     }
     void TearDown() override {
         std::filesystem::remove(_app.db_path());
+        std::filesystem::remove(_app.db_path() + NATIVE_PATH("_inv"));
         std::filesystem::remove(temp_directory_path() / "testConf.txt");
     }
 };
@@ -165,6 +166,7 @@ TEST_F(orieApp, osDefault) {
 
     std::filesystem::remove(conf_dir / "default.txt");
     std::filesystem::remove(conf_dir / "default.db");
+    std::filesystem::remove(conf_dir / "default.db_inv");
     // Create config
     _app = orie::app::os_default(_pool);
     _app.update_db().add_start_path(orie::str_t());

@@ -58,6 +58,7 @@ struct ABunchOfDirs {
     ~ABunchOfDirs() { 
         remove_all(tmpPath);
         remove(dbPath);
+        remove(dbPath += "_inv");
     }
 
     ABunchOfDirs(ABunchOfDirs&& rhs) = delete;
