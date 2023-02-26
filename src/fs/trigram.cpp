@@ -9,7 +9,7 @@ size_t strstr_trigram_ext(sv_t name, uint32_t* out, size_t outsz) noexcept {
         return 0;
     size_t outat = 0;
     for (size_t i = 0; i < name.size() - 2 && outat < outsz; ++i) {
-        uint32_t to_add = char_to_trigram(name[i], name[i+1], name[i+2]);
+        uint32_t to_add = char_to_trigram(name[i], name[i+1], name[i+2]) & 4095;
         if (to_add != 0)
             out[outat++] = to_add;
     }
@@ -55,7 +55,7 @@ glob_trigram_ext(sv_t pat, uint32_t* out, const size_t outsz, bool full) noexcep
         l = m; m = h; h = *p;
         escape = false;
         if (l != 0 && outat < outsz) {
-            uint32_t toadd = char_to_trigram(l, m, h);
+            uint32_t toadd = char_to_trigram(l, m, h) & 4095;
             if (toadd != 0)
                 out[outat++] = toadd;
         }
@@ -103,18 +103,22 @@ fullpath_trigram_ext(sv_t pat, bool glob, uint32_t* out, size_t outsz) {
 }
 
 uint32_t char_to_trigram(uint32_t low, uint32_t mid, uint32_t high) noexcept {
-    // 7 6 5 4 3 2 1 0
-    //   ^   ^     ^ ^ Byte 1, bit 0~3 of result
-    //         ^ ^ ^ ^ Byte 2, bit 4~7 of result
-    //   ^   ^ ^ ^     Byte 3, bit 8~11 of result
-    return (low & 0b11) | ((low & 0b10000) >> 2) | ((low & 0b1000000) >> 3) |
-           ((mid & 0b1111) << 4) |
-           ((high & 0b11100) << 6) | ((high & 0b1000000) << 5);
+    low |= 0b100000; // Trick: Lowercase letters' ASCII codes equal to their
+    mid &= ~(0b100000); // uppercase counterparts' plus 32. After these bit-ors,
+    high |= 0b100000; // lowercase and uppercase share the same trigrams.
+    uint32_t crc = low | (mid << 8) | (high << 16);
+    for (size_t i = 0; i < 32; i++) {
+        bool bit = crc & 0x80000000;
+        crc <<= 1;
+        if (bit)
+            crc ^= 0x1edc6f41;
+    }
+    return crc;
 }
 
 void place_trigram(sv_t name, uint32_t batch, arr2d_writer& w) {
     for (size_t i = 2; i < name.size(); ++i) {
-        uint32_t to_add = char_to_trigram(name[i-2], name[i-1], name[i]);
+        uint32_t to_add = char_to_trigram(name[i-2], name[i-1], name[i]) & 4095;
         if (to_add != 0)
             w.add_int(to_add, batch);
     }
