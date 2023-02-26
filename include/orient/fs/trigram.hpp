@@ -36,7 +36,7 @@ public:
     // is_full == true here does not mean is_fullpath() return true
     void reset_glob_needle(sv_t needle, bool is_full);
 
-    uint32_t next_batch_possible() { return _query.next_intersect(0); }
+    uint32_t next_batch_possible() { return _query.next_intersect(5); }
     // uint32_t next_batch_possible(const fs_data_iter& it);
     // void to_next_batch(fs_data_iter& it);
 
