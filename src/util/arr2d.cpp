@@ -152,7 +152,7 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     _cache_mut.unlock();
 
     // Move the cached page and position to current page
-    if (cache_page_idx == page)
+    if (__likely(cache_page_idx == page))
         return cache_page_offset;
 
     if (cache_page_idx > page)

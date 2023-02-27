@@ -29,7 +29,7 @@ fs_data_record::fs_data_record(const fs_data_record& rhs) noexcept
 fs_data_record::~fs_data_record() noexcept { finish_visit(); }
 
 sv_t fs_data_record::change_batch(size_t batch) noexcept {
-    if (_dumper == nullptr)
+    if (__unlikely(_dumper == nullptr))
         return sv_t();
     finish_visit();
 
@@ -72,13 +72,13 @@ ptrdiff_t fs_data_record::increment() {
 
     // Use while loop in case of multiple dir exit
 pop_dirs:
-    while (_category == dir_pop_tag) {
+    while (__unlikely(_category == dir_pop_tag)) {
         _cur_pos += sizeof(category_tag);
         _viewing += sizeof(category_tag);
         --push_count;
     }
     // A chunk will only end after dir_pop_tag
-    if (_category == next_chunk_tag) {
+    if (__unlikely(_category == next_chunk_tag)) {
         _dumper->_index.finish_visit();
         ++_cur_chunk;
         _cur_pos = 0;
@@ -88,7 +88,7 @@ pop_dirs:
 
     assert(push_count < 2);
     ++_in_batch_pos;
-    if (_in_batch_pos == _dumper->nfile_in_batch) {
+    if (__unlikely(_in_batch_pos == _dumper->nfile_in_batch)) {
         assert(*reinterpret_cast<const category_tag*>(_viewing) ==
                next_group_tag);
         ++_viewing; ++_cur_pos;
@@ -142,7 +142,7 @@ const str_t& fs_data_iter::path() const {
 }
 
 fs_data_iter& fs_data_iter::operator++() {
-    if (!_cur_record.is_visiting())
+    if (__unlikely(!_cur_record.is_visiting()))
         _cur_record.start_visit();
     _opt_fullpath.reset(); _opt_stat.reset();
     if (_push_count == 0)
@@ -150,22 +150,22 @@ fs_data_iter& fs_data_iter::operator++() {
         
     fs_data_record prev_rec(_cur_record);
     ptrdiff_t pushed = _cur_record.increment();
-    while (_recur != iter_mode::enable && pushed > 0)
+    while (__unlikely(_recur != iter_mode::enable) && pushed > 0)
         pushed += _cur_record.increment();
     _tag = _cur_record.file_type();
 
-    if (pushed + static_cast<ptrdiff_t>(_push_count) < 0) {
+    if (__unlikely(pushed + static_cast<ptrdiff_t>(_push_count) < 0)) {
         _push_count = 0;
         _cur_record.finish_visit();
         return *this;
     }
     else _push_count += pushed;
 
-    if (pushed == 1) {
+    if (__unlikely(pushed == 1)) {
         prev_rec.start_visit();
         (_prefix += prev_rec.file_name_view()) += orie::separator;
     }
-    while (pushed < 0) {
+    while (__unlikely(pushed < 0)) {
         _prefix.erase(
             _prefix.find_last_of(
                 orie::separator, _prefix.size() - 2
@@ -174,7 +174,7 @@ fs_data_iter& fs_data_iter::operator++() {
         ++pushed;
     }
 
-    if (_recur == iter_mode::temp_disable)
+    if (__unlikely(_recur == iter_mode::temp_disable))
         _recur = iter_mode::enable;
     return *this;
 }
@@ -257,7 +257,7 @@ fs_data_iter &fs_data_iter::change_root(sv_t root_new) {
                 ++*this;
                 pref_view = sv_t(_prefix);
                 // Remove Extra Slash. 
-                if (!pref_view.empty()) 
+                if (__likely(!pref_view.empty()))
                     pref_view.remove_suffix(1);
                 if (root_new == pref_view)
                     goto done;
@@ -270,7 +270,7 @@ fs_data_iter &fs_data_iter::change_root(sv_t root_new) {
             ++*this;
             pref_view = sv_t(_prefix);
             // Remove Extra Slash. 
-            if (!pref_view.empty()) 
+            if (__likely(!pref_view.empty()))
                 pref_view.remove_suffix(1);
             if (root_new == pref_view)
                 goto done;
@@ -320,7 +320,7 @@ int fs_data_iter::_fetch_stat() const noexcept {
     _opt_stat.emplace();
     int ret_stat = orie::stat(path().c_str(), &_opt_stat.value());
 
-    if (ret_stat != 0)
+    if (__unlikely(ret_stat != 0))
         ::memset(&_opt_stat.value(), 0xff, sizeof(struct stat));
     return ret_stat;
 }

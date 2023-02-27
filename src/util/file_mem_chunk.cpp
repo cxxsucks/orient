@@ -15,7 +15,7 @@ cache_read:
     __writer_lock(); // Cache table is shared (critical section) therefore lock
     // Read cache table. If this chunk is already in, return it
     in_which_cache = _chunkid_to_cacheid[chunk_idx];
-    if (in_which_cache >= 8) 
+    if (__unlikely(in_which_cache >= 8))
         goto cache_write;
     if (at >= _cached_dat[in_which_cache].size()) {
         finish_visit();

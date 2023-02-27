@@ -25,7 +25,17 @@ extern "C" {
 #define NATIVE_PATH(str) str
 #endif
 }
+
 #define NATIVE_SV(str) orie::sv_t(NATIVE_PATH(str))
+#ifndef __likely
+#ifdef __GNUC__
+#define __likely(x) __builtin_expect(!!(x), 1)
+#define __unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#define __likely(x)
+#define __unlikely(x)
+#endif
+#endif
 
 #include <cstring>
 #include <cstdlib>
