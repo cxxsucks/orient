@@ -2,20 +2,21 @@
 #include <orient/pred_tree/builder.hpp>
 #include <chrono>
 
-using test_builder_type = orie::pred_tree::builder<const int, std::string_view>;
+using test_builder_type = orie::pred_tree::builder<int, std::string_view>;
 
 static void __do_test(int argc0, const char* const* argv0, bool expect)
 {
     std::string expr_str;
-    for (int i = 1; i < argc0; ++i)
+    int i;
+    for (i = 1; i < argc0; ++i)
         (expr_str += argv0[i]) += ' ';
 
     test_builder_type builder;
     // All pred trees here only consist of `true false not` whose result is 
     // constant and has nothing to with the value (0 here)
-    EXPECT_EQ(expect, builder.build(argc0, argv0)->apply_blocked(0))
+    EXPECT_EQ(expect, builder.build(argc0, argv0)->apply_blocked(i))
         << "Failed (command as argc and argv):" << expr_str;
-    EXPECT_EQ(expect, builder.build(expr_str)->apply_blocked(0))
+    EXPECT_EQ(expect, builder.build(expr_str)->apply_blocked(i))
         << "Failed (command as a string):" << expr_str;
 }
 
@@ -116,15 +117,16 @@ TEST(builder, updateCost) {
     bm += " -a -false";
     fast.build(bm);
     fast.get()->update_cost();
+    int i = 0;
 
     auto start_time = std::chrono::system_clock::now();
-    ASSERT_TRUE(slow.get()->apply_blocked(0));
+    ASSERT_TRUE(slow.get()->apply_blocked(i));
     time_t slow_cost = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::system_clock::now() - start_time
     ).count();
 
     start_time = std::chrono::system_clock::now();
-    ASSERT_FALSE(fast.get()->apply_blocked(0));
+    ASSERT_FALSE(fast.get()->apply_blocked(i));
     time_t fast_cost = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::system_clock::now() - start_time
     ).count();

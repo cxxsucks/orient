@@ -64,6 +64,27 @@ public:
     }
 
         // Produce `min_result_sync` synchorous results
+        // If `next` is faster, use it.
+        if (_expression.faster_with_next(true)) {
+            while (min_result_sync > 0 && !_cancelled) {
+                bool uncertain =
+                    _expression.next_or_uncertain(_begin, _end, true);
+                if (_begin == _end)
+                    return;
+                if (uncertain) {
+                    ++_cnt_running;
+                    pool.enqueue(pool_job, _begin);
+                } else {
+                    if constexpr (std::is_invocable_v<callback_t, bool, iter_t&>)
+                        callback(false, _begin);
+                    else callback(_begin);
+                    --min_result_sync;
+                }
+            }
+            return;
+        }
+
+        // Fall back on iterative approach if `next` is not faster
         while (_begin != _end && min_result_sync > 0 && !_cancelled) {
             tribool_bad res;
             try {
