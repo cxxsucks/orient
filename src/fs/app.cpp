@@ -208,6 +208,7 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
     if (!has_data())
         return jobs;
     jobs.reserve(_start_paths.size());
+    expr.update_cost();
     // A lock must be introduced or an updatedb may alter data_dumped between
     // construct dataiter(+5 lines) and copy data_dumped to job list(+11 lines)
     std::lock_guard __lck(_paths_mut);
