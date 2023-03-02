@@ -11,8 +11,14 @@ struct statNode : public ::testing::Test {
     size_t _do_tests(orie::pred_tree::fs_node& matcher) {
         fs_data_iter iter(info.dmp.get());
         matcher.update_cost();
-        return std::count_if(iter, iter.end(), [&matcher] (auto& dat_it)
-                             { return matcher.apply_blocked(dat_it); });
+
+        size_t cnt = 0;
+        while (iter.depth() > 0)  {
+            if (matcher.apply_blocked(iter))
+                ++cnt;
+            ++iter;
+        }
+        return cnt;
     }
 };
 
@@ -38,9 +44,9 @@ TEST_F(statNode, strstr) {
     EXPECT_FALSE(matcher.next_param(NATIVE_SV("file")));
     EXPECT_EQ(31, _do_tests(matcher));
 
-    matcher = strstr_node();
-    ASSERT_TRUE(matcher.next_param(NATIVE_SV("ymli")));
-    EXPECT_EQ(2, _do_tests(matcher));
+    strstr_node matcher2;
+    ASSERT_TRUE(matcher2.next_param(NATIVE_SV("ymli")));
+    EXPECT_EQ(2, _do_tests(matcher2));
 }
 
 TEST_F(statNode, regex) {

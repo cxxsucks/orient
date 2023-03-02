@@ -1,6 +1,7 @@
 #pragma once
 #include <orient/pred_tree/node.hpp>
 #include <orient/fs/data_iter.hpp>
+#include <orient/fs/trigram.hpp>
 
 #include <fstream>
 #include <string>
@@ -108,11 +109,22 @@ protected:
     bool _is_fullpath;
     bool _is_lname;
     bool _is_icase;
-    // Total 256B
+    // Total 256B till here
+
+    dmp::trigram_query _query;
+    fs_data_iter* _last_match;
+    size_t _full_match_depth;
+
+    bool __next_param_impl(sv_t param);
 
 public:
-    double success_rate() const noexcept override { return 0.05; }
-    double cost() const noexcept override { return 2.5e-7; }
+    double success_rate() const noexcept override {
+        return (_is_fullpath ? 0.8 : 0.5)
+               * std::pow(0.1, _query.trigram_size());
+    }
+    double cost() const noexcept override {
+        return _is_fullpath ? 3e-7 : 2e-7;
+    }
     fs_node* clone() const override {
         return new glob_node(*this);
     }
@@ -120,18 +132,32 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
+    bool faster_with_next(bool t) override {
+        return t && !_is_lname && _query.trigram_size();
+    }
+    void next(fs_data_iter& it, const fs_data_iter&, bool t) override;
+
     glob_node(bool full = false, bool lname = false, bool icase = false);
+    glob_node(const glob_node& rhs);
+    glob_node& operator=(const glob_node& r);
 };
 
 // Strictly speaking strstr_node "is not a" glob node,
 // but their memory layout and next_param methods are exactly identical.
 // The inheritance is more of a code reusing trick than an abstraction.
 struct strstr_node : public glob_node {
-    double cost() const noexcept override { return 1e-7; }
+    double success_rate() const noexcept override {
+        return (_is_fullpath ? 0.6 : 0.1)
+               * std::pow(0.1, _query.trigram_size());
+    }
+    double cost() const noexcept override {
+        return _is_fullpath ? 2e-7 : 1e-7;
+    }
     fs_node* clone() const override {
         return new strstr_node(*this);
     }
 
+    bool next_param(sv_t param) override;
     bool apply_blocked(fs_data_iter& it) override; 
 
     strstr_node(bool full = false, bool lname = false, bool icase = false)

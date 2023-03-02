@@ -246,28 +246,28 @@ TEST(trigramSearch, corner) {
 
     // Null reader, has pattern
     query.reset_strstr_needle(NATIVE_SV("Hello"), false);
-    EXPECT_TRUE(query.trigram_avaliable());
+    EXPECT_TRUE(query.trigram_size());
     EXPECT_EQ(query.next_batch_possible(), ~uint32_t());
 
     // Has reader, has pattern (normal)
     arr2d_reader reader(tmpPath.c_str());
     query.reset_reader(&reader); 
-    EXPECT_TRUE(query.trigram_avaliable());
+    EXPECT_TRUE(query.trigram_size());
     EXPECT_NE(query.next_batch_possible(), ~uint32_t());
 
     // Has reader, no pattern
     query.reset_strstr_needle(NATIVE_SV(""), false);
-    EXPECT_FALSE(query.trigram_avaliable());
+    EXPECT_FALSE(query.trigram_size());
     EXPECT_EQ(query.next_batch_possible(), ~uint32_t());
 
     // Very short pattern
     query.reset_strstr_needle(NATIVE_SV("dd"), false);
-    EXPECT_FALSE(query.trigram_avaliable());
+    EXPECT_FALSE(query.trigram_size());
     EXPECT_EQ(query.next_batch_possible(), ~uint32_t());
 
     // Very long pattern
     query.reset_glob_needle(NATIVE_SV("abcdefg*hijklmn?[opq].rst"), false);
-    EXPECT_TRUE(query.trigram_avaliable());
+    EXPECT_TRUE(query.trigram_size());
     // NOTE: intersection stops prematurely when there are at most 4
     // results in a group since iterating 4 groups are faster than
     // intersection query. This especially works for long patterns.

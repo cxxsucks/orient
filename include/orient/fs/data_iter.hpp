@@ -78,13 +78,13 @@ public:
     // A record is smaller if the current position is smaller
     bool operator<(const fs_data_record& rhs) const noexcept {
         assert(_dumper == rhs._dumper);
-        return _cur_chunk == rhs._cur_chunk ? _cur_chunk < rhs._cur_chunk
-                                            : _cur_pos < rhs._cur_pos;
+        return _cur_chunk == rhs._cur_chunk ? _cur_pos < rhs._cur_pos
+                                            : _cur_chunk < rhs._cur_chunk;
     }
     bool operator>(const fs_data_record& rhs) const noexcept {
         assert(_dumper == rhs._dumper);
-        return _cur_chunk == rhs._cur_chunk ? _cur_chunk > rhs._cur_chunk
-                                            : _cur_pos > rhs._cur_pos;
+        return _cur_chunk == rhs._cur_chunk ? _cur_pos > rhs._cur_pos
+                                            : _cur_chunk > rhs._cur_chunk;
     }
 
     // Must call `change_batch` before calling `increment`
@@ -135,9 +135,11 @@ private:
 
 public:
     // Disable view to database. Re-established on ++ call.
-    void close_fsdb_view() noexcept {
-        path(); // Call path() to construct full path string
-        _cur_record.finish_visit();
+    void close_index_view() noexcept {
+        if (_cur_record.is_visiting()) {
+            path(); // Call path() to construct full path string
+            _cur_record.finish_visit();
+        }
     }
 
     // Move *this one level up in filesystem hierchary AND drops it
@@ -173,18 +175,12 @@ public:
             _recur = enable ? iter_mode::temp_disable : iter_mode::enable;
     }
 
-    const fs_data_record& record() const noexcept { return _cur_record; }
     //! @brief Get a reference to current full path string.
     //! @warning The reference is valid until next @a operator++ call.
     const str_t& path() const;
     //! @brief Get the base name current path.
     //! @note Same as @code record().basename() @endcode when iter mode on
-    sv_t basename() const {
-        if (_cur_record.is_visiting())
-            return _cur_record.file_name_view();
-        sv_t res(_opt_fullpath.value());
-        return res.substr(_opt_fullpath.value().find_last_of(separator) + 1);
-    }
+    sv_t basename() const;
 
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
@@ -219,7 +215,12 @@ public:
     blksize_t io_block_size() const noexcept;
 #endif // !_WIN32
 
-    size_t depth() const noexcept;
+    // Simple getters
+    const fs_data_record& record() const noexcept { return _cur_record; }
+    const arr2d_reader& invidx_reader() const noexcept {
+        return _cur_record.dumper()->_invidx;
+    }
+    size_t depth() const noexcept { return _push_count; }
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()
     category_tag file_type() const noexcept { return _tag; }

@@ -33,6 +33,10 @@ sv_t fs_data_record::change_batch(size_t batch) noexcept {
         return sv_t();
     finish_visit();
 
+    if (batch >= _dumper->_pos_of_batches.size()) {
+        _cur_chunk = ~uint8_t();
+        return sv_t();
+    }
     size_t p = _dumper->_pos_of_batches[batch];
     _cur_chunk = static_cast<uint8_t>(p >> 25);
     _cur_pos = p & 0x1ffffff;
@@ -193,8 +197,9 @@ void fs_data_iter::change_batch(size_t batch_at) noexcept {
     // Both views contain no ending separator
     sv_t root_view = sv_t(_prefix).substr(0, _root_path_len);
     sv_t dest = _cur_record.change_batch(batch_at);
+
     if (batch_at == 0) {
-        // Starting of 0th batch, which is also the start of data,
+        // Data iters at the beginning of data (0th batch) by definition
         // has a depth of 0 that may be mistakenly treated as end
         // of data who also has a depth of 0. Escape it by an increment.
         _prefix.clear();
@@ -203,14 +208,16 @@ void fs_data_iter::change_batch(size_t batch_at) noexcept {
         return;
     } 
 
-    // if (!dest.starts_with(root_view)) {
-    if (dest.substr(0, root_view.size()) != root_view)
+    // if (!dest.starts_with(root_view))
+    if (dest.substr(0, root_view.size()) != root_view ||
+        batch_at >= _cur_record.dumper()->_pos_of_batches.size())
         _push_count = 0;
     else {
         // It works. Don't touch.
         _push_count = std::count(dest.begin(), dest.end(), separator)
                     - _root_depth + 1;  // Why the +1 is needed?
         (_prefix = dest).push_back(separator);
+        _tag = _cur_record.file_type();
     }
 }
 
@@ -218,9 +225,7 @@ void fs_data_iter::change_batch(dmp::trigram_query& qry) {
     uint32_t batch_at;
     while ((batch_at = qry.next_batch_possible()) < _cur_record.at_batch())
         ;
-    if (batch_at == ~uint32_t())
-        _push_count = 0;
-    else change_batch(batch_at);
+    change_batch(batch_at);
 }
 
 fs_data_iter &fs_data_iter::change_root(sv_t root_new) {
@@ -245,10 +250,10 @@ fs_data_iter &fs_data_iter::change_root(sv_t root_new) {
     static dmp::trigram_query chroot_qry;
     static std::mutex chroot_qry_lck;
     std::unique_lock lck(chroot_qry_lck);
-    chroot_qry.reset_reader(&_cur_record.dumper()->_invidx);
+    chroot_qry.reset_reader(&invidx_reader());
     chroot_qry.reset_strstr_needle(basename, false);
 
-    if (chroot_qry.trigram_avaliable()) {
+    if (chroot_qry.trigram_size()) {
         while (_push_count != 0) {
             change_batch(chroot_qry);
             for (size_t i = 0; i < _cur_record.dumper()->nfile_in_batch + 2; i++) {
@@ -314,6 +319,13 @@ bool fs_data_iter::operator==(const fs_data_iter& rhs) const noexcept {
     return _push_count == rhs._push_count && _cur_record == rhs._cur_record;
 }
 
+sv_t fs_data_iter::basename() const {
+    if (_cur_record.is_visiting())
+        return _cur_record.file_name_view();
+    sv_t res(_opt_fullpath.value());
+    return res.substr(_opt_fullpath.value().find_last_of(separator) + 1);
+}
+
 int fs_data_iter::_fetch_stat() const noexcept {
     if (_opt_stat.has_value())
         return _opt_stat.value().st_size == ~::off_t() ? -10 : 0;
@@ -329,37 +341,30 @@ gid_t fs_data_iter::gid() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_gid;
 }
-
 uid_t fs_data_iter::uid() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_uid;
 }
-
 time_t fs_data_iter::mtime() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_mtime;
 }
-
 time_t fs_data_iter::atime() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_atime;
 }
-
 time_t fs_data_iter:: ctime() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_ctime;
 }
-
 off_t fs_data_iter::file_size() const noexcept{
     _fetch_stat();
     return _opt_stat.value().st_size;
 }
-
 ino_t fs_data_iter::inode() const noexcept {
     _fetch_stat();
     return _opt_stat.value().st_ino;
 }
-
 mode_t fs_data_iter::mode() const noexcept {
     _fetch_stat();
     return _opt_stat.value().st_mode;
@@ -372,15 +377,11 @@ blksize_t fs_data_iter::io_block_size() const noexcept {
 }
 #endif // !_WIN32
 
-size_t fs_data_iter::depth() const noexcept {
-    return _push_count;
-    // return std::count(_prefix.begin(), _prefix.end(), orie::separator);
-}
-
 // Copy Move Ctor Assignment
 fs_data_iter::fs_data_iter(const fs_data_iter& rhs)
     : _cur_record(rhs._cur_record) , _push_count(rhs._push_count)
-    , _prefix(rhs._prefix) , _recur(rhs._recur), _tag(rhs._tag)
+    , _prefix(rhs._prefix), _root_path_len(rhs._root_path_len)
+    , _root_depth(rhs._root_depth), _recur(rhs._recur), _tag(rhs._tag)
     , _opt_fullpath(rhs._opt_fullpath), _opt_stat(rhs._opt_stat)
 {
     if (_push_count != 0 && !_opt_fullpath.has_value())
@@ -389,7 +390,8 @@ fs_data_iter::fs_data_iter(const fs_data_iter& rhs)
 
 fs_data_iter::fs_data_iter(fs_data_iter&& rhs) noexcept
     : _cur_record(rhs._cur_record) , _push_count(rhs._push_count)
-    , _prefix(std::move(rhs._prefix)), _recur(rhs._recur), _tag(rhs._tag)
+    , _prefix(std::move(rhs._prefix)), _root_path_len(rhs._root_path_len)
+    , _root_depth(rhs._root_depth), _recur(rhs._recur), _tag(rhs._tag)
     , _opt_fullpath(std::move(rhs._opt_fullpath))
     , _opt_stat(std::move(rhs._opt_stat)) 
 { 

@@ -297,3 +297,4 @@ arr2d_intersect::decompress_entire_line(uint32_t line, const arr2d_reader* r) {
     }
     return res;
 }
+

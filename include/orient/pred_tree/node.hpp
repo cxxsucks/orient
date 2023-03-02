@@ -201,7 +201,7 @@ struct truefalse_node : public node<iter_t, sv_t> {
 
     // For -true, next(..., true) advances while next(false) gives end.
     // The inverse is true for -false.
-    void next(iter_t& it, const iter_t& end, bool t) {
+    void next(iter_t& it, const iter_t& end, bool t) override {
         if (t == always)
             ++it;
         else it = end;
@@ -313,11 +313,15 @@ class cond_node : public node<iter_t, sv_t> {
     std::shared_ptr<node<iter_t, sv_t>> _left, _right;
     double _lsucc = 0.5, _lcost = 100, _rsucc = 0.5, _rcost = 100;
     CONDS _cond;
-    bool _commu = true;
+    bool _commu = false;
 
-    bool _left_smaller;
+    // Cache variables.
     // Required to keep results of consecutive calls to `next` sorted
-    iter_t _opposite_res;
+    bool _nextl_uncertain, _nextr_uncertain;
+    // Used to feed _left and _right alternating iterators
+    uint8_t turn = 0;
+    // Store _left and _right's results and return smaller one
+    iter_t _next_res[2];
     // It will never be dereferenced and is often dangling
     iter_t* _last_match;
 
@@ -336,23 +340,29 @@ public:
         if (!_right->communicative() || !_left->communicative()) {
             _commu = false;
             return;
-        }
+        } else _commu = true;
 
-        switch (_cond) {
-        case CONDS::OR: case CONDS::NOR:
-            // Right succeeds with less price
-            r2l = _rcost + _lcost * (1 - _rsucc) < _lcost + _rcost * (1 - _lsucc);
-            break;
-        case CONDS::AND: case CONDS::NAND:
-            // Right fails with less price
-            r2l = _rcost + _lcost * _rsucc < _lcost + _rcost * _lsucc;
-            break;
-        case CONDS::XNOR: case CONDS::XOR: 
-            r2l = false;   // Must evaluate both
-            break;
-        default:
-            std::terminate();
-        }
+        if (_left->faster_with_next(true) && !_right->faster_with_next(true))
+            r2l = false;
+        else if (!_left->faster_with_next(true) && _right->faster_with_next(true))
+            r2l = true;
+        else
+            switch (_cond) {
+            case CONDS::OR: case CONDS::NOR:
+                // Right succeeds with less price
+                r2l = _rcost + _lcost * (1 - _rsucc) 
+                    < _lcost + _rcost * (1 - _lsucc);
+                break;
+            case CONDS::AND: case CONDS::NAND:
+                // Right fails with less price
+                r2l = _rcost + _lcost * _rsucc < _lcost + _rcost * _lsucc;
+                break;
+            case CONDS::XNOR: case CONDS::XOR: 
+                r2l = false;   // Must evaluate both
+                break;
+            default:
+                std::terminate();
+            }
         if (r2l) {
             std::swap(_left, _right);
             std::swap(_lcost, _rcost);
@@ -463,7 +473,7 @@ public:
         // after all - the NEXT_FALSE of an AND node is equivalent to the
         // NEXT_TRUE of an NAND. `t` is no longer useful after this maneuver.
         CONDS cond_true = t ? _cond : CONDS(_cond ^ CONDS::NOT_MASK);
-        node<iter_t, sv_t> *fir = _left.get(), *sec = _right.get();
+        node<iter_t, sv_t> *lhs = _left.get(), *rhs = _right.get();
 
         switch (cond_true) {
         case CONDS::XOR: case CONDS::XNOR:
@@ -472,11 +482,11 @@ public:
         case CONDS::NOR: // BOTH childern must be false
             query = false; [[fallthrough]];
         case CONDS::AND: // BOTH children must be true
-            fir->next(it, end, query);
+            lhs->next(it, end, query);
             while (it != end) {
-                if (sec->apply_blocked(it) == query)
+                if (rhs->apply_blocked(it) == query)
                     return;
-                fir->next(it, end, query);
+                lhs->next(it, end, query);
             }
             break;
 
@@ -484,24 +494,28 @@ public:
             query = false; [[fallthrough]];
         case CONDS::OR: // ANY children needs be true
             if (__unlikely(&it != _last_match)) {
-                _opposite_res = it;
-                fir->next(it, end, query);
-                sec->next(_opposite_res, end, query);
-                _left_smaller = true;
+                ++turn;
+                _next_res[0] = it;
+                _next_res[1] = it;
+                it = _next_res[1]; // TODO: THIS IS SO DUMB!!!!!!!!!!!!!!!!
+                lhs->next(_next_res[turn & 1], end, query);
+                rhs->next(_next_res[!(turn & 1)], end, query);
                 _last_match = &it;
+            }  
 
-            } else {
-                _left_smaller ? fir->next(it, end, query)
-                              : sec->next(it, end, query);
-                if (__unlikely(_opposite_res == it))
-                    _left_smaller ? sec->next(_opposite_res, end, query)
-                                  : sec->next(_opposite_res, end, query);
+            if (_next_res[turn & 1] == _next_res[!(turn & 1)]) {
+                if (_next_res[turn & 1] == end) {
+                    it = end;
+                    return;
+                }
+                rhs->next(_next_res[!(turn & 1)], end, query);
             }
-
-            // `it` always points to smaller of two
-            if (_opposite_res < it) {
-                std::swap(it, _opposite_res);
-                _left_smaller = !_left_smaller;
+            if (_next_res[turn & 1] < _next_res[!(turn & 1)]) {
+                it = _next_res[turn & 1];
+                lhs->next(_next_res[turn & 1], end, query);
+            } else {
+                it = _next_res[!(turn & 1)];
+                rhs->next(_next_res[!(turn & 1)], end, query);
             }
             break;
 
@@ -513,7 +527,7 @@ public:
     bool next_or_uncertain(iter_t& it, const iter_t& end, bool t) override {
         bool query = true;
         CONDS cond_true = t ? _cond : CONDS(_cond ^ CONDS::NOT_MASK);
-        node<iter_t, sv_t> *fir = _left.get(), *sec = _right.get();
+        node<iter_t, sv_t> *lhs = _left.get(), *rhs = _right.get();
 
         switch (cond_true) {
         case CONDS::XOR: case CONDS::XNOR:
@@ -522,15 +536,15 @@ public:
         case CONDS::NOR: // BOTH childern must be false
             query = false; [[fallthrough]];
         case CONDS::AND: { // BOTH children must be true
-            bool fir_unct = fir->next_or_uncertain(it, end, query);
+            bool fir_unct = lhs->next_or_uncertain(it, end, query);
             while (it != end) {
                 if (fir_unct) return true; // Uncertain AND any is uncertain
-                tribool_bad sec_res = sec->apply(it);
+                tribool_bad sec_res = rhs->apply(it);
                 if (sec_res.is_uncertain())
                     return true;
                 else if (sec_res == tribool_bad::True)
                     return false;
-                fir->next(it, end, query);
+                lhs->next(it, end, query);
             }
             break;
         }
@@ -538,33 +552,40 @@ public:
         case CONDS::NAND: // ANY childern needs be false
             query = false; [[fallthrough]];
         case CONDS::OR: { // ANY children needs be true
-            bool unc;
             if (__unlikely(&it != _last_match)) {
-                _opposite_res = it;
-                unc = fir->next_or_uncertain(it, end, query);
-                sec->next_or_uncertain(_opposite_res, end, query);
-                _left_smaller = true;
+                ++turn;
+                _next_res[turn & 1] = it;
+                _next_res[!(turn & 1)] = it;
+                it = _next_res[!(turn & 1)]; // TODO: THIS IS SO DUMB!!!!!!!!!!!!!!!!
+                _nextl_uncertain = 
+                    lhs->next_or_uncertain(_next_res[turn & 1], end, query);
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
                 _last_match = &it;
+            }  
 
+            if (_next_res[turn & 1] == _next_res[!(turn & 1)]) {
+                if (_next_res[turn & 1] == end) {
+                    it = end;
+                    return false;
+                }
+                _nextl_uncertain &= _nextr_uncertain;
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
+            }
+            if (_next_res[turn & 1] < _next_res[!(turn & 1)]) {
+                it = _next_res[turn & 1];
+                bool ret = _nextl_uncertain;
+                _nextl_uncertain = 
+                    lhs->next_or_uncertain(_next_res[turn & 1], end, query);
+                return ret;
             } else {
-                unc = _left_smaller ? fir->next_or_uncertain(it, end, query)
-                                    : sec->next_or_uncertain(it, end, query);
-                if (__unlikely(_opposite_res == it))
-                    _left_smaller
-                        ? sec->next_or_uncertain(_opposite_res, end, query)
-                        : sec->next_or_uncertain(_opposite_res, end, query);
+                it = _next_res[!(turn & 1)];
+                bool ret = _nextr_uncertain;
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
+                return ret;
             }
-
-            // `it` always points to smaller of two
-            if (_opposite_res < it) {
-                std::swap(it, _opposite_res);
-                _left_smaller = !_left_smaller;
-                // Whether the opposite result is uncertain is not cached
-                // and have to be re-evaluated here :(
-                unc = (_left_smaller ? fir->apply(it) : sec->apply(it))
-                      .is_uncertain();
-            }
-            return unc;
         }
 
         default:
@@ -588,8 +609,7 @@ public:
         else _right.reset(heap_node);
     }
  
-    cond_node(CONDS cond)
-        : _cond(cond), _left_smaller(false), _last_match(nullptr) {}
+    cond_node(CONDS cond) : _cond(cond), _last_match(nullptr) {}
 };
 
 // MODIF: -quitmod

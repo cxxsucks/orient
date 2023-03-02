@@ -44,7 +44,7 @@ public:
     std::pair<const uint32_t*, uint32_t>
     line_data(size_t line, size_t page) const noexcept;
     // ~uint32_t() if page or line is out of bound
-    // no throw because out ogf bound is common :)
+    // no throw because out of bound is common :)
     uint32_t uncmprs_size(size_t line, size_t page) const noexcept;
     const orie::str_t& file_path() const noexcept { return _map_path; }
 
@@ -56,7 +56,15 @@ public:
     void clear();
 
     // Throws system error if open failed
-    arr2d_reader(orie::str_t invidx_path);
+    arr2d_reader(orie::str_t arr_file_path);
+    arr2d_reader(const arr2d_reader& r) : arr2d_reader(r._map_path) {}
+    arr2d_reader& operator=(const arr2d_reader& r) {
+        if (&r != this) {
+            this->~arr2d_reader();
+            new (this) arr2d_reader(r);
+        }
+        return *this;
+    }
     // munmap and close
     ~arr2d_reader() noexcept;
 };

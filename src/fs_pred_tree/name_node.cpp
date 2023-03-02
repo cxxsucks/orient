@@ -6,7 +6,22 @@ namespace pred_tree {
 
 glob_node::glob_node(bool full, bool lname, bool icase)
     : _is_fullpath(full), _is_lname(lname), _is_icase(icase) 
+    , _query(nullptr), _last_match(nullptr), _full_match_depth(999999)
 { ::memset(_pattern.data(), 0, sizeof(_pattern)); }
+
+glob_node::glob_node(const glob_node& rhs)
+    : _pattern(rhs._pattern), _is_fullpath(rhs._is_fullpath)
+    , _is_lname(rhs._is_lname), _is_icase(rhs._is_icase)
+    , _query(nullptr, sv_t(_pattern.data()), true, _is_fullpath)
+    , _last_match(nullptr), _full_match_depth(999999) {}
+
+glob_node& glob_node::operator=(const glob_node& r) {
+    if (&r != this) {
+        this->~glob_node();
+        new (this) glob_node(r);
+    }
+    return *this;
+}
 
 bool glob_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
@@ -41,7 +56,54 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
     // Unreachable
 }
 
-bool glob_node::next_param(sv_t param) {
+void glob_node::next(fs_data_iter& it, const fs_data_iter&, bool t) {
+    // Not supporting trigrams? Just iteration :)
+    if (__unlikely(!t || _is_lname || !_query.trigram_size())) {
+        while (it.depth() != 0) {
+            if (apply_blocked(it))
+                goto done;
+            ++it;
+        }
+        goto done;
+    }
+
+    // Not the same iterator as before?
+    if (__unlikely(_last_match != &it)) {
+        _query.reset_reader(&it.invidx_reader());
+        _last_match = &it;
+        _full_match_depth = 999999;
+    }
+    else if (it.depth() > 0)
+        ++it;
+
+    // Iterate through potential leftover since previous full path match
+    // as trigrams only match basenames but fullpath patterns not necessarily
+    // just match basenames.
+    while (it.depth() > _full_match_depth) {
+        if (apply_blocked(it))
+            goto done;
+        ++it;
+    }
+    _full_match_depth = 999999;
+
+    while (it.depth() != 0) {
+        // Iterate over current batch
+        do {
+            if (apply_blocked(it)) {
+                if (_query.is_fullpath())
+                    _full_match_depth = it.depth();
+                goto done;
+            }
+            ++it;
+        } while (it.record().in_batch_pos() != 0 && it.depth() != 0);
+        if (it.depth() != 0)
+            it.change_batch(_query);
+    }
+done:
+    it.close_index_view();
+}
+
+bool glob_node::__next_param_impl(sv_t param) {
     if (_pattern[0] != '\0')
         return false;
 
@@ -63,6 +125,20 @@ bool glob_node::next_param(sv_t param) {
     }
     ::memcpy(_pattern.data(), param.data(), param.size() * sizeof(char_t));
     return true;
+}
+
+bool glob_node::next_param(sv_t param) {
+    bool res = __next_param_impl(param);
+    if (res && param.size() >= 3 && param[0] != '-' && param[1] != '-')
+        _query.reset_glob_needle(param, _is_fullpath);
+    return res;
+}
+
+bool strstr_node::next_param(sv_t param) {
+    bool res = __next_param_impl(param);
+    if (res && param.size() >= 3 && param[0] != '-' && param[1] != '-')
+        _query.reset_strstr_needle(param, _is_fullpath);
+    return res;
 }
 
 bool strstr_node::apply_blocked(fs_data_iter& it) {

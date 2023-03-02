@@ -25,10 +25,9 @@ class trigram_query {
 public:
     // Getter
     bool is_fullpath() const noexcept { return _is_full; }
-    bool trigram_avaliable() const noexcept
-        { return !_query._lines_to_query.empty(); }
-    void reset_reader(const arr2d_reader* reader)
-        { if (_query.reader() != reader) _query.set_reader(reader); }
+    size_t trigram_size() const noexcept
+        { return _query._lines_to_query.size(); }
+    void reset_reader(const arr2d_reader* reader) { _query.set_reader(reader); }
     void rewind() noexcept { _query.rewind(); }
 
     // is_fullpath() will return the same as is_full here
