@@ -98,6 +98,7 @@ bool updir_node::apply_blocked(fs_data_iter& it) {
 
     fs_data_iter up_iter = it;
     up_iter.updir();
+    it.close_index_view();
     bool ret = prev->apply_blocked(up_iter);
     
     std::lock_guard<std::mutex> _lck(_last_done_mut);

@@ -23,7 +23,8 @@ namespace orie {
 #endif
 // Default ctor creates an invalid record and the other fields are unused
 fs_data_record::fs_data_record(dmp::dumper* dumper) noexcept
-    : _dumper(dumper), _cur_batch(~uint32_t()), _is_viewing(false) { }
+    : _dumper(dumper), _cur_chunk(~uint32_t()), _cur_batch(~uint32_t())
+    , _is_viewing(false) { }
 
 fs_data_record::fs_data_record(const fs_data_record& rhs) noexcept
     // Copied record does NOT acquire a filesystem database view!
@@ -42,7 +43,7 @@ sv_t fs_data_record::change_batch(size_t batch) noexcept {
     finish_visit();
 
     if (batch >= _dumper->_pos_of_batches.size()) {
-        _cur_chunk = 4096;
+        _cur_chunk = ~uint32_t();
         return sv_t();
     }
     // TODO: forward index files larger than 32bit limit?
@@ -196,7 +197,8 @@ fs_data_iter& fs_data_iter::updir() {
     _prefix.erase(
         _prefix.find_last_of(orie::separator, _prefix.size() - 2) + 1
     );
-    _cur_record = fs_data_record();
+    _cur_record = fs_data_record(_cur_record.dumper());
+    _tag = dir_tag;
     _opt_stat.reset();
     return *this;
 }
@@ -301,16 +303,24 @@ done:
 }
 
 bool fs_data_iter::empty_dir() const noexcept {
-    fs_data_record rec = _cur_record;
-    rec.start_visit();
-    if (rec.file_type() != category_tag::dir_tag)
+    if (!_cur_record.valid())
+        return false;
+    if (_tag != category_tag::dir_tag)
         return true;
+    fs_data_record rec = _cur_record;
     // If a dir is not empty, it would descend into itself 
     // after incrementing, resulting a positive return.
+    rec.start_visit();
     return rec.increment() <= 0;
 }
 
 fs_data_iter fs_data_iter::current_dir_iter() const {
+    if (!_cur_record.valid()) {
+        fs_data_iter res(_cur_record.dumper(), path());
+        res.set_recursive(false);
+        return res;
+    }
+
     if (empty_dir())
         return end();
     fs_data_iter res(*this);

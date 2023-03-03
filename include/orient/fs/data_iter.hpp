@@ -63,6 +63,7 @@ public:
     uint8_t in_batch_pos() const noexcept { return _in_batch_pos; };
     uint32_t at_batch() const noexcept { return _cur_batch; };
     dmp::dumper* dumper() const noexcept { return _dumper; };
+    bool valid() const noexcept { return _cur_chunk < 4096; }
 
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.

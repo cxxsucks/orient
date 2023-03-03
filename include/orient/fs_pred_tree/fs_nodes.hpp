@@ -600,7 +600,7 @@ class updir_node : public fs_mod_node {
     std::mutex _last_done_mut;
 
 public:
-    double cost() const noexcept override { return prev_cost / 8.0 + 2e-7; }
+    double cost() const noexcept override { return prev_cost * 0.4 + 2e-7; }
     fs_node* clone() const override {
         return new updir_node(*this);
     }
@@ -626,7 +626,7 @@ class downdir_node : public fs_mod_node {
     size_t _min_cnt = 0;
 
 public:
-    double cost() const noexcept override { return prev_cost * 8.0 + 5e-8; }
+    double cost() const noexcept override { return prev_cost * 8.0 + 2e-7; }
     fs_node* clone() const override {
         return new downdir_node(*this);
     }
