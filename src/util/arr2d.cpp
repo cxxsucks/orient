@@ -10,7 +10,7 @@ void arr2d_writer::add_int(size_t row, uint32_t val) {
                              std::vector<uint32_t>());
 
     // Check if the value is already placed, ensuring the arrays are ascending
-    if (_data_pending[row].empty() || _data_pending[row].back() < val)
+    if (row <= 1 || _data_pending[row].empty() || _data_pending[row].back() < val)
         _data_pending[row].push_back(val);
 }
 

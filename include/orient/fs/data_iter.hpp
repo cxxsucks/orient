@@ -15,16 +15,19 @@ namespace dmp { class trigram_query; }
 class fs_data_record {
 private:
     dmp::dumper* _dumper;
-    // Current position in the chunk of Normal Index
-    size_t _cur_pos;
-    const std::byte* _viewing;
-    // Current chunk in Normal Index
-    uint8_t _cur_chunk,
-    // Current position in the batch of Inverted Index
-            _in_batch_pos;
-    bool _is_viewing;
+
+    // Current chunk in Forward Index, 0~4095
+    uint32_t _cur_chunk;
     // Current batch in Inverted Index
     uint32_t _cur_batch;
+
+    const std::byte* _viewing;
+    // Current position in current chunk of Forward Index
+    size_t _cur_pos;
+
+    // Current position in the batch of Inverted Index
+    uint8_t _in_batch_pos;
+    bool _is_viewing;
 
 public:
     //! @brief Open views to filesystem database 

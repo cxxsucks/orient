@@ -17,14 +17,22 @@
 
 namespace orie {
 
+#ifdef __GNUC_STDC_INLINE__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+// Default ctor creates an invalid record and the other fields are unused
 fs_data_record::fs_data_record(dmp::dumper* dumper) noexcept
-    : _dumper(dumper), _is_viewing(false), _cur_batch(~uint32_t()) { }
+    : _dumper(dumper), _cur_batch(~uint32_t()), _is_viewing(false) { }
 
 fs_data_record::fs_data_record(const fs_data_record& rhs) noexcept
     // Copied record does NOT acquire a filesystem database view!
-    : _dumper(rhs._dumper), _cur_pos(rhs._cur_pos), _viewing(nullptr)
-    , _cur_chunk(rhs._cur_chunk), _in_batch_pos(rhs._in_batch_pos)
-    , _is_viewing(false), _cur_batch(rhs._cur_batch) { }
+    : _dumper(rhs._dumper), _cur_chunk(rhs._cur_chunk), _cur_batch(rhs._cur_batch)
+    , _viewing(nullptr), _cur_pos(rhs._cur_pos)
+    , _in_batch_pos(rhs._in_batch_pos), _is_viewing(false) { }
+#ifdef __GNUC_STDC_INLINE__
+#pragma GCC diagnostic pop
+#endif
 
 fs_data_record::~fs_data_record() noexcept { finish_visit(); }
 
@@ -34,12 +42,12 @@ sv_t fs_data_record::change_batch(size_t batch) noexcept {
     finish_visit();
 
     if (batch >= _dumper->_pos_of_batches.size()) {
-        _cur_chunk = ~uint8_t();
+        _cur_chunk = 4096;
         return sv_t();
     }
-    size_t p = _dumper->_pos_of_batches[batch];
-    _cur_chunk = static_cast<uint8_t>(p >> 25);
-    _cur_pos = p & 0x1ffffff;
+    // TODO: forward index files larger than 32bit limit?
+    _cur_pos = _dumper->_pos_of_batches[batch];
+    _cur_chunk = _dumper->_chunk_of_batches[batch];
     start_visit();
 
     assert(*reinterpret_cast<const category_tag*>(_viewing) == next_group_tag);

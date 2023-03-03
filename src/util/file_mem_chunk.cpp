@@ -6,7 +6,7 @@
 namespace orie {
 namespace dmp {
 
-const std::byte* file_mem_chunk::start_visit(uint8_t chunk_idx, size_t at) {
+const std::byte* file_mem_chunk::start_visit(uint32_t chunk_idx, size_t at) {
     if (chunk_idx >= _chunk_num)
         throw std::out_of_range("Chunk Index Out of Range");
     uint8_t in_which_cache;
@@ -33,14 +33,14 @@ cache_write: {
 
     // Only do cache swapping if not in cache
     size_t beg = _chunk_size_presum[chunk_idx],
-            end = _chunk_size_presum[chunk_idx + 1],
-            read_sz = end - beg;
+           end = _chunk_size_presum[chunk_idx + 1],
+           read_sz = end - beg;
     // C-style binary file read
     FILE *fp = fopen(_saving_path.c_str(), NATIVE_PATH("rb")); 
     if (fp == nullptr || end == ~size_t())
         throw std::runtime_error("Cannot read database");
     // TODO: Magic number
-    fseek(fp, sizeof(size_t) * 256 + beg, SEEK_SET);
+    fseek(fp, sizeof(size_t) * 4096 + beg, SEEK_SET);
 
     // Remove previous cache info
     in_which_cache = (_next_overwrite++ % _cache_num);
@@ -68,7 +68,7 @@ cache_write: {
 void file_mem_chunk::add_last_chunk() {
     if (_unplaced_dat.empty())
         return;
-    if (_chunk_num == 255)
+    if (_chunk_num == 4095)
         throw std::out_of_range("Max chunk count reached");
 
     std::lock_guard __lck(_buf_mut);
@@ -109,14 +109,16 @@ void file_mem_chunk::add_last_chunk() {
 
 file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
                                bool empty, bool rm)
-    : _chunkid_to_cacheid(new uint8_t[256 * (1 + sizeof(size_t))])
-    , _chunk_size_presum(reinterpret_cast<size_t*>(_chunkid_to_cacheid + 256))
+    : _chunkid_to_cacheid(new uint8_t[4096 * (1 + sizeof(size_t))])
+    , _chunk_size_presum(reinterpret_cast<size_t*>(_chunkid_to_cacheid + 4096))
     , _cctx(ZSTD_createCCtx()), _dctx(ZSTD_createDCtx())
     , _saving_path(fpath), _chunk_num(0) , _next_overwrite(0)
     , _cache_num(cache_cnt), _rmfile_on_dtor(rm)
 {
-    *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
-    memset(_chunkid_to_cacheid, -1, 256 * (1 + sizeof(size_t)));
+    // *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
+    for (size_t i = 0; i < 8; ++i)
+        _cacheid_to_chunkid[i] = 4095;
+    memset(_chunkid_to_cacheid, -1, 4096 * (1 + sizeof(size_t)));
     _chunk_size_presum[0] = 0;
 
     // Open the file
@@ -133,15 +135,15 @@ file_mem_chunk::file_mem_chunk(sv_t fpath, uint8_t cache_cnt,
     // No exception in this if statement
     if (empty) {
         // TODO: magic num
-        fwrite(_chunk_size_presum, sizeof(size_t), 256, fp);
+        fwrite(_chunk_size_presum, sizeof(size_t), 4096, fp);
     } else {
-        if (fread(_chunk_size_presum, sizeof(size_t), 256, fp) != 256
+        if (fread(_chunk_size_presum, sizeof(size_t), 4096, fp) != 4096
             || _chunk_size_presum[0] != magic_num)
             throw std::runtime_error("Not a valid database");
         size_t nc = 0;
-        while (nc < 256 && _chunk_size_presum[nc] != ~uint64_t())
+        while (nc < 4096 && _chunk_size_presum[nc] != ~uint64_t())
             ++nc;
-        _chunk_num = static_cast<uint8_t>(--nc);
+        _chunk_num = static_cast<uint32_t>(--nc);
     }
     fclose(fp);
 }
@@ -157,7 +159,7 @@ void file_mem_chunk::move_file(const char_t* fpath) {
     _saving_path.assign(fpath);
 }
 
-size_t file_mem_chunk::chunk_size(uint8_t at) const {
+size_t file_mem_chunk::chunk_size(uint32_t at) const {
     if (at >= _chunk_num)
         throw std::out_of_range("Chunk Index Out of Range");
     return _chunk_size_presum[at + 1] - _chunk_size_presum[at];
@@ -170,11 +172,13 @@ void file_mem_chunk::clear() {
         throw std::runtime_error("Cannot clear database");
 
     _chunk_num = 0;
-    *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
-    memset(_chunkid_to_cacheid, -1, 256 * (1 + sizeof(size_t)));
+    // *reinterpret_cast<uint64_t*>(_cacheid_to_chunkid) = ~uint64_t();
+    for (size_t i = 0; i < 8; ++i)
+        _cacheid_to_chunkid[i] = 4095;
+    memset(_chunkid_to_cacheid, -1, 4096 * (1 + sizeof(size_t)));
     _chunk_size_presum[0] = 0;
     // TODO: magic num
-    fwrite(_chunk_size_presum, sizeof(size_t), 256, fp);
+    fwrite(_chunk_size_presum, sizeof(size_t), 4096, fp);
     fclose(fp);
 
     _unplaced_dat.clear();

@@ -11,9 +11,9 @@ namespace dmp {
 struct dumper {
     // TODO: Changeable in conf file
     // Minimum size of each chunk. Actual size will be a bit larger.
-    static constexpr size_t chunk_size_hint = 15000000;
+    static constexpr size_t chunk_size_hint = 2000000;
     // Number of chunks loaded into memory
-    static constexpr uint8_t cached_chunk_cnt = 4;
+    static constexpr uint8_t cached_chunk_cnt = 8;
     // Number of files in a batch
     static constexpr uint8_t nfile_in_batch = 24;
 
@@ -36,10 +36,10 @@ struct dumper {
     file_mem_chunk _index;
     arr2d_reader _invidx;
 
-    // Map from batch subscript to the batch's position in index
-    // (inverted index to index)
-    // Higher 7 bits are page number; Lower 25 bits are pos inside that page
-    std::vector<uint32_t> _pos_of_batches;
+    // Map from batch subscript to the batch's position in forward index
+    // (inverted index to forward index)
+    std::vector<uint32_t> _pos_of_batches; // In-chunk position
+    std::vector<uint32_t> _chunk_of_batches; // Chunk id
 
     dumper(sv_t database_path, fifo_thpool& pool);
     void rebuild_database();

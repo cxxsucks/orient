@@ -96,9 +96,10 @@ size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer
 
     // Dumps full path len and full path if group counter reaches 24
     if (nth_file % nfile_in_batch == 0) {
-        uint32_t pos = (_index.chunk_count() << 25) | d.size();
-        _pos_of_batches.push_back(pos);
-        w.add_int(0, pos);
+        _pos_of_batches.push_back(d.size());
+        w.add_int(0, d.size());
+        _chunk_of_batches.push_back(_index.chunk_count());
+        w.add_int(1, _index.chunk_count());
         sv_t parent_view(fullpath.c_str(), fullpath.size() == basename_len ?
                          0 : fullpath.size() - basename_len - 1);
         d.push_back(std::byte(orie::next_group_tag));
@@ -115,9 +116,10 @@ size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer
     // dump parent path (which is `fullpath` here) if group counter reaches 24
     for (const str_t& subfile_basename : info.second) {
         if (nth_file % nfile_in_batch == 0) {
-            uint32_t pos = (_index.chunk_count() << 25) | d.size();
-            _pos_of_batches.push_back(pos);
-            w.add_int(0, pos);
+            _pos_of_batches.push_back(d.size());
+            w.add_int(0, d.size());
+            _chunk_of_batches.push_back(_index.chunk_count());
+            w.add_int(1, _index.chunk_count());
             d.push_back(std::byte(orie::next_group_tag));
             __place_a_name(sv_t(fullpath), d);
         }
@@ -154,7 +156,8 @@ size_t dumper::dump_noconcur(str_t& fullpath, size_t basename_len, arr2d_writer&
     if (d.size() >= chunk_size_hint) {
         d.push_back(std::byte(next_chunk_tag));
         _index.add_last_chunk();
-        w.append_pending_to_file();
+        if (!(_index.chunk_count() & 15))
+            w.append_pending_to_file();
     }
     return nth_file;
 }
@@ -200,7 +203,8 @@ size_t dumper::dump_concur(str_t& fullpath, size_t basename_len, arr2d_writer& w
     if (d.size() >= chunk_size_hint) {
         d.push_back(std::byte(next_chunk_tag));
         _index.add_last_chunk();
-        w.append_pending_to_file();
+        if (!(_index.chunk_count() & 15))
+            w.append_pending_to_file();
     }
     return nth_file;
 }
@@ -209,6 +213,7 @@ void dumper::rebuild_database() {
     _index.clear();
     _invidx.clear();
     _pos_of_batches.clear();
+    _chunk_of_batches.clear();
     arr2d_writer w(_invidx.file_path());
     size_t n_file;
 
@@ -270,13 +275,15 @@ void dumper::rebuild_database() {
     _index.add_last_chunk();
     w.append_pending_to_file();
     _invidx.refresh();
+    assert(_pos_of_batches.size() == _chunk_of_batches.size());
 }
 
 dumper::dumper(sv_t database_path, fifo_thpool& pool)
     : _root_path({ separator }), _pool(pool)
-    , _index(database_path, 4, false, false)
+    , _index(database_path, cached_chunk_cnt, false, false)
     , _invidx(str_t(database_path) + NATIVE_PATH("_inv"))
-    , _pos_of_batches(arr2d_intersect::decompress_entire_line(0, &_invidx)) {}
+    , _pos_of_batches(arr2d_intersect::decompress_entire_line(0, &_invidx))
+    , _chunk_of_batches(arr2d_intersect::decompress_entire_line(1, &_invidx)) {}
 
 void dumper::move_file(str_t path) {
     _index.move_file(path.c_str());

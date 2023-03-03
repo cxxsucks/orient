@@ -82,13 +82,13 @@ TEST(trigramParse, fullGlobNoSep) {
     // * and ? reset all results
     EXPECT_EQ(glob_trigram_ext(NATIVE_SV("01234?0123*000*"), buf, 32, true),
               std::make_pair(size_t(1), false));
-    EXPECT_EQ(buf[0], char_to_trigram('0', '0', '0') & 4095);
+    EXPECT_EQ(buf[0], char_to_trigram('0', '0', '0') & 8191);
     EXPECT_EQ(glob_trigram_ext(NATIVE_SV("01234?0123*000"), buf, 32, true),
               std::make_pair(size_t(1), true));
-    EXPECT_EQ(buf[0], char_to_trigram('0', '0', '0') & 4095);
+    EXPECT_EQ(buf[0], char_to_trigram('0', '0', '0') & 8191);
     EXPECT_EQ(glob_trigram_ext(NATIVE_SV("01234?0123[*?]000"), buf, 32, true),
               std::make_pair(size_t(3), true));
-    EXPECT_EQ(buf[2], char_to_trigram('0', '0', '0') & 4095);
+    EXPECT_EQ(buf[2], char_to_trigram('0', '0', '0') & 8191);
 
     // Lone '[' and ']' reset results in fullpath glob
     EXPECT_EQ(glob_trigram_ext(NATIVE_SV("012[345*?"), buf, 32, true),

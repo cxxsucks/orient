@@ -9,8 +9,8 @@ size_t strstr_trigram_ext(sv_t name, uint32_t* out, size_t outsz) noexcept {
         return 0;
     size_t outat = 0;
     for (size_t i = 0; i < name.size() - 2 && outat < outsz; ++i) {
-        uint32_t to_add = char_to_trigram(name[i], name[i+1], name[i+2]) & 4095;
-        if (to_add != 0)
+        uint32_t to_add = char_to_trigram(name[i], name[i+1], name[i+2]) & 8191;
+        if (to_add > 1)
             out[outat++] = to_add;
     }
     return outat;
@@ -55,8 +55,8 @@ glob_trigram_ext(sv_t pat, uint32_t* out, const size_t outsz, bool full) noexcep
         l = m; m = h; h = *p;
         escape = false;
         if (l != 0 && outat < outsz) {
-            uint32_t toadd = char_to_trigram(l, m, h) & 4095;
-            if (toadd != 0)
+            uint32_t toadd = char_to_trigram(l, m, h) & 8191;
+            if (toadd > 1)
                 out[outat++] = toadd;
         }
     }
@@ -118,8 +118,8 @@ uint32_t char_to_trigram(uint32_t low, uint32_t mid, uint32_t high) noexcept {
 
 void place_trigram(sv_t name, uint32_t batch, arr2d_writer& w) {
     for (size_t i = 2; i < name.size(); ++i) {
-        uint32_t to_add = char_to_trigram(name[i-2], name[i-1], name[i]) & 4095;
-        if (to_add != 0)
+        uint32_t to_add = char_to_trigram(name[i-2], name[i-1], name[i]) & 8191;
+        if (to_add > 1)
             w.add_int(to_add, batch);
     }
 }
