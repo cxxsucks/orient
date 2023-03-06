@@ -221,9 +221,7 @@ public:
 
     // Simple getters
     const fs_data_record& record() const noexcept { return _cur_record; }
-    const arr2d_reader& invidx_reader() const noexcept {
-        return _cur_record.dumper()->_invidx;
-    }
+    dmp::dumper* dumper() const noexcept { return _cur_record.dumper(); }
     size_t depth() const noexcept { return _push_count; }
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()

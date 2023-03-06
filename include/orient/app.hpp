@@ -55,7 +55,7 @@ public:
 
     // Getters
     const str_t& db_path() const noexcept {
-        return _dumper->_index.saving_path();
+        return _dumper->fwdidx_path();
     }
     const str_t& root_path() const noexcept { return _dumper->_root_path; }
     const str_t& conf_path() const noexcept { return _conf_path; }
@@ -79,7 +79,7 @@ public:
     // Paths can only be set in valid state
     bool valid() const noexcept { return _dumper != nullptr; }
     bool has_data() const noexcept {
-        return _dumper != nullptr && _dumper->_index.chunk_count() != 0;
+        return _dumper != nullptr && _dumper->chunk_count() != 0;
     }
 
     // To keep jobs safe after updatedb, which resets dumped data in

@@ -42,13 +42,13 @@ sv_t fs_data_record::change_batch(size_t batch) noexcept {
         return sv_t();
     finish_visit();
 
-    if (batch >= _dumper->_pos_of_batches.size()) {
+    if (batch >= _dumper->batch_count()) {
         _cur_chunk = ~uint32_t();
         return sv_t();
     }
     // TODO: forward index files larger than 32bit limit?
-    _cur_pos = _dumper->_pos_of_batches[batch];
-    _cur_chunk = _dumper->_chunk_of_batches[batch];
+    _cur_pos = _dumper->in_chunk_pos_of_batch(batch);
+    _cur_chunk = _dumper->chunk_of_batch(batch);
     start_visit();
 
     assert(*reinterpret_cast<const category_tag*>(_viewing) == next_group_tag);
@@ -65,13 +65,13 @@ sv_t fs_data_record::change_batch(size_t batch) noexcept {
 void fs_data_record::start_visit() {
     if (_is_viewing)
         return;
-    _viewing = _dumper->_index.start_visit(_cur_chunk, _cur_pos);
+    _viewing = _dumper->start_visit(_cur_chunk, _cur_pos);
     _is_viewing = true;
 }
 void fs_data_record::finish_visit() noexcept {
     if (!_is_viewing)
         return;
-    _dumper->_index.finish_visit();
+    _dumper->finish_visit();
     _is_viewing = false;
 }
 
@@ -92,10 +92,10 @@ pop_dirs:
     }
     // A chunk will only end after dir_pop_tag
     if (__unlikely(_category == next_chunk_tag)) {
-        _dumper->_index.finish_visit();
+        _dumper->finish_visit();
         ++_cur_chunk;
         _cur_pos = 0;
-        _viewing = _dumper->_index.start_visit(_cur_chunk, 0);
+        _viewing = _dumper->start_visit(_cur_chunk, 0);
         goto pop_dirs;
     }
 
@@ -220,7 +220,7 @@ void fs_data_iter::change_batch(size_t batch_at) noexcept {
 
     // if (!dest.starts_with(root_view))
     if (dest.substr(0, root_view.size()) != root_view ||
-        batch_at >= _cur_record.dumper()->_pos_of_batches.size())
+        batch_at >= _cur_record.dumper()->batch_count())
         _push_count = 0;
     else {
         // It works. Don't touch.
@@ -260,7 +260,7 @@ fs_data_iter &fs_data_iter::change_root(sv_t root_new) {
     static dmp::trigram_query chroot_qry;
     static std::mutex chroot_qry_lck;
     std::unique_lock lck(chroot_qry_lck);
-    chroot_qry.reset_reader(&invidx_reader());
+    _cur_record.dumper()->to_query_of_this_index(chroot_qry);
     chroot_qry.reset_strstr_needle(basename, false);
 
     if (chroot_qry.trigram_size()) {

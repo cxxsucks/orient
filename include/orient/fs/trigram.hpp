@@ -27,7 +27,9 @@ public:
     bool is_fullpath() const noexcept { return _is_full; }
     size_t trigram_size() const noexcept
         { return _query._lines_to_query.size(); }
-    void reset_reader(const arr2d_reader* reader) { _query.set_reader(reader); }
+    void reset_reader(const arr2d_reader* reader) noexcept {
+        _query.set_reader(reader);
+    }
     void rewind() noexcept { _query.rewind(); }
 
     // is_fullpath() will return the same as is_full here

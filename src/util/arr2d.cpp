@@ -125,7 +125,7 @@ fail:
 }
 
 arr2d_reader::arr2d_reader(orie::str_t fpath)
-    : rmfile_on_dtor(false), _map_path(std::move(fpath))
+    : _rmfile_on_dtor(false), _map_path(std::move(fpath))
     , _mapped_data(nullptr) , _mapped_sz(0)
     , _cache_page_idx(0), _cache_page_offset(0)
 {
@@ -140,7 +140,7 @@ arr2d_reader::~arr2d_reader() noexcept {
         munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
     if (_map_descriptor >= 0)
         close(_map_descriptor);
-    if (rmfile_on_dtor)
+    if (_rmfile_on_dtor)
         unlink(_map_path.c_str());
 }
 

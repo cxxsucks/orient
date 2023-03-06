@@ -15,7 +15,7 @@ app& app::update_db() {
     if (_dumper == nullptr)
         throw std::runtime_error("orient database not set with `set_db_path`"
                                  " or `read_conf`");
-    str_t db_path = _dumper->_index.saving_path();
+    str_t db_path = _dumper->fwdidx_path();
 
     // Having multiple dumpers running gets no performance gain
     static std::mutex global_dump_lock;
@@ -28,8 +28,7 @@ app& app::update_db() {
 #else
     _dumper->move_file(db_path + std::to_string(::rand()));
 #endif
-    _dumper->_index._rmfile_on_dtor = true;
-    _dumper->_invidx.rmfile_on_dtor = true;
+    _dumper->set_remove_on_destroy(true);
 
     // Setup the new dumper
     std::shared_ptr<dmp::dumper> dumper_new(new dmp::dumper(db_path, _pool));

@@ -214,7 +214,7 @@ void dumper::rebuild_database() {
     _invidx.clear();
     _pos_of_batches.clear();
     _chunk_of_batches.clear();
-    arr2d_writer w(_invidx.file_path());
+    arr2d_writer w(_invidx.saving_path());
     size_t n_file;
 
     if (_root_path.size() == 1) {

@@ -69,7 +69,7 @@ void glob_node::next(fs_data_iter& it, const fs_data_iter&, bool t) {
 
     // Not the same iterator as before?
     if (__unlikely(_last_match != &it)) {
-        _query.reset_reader(&it.invidx_reader());
+        it.dumper()->to_query_of_this_index(_query);
         _last_match = &it;
         _full_match_depth = 999999;
     }
