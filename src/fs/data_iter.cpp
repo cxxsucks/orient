@@ -231,10 +231,14 @@ void fs_data_iter::change_batch(size_t batch_at) noexcept {
     }
 }
 
-void fs_data_iter::change_batch(dmp::trigram_query& qry) {
+void fs_data_iter::change_batch(dmp::trigram_query& qry, size_t min) {
     uint32_t batch_at;
-    while ((batch_at = qry.next_batch_possible()) < _cur_record.at_batch())
-        ;
+    if (min == 0)
+        while ((batch_at = qry.next_batch_possible()) < _cur_record.at_batch())
+            ;
+    else
+        while ((batch_at = qry.next_fuzz_possible(min)) < _cur_record.at_batch())
+            ;
     change_batch(batch_at);
 }
 

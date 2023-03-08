@@ -149,6 +149,24 @@ TEST_F(arr2d, int) {
     EXPECT_EQ(query.next_intersect(), 100000 + 13 * 17 * 19 * 2);
 }
 
+TEST_F(arr2d, freq) {
+    arr2d_reader reader(tmpPath.c_str());
+    arr2d_intersect query(&reader);
+    query._lines_to_query.assign({0, 1, 3});
+
+    size_t nint = 0;
+    uint32_t res;
+    while ((res = query.next_frequent(2)) < 100000) {
+        ASSERT_EQ(res, nint * 7);
+        ++nint;
+    }
+    EXPECT_EQ(nint, 200); // All of 0th line and 1st line in page 1
+    EXPECT_EQ(res, 100000);
+    EXPECT_EQ(query.next_frequent(2), 13 * 17 + 100000);
+    EXPECT_EQ(query.next_frequent(2), 13 * 19 + 100000);
+    EXPECT_EQ(query.next_frequent(2), 17 * 19 + 100000);
+}
+
 TEST_F(arr2d, intCorner) {
     arr2d_reader reader(tmpPath.c_str());
     arr2d_intersect query;
@@ -174,10 +192,10 @@ TEST_F(arr2d, intCorner) {
     query.rewind();
     EXPECT_EQ(0, query.next_intersect());
 
-    // Line 2 page 2 is empty
+    // Line 2 page 1 is empty
     query._lines_to_query.assign({0, 2});
     query.rewind();
     while (query.next_intersect() < 100000)
-        ; // Skip page 1
+        ; // Skip page 0
     EXPECT_EQ(~uint32_t(), query.next_intersect());
 }

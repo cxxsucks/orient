@@ -162,10 +162,12 @@ public:
     //! @brief Move to the @p batch th batch of the index
     //! @note Calls @c start_visit inside and enables viewing
     void change_batch(size_t batch) noexcept;
-    //! @brief Move to the @b next batch containing the trigram
+    //! @brief Move to the @b next batch that may contain the trigram in @p qry
     //! @param qry The trigram query already has a pattern set 
+    //! @param fuzz_thresh Number of trigrams the name must contain, 0 for
+    //! non-fuzzy matching
     //! @note Becomes @a end if none could be found
-    void change_batch(dmp::trigram_query& qry);
+    void change_batch(dmp::trigram_query& qry, size_t fuzz_thresh = 0);
     // Set this iterator to "normal" directory iteration mode, if not, then
     // set whether the iterator recursively delves into child directories. 
     void set_recursive(bool enable) noexcept {

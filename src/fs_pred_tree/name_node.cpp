@@ -245,6 +245,59 @@ bool regex_node::next_param(sv_t param) {
     return true;
 }
 
+fuzz_node::fuzz_node(bool full, bool lname)
+    : _is_full(full), _is_lname(lname), _next_cutoff(false)
+    , _cutoff(90.0), _query(nullptr), _last_match(nullptr)
+    , _min_haystack_len(0) {};
+
+fuzz_node::fuzz_node(const fuzz_node& rhs)
+    : _matcher(rhs._matcher), _is_full(rhs._is_full)
+    , _is_lname(rhs._is_lname), _next_cutoff(rhs._next_cutoff)
+    , _cutoff(rhs._cutoff) , _query(nullptr), _last_match(nullptr)
+    , _min_haystack_len(rhs._min_haystack_len) {};
+
+fuzz_node& fuzz_node::operator=(const fuzz_node& rhs) {
+    if (&rhs != this) {
+        this->~fuzz_node();
+        new (this) fuzz_node(rhs);
+    }
+    return *this;
+}
+
+void fuzz_node::next(fs_data_iter& it, const fs_data_iter&, bool t) {
+    size_t fuzz_threth = _query.trigram_size() >> 1;
+    // Not supporting trigrams? Just iteration :)
+    if (__unlikely(!t || _is_full || fuzz_threth < 2 || _is_lname)) {
+        while (it.depth() != 0) {
+            if (apply_blocked(it))
+                goto done;
+            ++it;
+        }
+        goto done;
+    }
+
+    // Not the same iterator as before?
+    if (__unlikely(_last_match != &it)) {
+        it.dumper()->to_query_of_this_index(_query);
+        _last_match = &it;
+    }
+    else if (it.depth() > 0)
+        ++it;
+
+    while (it.depth() != 0) {
+        // Iterate over current batch
+        do {
+            if (apply_blocked(it)) 
+                goto done;
+            ++it;
+        } while (it.record().in_batch_pos() != 0 && it.depth() != 0);
+        if (it.depth() != 0)
+            it.change_batch(_query, fuzz_threth);
+    }
+done:
+    it.close_index_view();
+}
+
 bool fuzz_node::apply_blocked(fs_data_iter& it) {
     if (!_matcher.has_value())
         throw orie::pred_tree::uninitialized_node(NATIVE_SV("-fuzz"));
@@ -286,7 +339,8 @@ bool fuzz_node::next_param(sv_t param) {
         _next_cutoff = false;
     } else {
         _matcher.emplace(param);
-        _min_haystack_len = (param.size() >> 1) + 1;
+        _min_haystack_len = param.size() >> 1;
+        _query.reset_fuzz_needle(param);
     } 
     return true;
 }

@@ -106,7 +106,7 @@ uint32_t char_to_trigram(uint32_t low, uint32_t mid, uint32_t high) noexcept {
     low |= 0b100000; // Trick: Lowercase letters' ASCII codes equal to their
     mid &= ~(0b100000); // uppercase counterparts' plus 32. After these bit-ors,
     high |= 0b100000; // lowercase and uppercase share the same trigrams.
-    uint32_t crc = low | (mid << 8) | (high << 16);
+    uint32_t crc = low + (mid << 8) + (high << 16);
     for (size_t i = 0; i < 32; i++) {
         bool bit = crc & 0x80000000;
         crc <<= 1;

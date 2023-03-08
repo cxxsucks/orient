@@ -202,9 +202,9 @@ uint32_t arr2d_reader::uncmprs_size(size_t line, size_t page) const noexcept {
 uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
     if (_reader == nullptr || _lines_to_query.empty())
         return ~uint32_t();
-
     if (!_cur_page_res.empty()) 
         goto retrive;
+
     while (_cur_page_res.empty()) {
         // Sort the numbers by number of elements in current page ascending
         std::sort(_lines_to_query.begin(), _lines_to_query.end(), [this] (uint32_t l, uint32_t r) {
@@ -220,9 +220,10 @@ uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
             _reader->line_data(_lines_to_query[0], _next_page_idx);
         if (cmprs_sz >= ~uint32_t() - 1) {
             _cur_page_res.clear();
-            if (cmprs_sz == ~uint32_t() - 1)
+            if (cmprs_sz == ~uint32_t() - 1) // No more pages
                 return ~uint32_t();
-            ++_next_page_idx;
+            // The page exists, but does not have this line
+            ++_next_page_idx; 
             continue;
         }
         uint32_t uncmprs_sz = lineptr[-1];
@@ -298,3 +299,85 @@ arr2d_intersect::decompress_entire_line(uint32_t line, const arr2d_reader* r) {
     return res;
 }
 
+// A simple uint-to-uint flat map for obtaining frequency data
+// in fuzzy matching. Difference between max and min key must be within 1M.
+class flatmap_bad {
+    size_t min_key;
+    std::vector<uint32_t> values;
+
+public:
+    uint32_t& operator[](size_t at);
+    void clear() noexcept { values.clear(); }
+    void get_frequent_nums(uint32_t threshold, std::vector<uint32_t>& dest) const;
+    flatmap_bad() : min_key(0) { values.reserve(200000); }
+};
+
+uint32_t &flatmap_bad::operator[](size_t at) {
+    if (__unlikely(values.empty()))
+        min_key = at > 16384 ? at - 16384 : 0;
+    if (__unlikely(at < min_key)) {
+        size_t n_ins = min_key - at;
+        n_ins += (at > 16384 ? at - 16384 : 0);
+        ASSERT(n_ins + values.size() < 1200000,
+               "Batch span in a page too large: " << n_ins + values.size());
+        values.insert(values.cbegin(), n_ins, 0);
+        min_key -= n_ins;
+    }
+    if (__unlikely(at >= min_key + values.size())) {
+        values.resize(at - min_key + 100000);
+        ASSERT(values.size() < 1200000,
+               "Batch span in a page too large: " << values.size());
+    }
+    return values[at - min_key];
+}
+
+void flatmap_bad::get_frequent_nums(uint32_t threshold,
+                                    std::vector<uint32_t> &dest) const
+{
+    // Write to `dest` in descending order
+    for (size_t i = values.size() - 1; i != ~size_t(); --i) {
+        if (values[i] >= threshold)
+            dest.push_back(static_cast<uint32_t>(i + min_key));
+    }
+}
+
+uint32_t arr2d_intersect::next_frequent(uint32_t min_freq) {
+    if (_reader == nullptr || _lines_to_query.empty())
+        return ~uint32_t();
+    if (__likely(!_cur_page_res.empty()))
+        goto retrive;
+
+{   std::vector<uint32_t> decode_buf;
+    flatmap_bad cur_page_freqs;
+    while (_cur_page_res.empty()) {
+        for (uint32_t line : _lines_to_query) {
+            auto [lineptr, cmprs_sz] =
+                _reader->line_data(line, _next_page_idx);
+            if (cmprs_sz == ~uint32_t() - 1) // No more pages
+                return ~uint32_t();
+            if (cmprs_sz == ~uint32_t())
+                continue; // The page exists, but does not have this line
+
+            // Uncompress this line and +1 frequency for each elem in it
+            size_t uncmprs_sz = lineptr[-1];
+            decode_buf.resize(uncmprs_sz + 4);
+            size_t decode_sz = decode_buf.size();
+            _codec.decodeArray(lineptr, cmprs_sz, decode_buf.data(), decode_sz);
+            ASSERT(decode_sz == uncmprs_sz, "Decode error");
+            decode_buf.resize(decode_sz);
+
+            // +1 frequency for each elem in the uncompressed line
+            for (uint32_t elem : decode_buf)
+                ++cur_page_freqs[elem];
+        }
+        ++_next_page_idx;
+        cur_page_freqs.get_frequent_nums(min_freq, _cur_page_res);
+        cur_page_freqs.clear();
+    }
+}
+
+retrive:
+    uint32_t res = _cur_page_res.back();
+    _cur_page_res.pop_back();
+    return res;
+}

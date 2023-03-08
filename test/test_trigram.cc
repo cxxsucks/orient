@@ -203,6 +203,18 @@ _do_tests(orie::sv_t pat, bool glob, bool full) {
     return std::make_pair(res == 90000, query.is_fullpath());
 }
 
+static bool _do_fuzz_test(orie::sv_t pat, size_t freq) {
+    trigramTestFilePrep();
+    arr2d_reader reader(tmpPath.c_str());
+    trigram_query query(&reader);
+    query.reset_fuzz_needle(pat);
+
+    uint32_t res;
+    while ((res = query.next_fuzz_possible(freq)) < 90000)
+        ; // Skip first 3 pages
+    return res == 90000;
+}
+
 TEST(trigramSearch, strstr) {
     EXPECT_EQ(_do_tests(NATIVE_SV("hello"), false, false),
               std::make_pair(true, false));
@@ -237,6 +249,19 @@ TEST(trigramSearch, fullGlob) {
               std::make_pair(false, false));
     EXPECT_EQ(_do_tests(NATIVE_SV("Hello*ab"), true, true),
               std::make_pair(true, true));
+}
+
+TEST(trigramSearch, fuzz) {
+    for (size_t i = 10; i > 0; --i) {
+        // "halloworld" against "Hello World", 4 out of 8 trigrams matched
+        EXPECT_EQ(_do_fuzz_test(NATIVE_SV("halloworld"), i), i <= 4);
+        // "hello ", 4 out of 4
+        EXPECT_EQ(_do_fuzz_test(NATIVE_SV("hello "), i), i <= 4);
+        // "hallo would!", 5 out of 10
+        EXPECT_EQ(_do_fuzz_test(NATIVE_SV("hallo would!"), i), i <= 5);
+        // "hllo wrld", 4 out of 7
+        EXPECT_EQ(_do_fuzz_test(NATIVE_SV("hllo wrld"), i), i <= 4);
+    }
 }
 
 TEST(trigramSearch, corner) {

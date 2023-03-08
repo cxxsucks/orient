@@ -71,6 +71,7 @@ public:
 
 // THREAD UNSAFE semi-lazy invert index queryer
 // Create multiple queries for thread safety
+// Can query both intersection and frequency (for fuzzy search)
 class arr2d_intersect {
     const arr2d_reader* _reader;
     // Lazily evaluate results, one page at a time
@@ -85,6 +86,9 @@ public:
 
     // ~uint32_t when finished, i.e., no more intersections
     uint32_t next_intersect(size_t redundancy = 0);
+    // ~uint32_t when finished, i.e., no more integersappearing more than
+    // `min_freq` times in `_lines_to_query`
+    uint32_t next_frequent(uint32_t min_freq);
     void rewind() noexcept { _next_page_idx = 0; _cur_page_res.clear(); }
 
     // Reader is nullable and can be set later

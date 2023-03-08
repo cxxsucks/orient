@@ -195,6 +195,9 @@ class fuzz_node : public fs_node {
     bool _is_lname;
     bool _next_cutoff;
     double _cutoff;
+
+    dmp::trigram_query _query;
+    fs_data_iter* _last_match;
     // Prevent too short matches like "e" matching "hello"
     // Set to half of needle length
     size_t _min_haystack_len;
@@ -206,12 +209,18 @@ public:
         return new fuzz_node(*this);
     }
 
+    bool faster_with_next(bool t) override {
+        return t && !_is_lname && !_is_full &&
+               _query.trigram_size() >= 4;
+    }
+    void next(fs_data_iter& it, const fs_data_iter&, bool t) override;
+
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    fuzz_node(bool full = false, bool lname = false)
-        : _is_full(full), _is_lname(lname), _next_cutoff(false)
-        , _cutoff(90.0), _min_haystack_len(0) {};
+    fuzz_node(bool full = false, bool lname = false);
+    fuzz_node(const fuzz_node& rhs);
+    fuzz_node& operator=(const fuzz_node& rhs);
 };
 
 class type_node : public fs_node {
