@@ -198,8 +198,8 @@ class fuzz_node : public fs_node {
 
     dmp::trigram_query _query;
     fs_data_iter* _last_match;
-    // Prevent too short matches like "e" matching "hello"
-    // Set to half of needle length
+    // Prevent short matches like "mylinux" matching "linux-6.2.2-"
+    // Set to needle length - 2
     size_t _min_haystack_len;
 
 public:

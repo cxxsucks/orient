@@ -233,21 +233,21 @@ bool regex_node::next_param(sv_t param) {
     ), pcre2_code_free);
 
     if (_re == nullptr) {
-            PCRE2_UCHAR errbuf[128];
-            int msg_len = pcre2_get_error_message(errcode, errbuf, 128);
-            if constexpr (sizeof(PCRE2_UCHAR) == 1)
-                throw std::runtime_error(reinterpret_cast<char*>(errbuf));
-            else
-                throw std::runtime_error(orie::xxstrcpy(
-                    std::basic_string_view(errbuf, msg_len)
-                ));
+        PCRE2_UCHAR errbuf[128];
+        int msg_len = pcre2_get_error_message(errcode, errbuf, 128);
+        if constexpr (sizeof(PCRE2_UCHAR) == 1)
+            throw std::runtime_error(reinterpret_cast<char*>(errbuf));
+        else
+            throw std::runtime_error(orie::xxstrcpy(
+                std::basic_string_view(errbuf, msg_len)
+            ));
     }
     return true;
 }
 
 fuzz_node::fuzz_node(bool full, bool lname)
     : _is_full(full), _is_lname(lname), _next_cutoff(false)
-    , _cutoff(90.0), _query(nullptr), _last_match(nullptr)
+    , _cutoff(85.0), _query(nullptr), _last_match(nullptr)
     , _min_haystack_len(0) {};
 
 fuzz_node::fuzz_node(const fuzz_node& rhs)
@@ -339,7 +339,8 @@ bool fuzz_node::next_param(sv_t param) {
         _next_cutoff = false;
     } else {
         _matcher.emplace(param);
-        _min_haystack_len = param.size() >> 1;
+        if (param.size() >= 2)
+            _min_haystack_len = param.size() - 2;
         _query.reset_fuzz_needle(param);
     } 
     return true;
