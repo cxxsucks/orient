@@ -98,9 +98,13 @@ void arr2d_reader::refresh() {
         goto fail;
 
     if (stbuf.st_size == 0) {
+        // Fake page with 0 lines and no next page
+        if (_mapped_sz != 0) // Previous map was not empty
+            if (munmap(const_cast<uint32_t*>(old_dat), _mapped_sz) != 0)
+                goto fail;
         static const uint32_t dummy[2] = {0, 0};
-        _mapped_data = dummy; // Fake page with 0 lines and no next page
         _mapped_sz = 0;
+        _mapped_data = dummy; 
         return;
     }
 
