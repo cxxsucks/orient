@@ -66,7 +66,7 @@ void arr2d_writer::append_pending_to_file() {
 }
 
 #define THROW_SYS_ERROR throw \
-    std::system_error(std::make_error_code(static_cast<std::errc>(errno)))
+    std::system_error(errno, std::system_category())
 
 void arr2d_reader::move_file(orie::str_t path) {
     // On Unix, moving or deleting a file when still open is possible

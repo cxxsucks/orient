@@ -48,7 +48,7 @@ app& app::update_db() {
 }
 
 app& app::stop_auto_update() {
-    if (_auto_update_thread != nullptr) {
+    if (_auto_update_thread.joinable()) {
     {
         std::unique_lock __lck(_paths_mut);
         _auto_update_stopped = true;
@@ -56,8 +56,8 @@ app& app::stop_auto_update() {
         // In the worst case, update starts right before notification
         // Will join after update finishes in this case.
         _auto_update_cv.notify_all();
-        _auto_update_thread->join();
-        _auto_update_thread.reset();
+        _auto_update_thread.join();
+        // _auto_update_thread.reset();
     }
     return *this;
 }
@@ -262,7 +262,7 @@ app::~app() {
 
 #ifndef _WIN32
 app app::os_default(fifo_thpool& pool) {
-    std::string conf_dir = ::getenv("HOME");
+    std::string conf_dir = ::getenv("HOME") ? ::getenv("HOME") : "/var/tmp";
     ::mkdir((conf_dir += "/.config").c_str(), 0755);
     ::mkdir((conf_dir += "/orie").c_str(), 0700);
     app res(pool);
