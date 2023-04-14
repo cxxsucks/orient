@@ -3,6 +3,13 @@ extern "C" {
 }
 #include <orient/util/arr2d.hpp>
 #include <algorithm>
+#include <mutex>
+// Return values of `munmap(2)` are NOT checked because:
+// https://stackoverflow.com/questions/22779556/linux-error-from-munmap
+
+#ifdef _WIN32
+#define fopen _wfopen
+#endif
 
 void arr2d_writer::add_int(size_t row, uint32_t val) {
     if (row >= _data_pending.size())
@@ -69,19 +76,76 @@ void arr2d_writer::append_pending_to_file() {
     std::system_error(errno, std::system_category())
 
 void arr2d_reader::move_file(orie::str_t path) {
+#ifdef _WIN32
+    // On Windows, a file MUST be closed before move or deletion.
+    // A lock must be introduced to avoid accessing during the gap when
+    // the file is unmapped.
+    std::unique_lock __lck(_access_mut);
+    // Unmap original data
+    if (_mapped_sz != 0) {
+        UnmapViewOfFile(_mapped_data);
+        static const uint32_t dummy[2] = {0, 0};
+        _mapped_sz = 0;
+        _mapped_data = dummy;
+    }
+
+    // Close file
+    if (_mapped_descriptor != INVALID_HANDLE_VALUE) {
+        CloseHandle(_mapped_descriptor);
+        _mapped_descriptor = INVALID_HANDLE_VALUE;
+    }
+
+    if (MoveFileExW(_map_path.c_str(), path.c_str(),
+                    MOVEFILE_REPLACE_EXISTING) == 0)
+    {
+        refresh(); 
+        THROW_SYS_ERROR;
+    }
+    _map_path = std::move(path);
+    refresh();
+
+#else
     // On Unix, moving or deleting a file when still open is possible
     if (0 != rename(_map_path.c_str(), path.c_str()))
         THROW_SYS_ERROR;
     _map_path = std::move(path);
-
-    // On Windows, a file MUST be closed before move or deletion.
-    // A lock must be introduced to avoid accessing during the gap when
-    // the file is unmapped.
+#endif
 }
 
 void arr2d_reader::clear() {
     if (_mapped_sz == 0)
         return;
+#ifdef _WIN32
+    std::unique_lock __lck(_access_mut);
+    // Unmap original data
+    if (_mapped_sz != 0) 
+        UnmapViewOfFile(_mapped_data);
+    static const uint32_t dummy[2] = {0, 0};
+    _mapped_sz = 0;
+    _mapped_data = dummy;
+
+    // Close file
+    if (_map_handle != INVALID_HANDLE_VALUE) {
+        if (CloseHandle(_map_handle) == 0)
+            THROW_SYS_ERROR;
+        _map_handle = INVALID_HANDLE_VALUE;
+    }
+
+    // Delete the file at _map_path
+    if (DeleteFileW(_map_path.c_str()) == 0) {
+        refresh();
+        THROW_SYS_ERROR;
+    }
+
+    // Create and open an empty file at _map_path
+    _map_handle = CreateFileA(_map_path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+    if (_map_handle == INVALID_HANDLE_VALUE)
+        THROW_SYS_ERROR;
+
+#else
     if (_map_descriptor >= 0)
         close(_map_descriptor);
     unlink(_map_path.c_str());
@@ -89,22 +153,54 @@ void arr2d_reader::clear() {
     if (_map_descriptor == -1)
         THROW_SYS_ERROR;
     refresh();
+#endif
 }
 
 void arr2d_reader::refresh() {
     const uint32_t* old_dat = _mapped_data;
-    struct stat stbuf;
-    if (fstat(_map_descriptor, &stbuf) != 0)
-        goto fail;
+    size_t old_sz = _mapped_sz;
+#ifdef _WIN32
+    struct _stat64 stbuf;
+    if (_fstat64(_fileno(_map_handle), &stbuf) != 0)
+        THROW_SYS_ERROR
 
     if (stbuf.st_size == 0) {
-        // Fake page with 0 lines and no next page
-        if (_mapped_sz != 0) // Previous map was not empty
-            if (munmap(const_cast<uint32_t*>(old_dat), _mapped_sz) != 0)
-                goto fail;
         static const uint32_t dummy[2] = {0, 0};
         _mapped_sz = 0;
+        _mapped_data = dummy;
+        if (_mapped_sz != 0)
+            UnmapViewOfFile(const_cast<uint32_t*>(old_dat));
+        return;
+    }
+
+    HANDLE map_obj = CreateFileMappingW(_map_handle, NULL, PAGE_READONLY,
+                                        0, 0, NULL);
+    if (map_obj == nullptr)
+        THROW_SYS_ERROR;
+    _mapped_data = static_cast<const uint32_t*>(
+        MapViewOfFile(map_obj, FILE_MAP_READ, 0, 0, 0));
+    if (_mapped_data == nullptr)
+        THROW_SYS_ERROR;
+
+    if (_mapped_sz != 0) // Previous map was not empty
+        UnmapViewOfFile(const_cast<uint32_t*>(old_dat));
+    _mapped_sz = static_cast<size_t>(stbuf.st_size);
+    CloseHandle(map_obj);
+
+#else
+    struct stat stbuf;
+    if (fstat(_map_descriptor, &stbuf) != 0)
+        THROW_SYS_ERROR;
+
+    std::unique_lock __lck(_access_mut);
+    if (stbuf.st_size == 0) {
+        // Fake page with 0 lines and no next page
+        static const uint32_t dummy[2] = {0, 0};
+        _mapped_sz = 0;
+        // The first 0 bytes are definitely correct so no undefined behaviors
         _mapped_data = dummy; 
+        if (old_sz != 0) // Previous map was not empty
+            munmap(const_cast<uint32_t*>(old_dat), old_sz);
         return;
     }
 
@@ -112,20 +208,15 @@ void arr2d_reader::refresh() {
         mmap(nullptr, static_cast<size_t>(stbuf.st_size),
              PROT_READ, MAP_SHARED, _map_descriptor, 0)
     );
-    if (_mapped_data == MAP_FAILED)
-        goto fail;
-    // Here is a window in which _mapped_sz is not equal to actual mapped
-    // size but as long as the file is appended (with arr2d_writer), the
-    // first `_mapped_sz` bytes are valid so no undefined behavior happen.
+    if (_mapped_data == MAP_FAILED) {
+        _mapped_data = old_dat;
+        THROW_SYS_ERROR;
+    }
 
     if (_mapped_sz != 0) // Previous map was not empty
-        if (munmap(const_cast<uint32_t*>(old_dat), _mapped_sz) != 0)
-            goto fail;
+        munmap(const_cast<uint32_t*>(old_dat), _mapped_sz);
     _mapped_sz = static_cast<size_t>(stbuf.st_size);
-    return;
-fail:
-    _mapped_data = old_dat;
-    THROW_SYS_ERROR;
+#endif
 }
 
 arr2d_reader::arr2d_reader(orie::str_t fpath)
@@ -154,13 +245,17 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     uint32_t cache_page_idx = _cache_page_idx;
     uint32_t cache_page_offset = _cache_page_offset;
     _cache_mut.unlock();
-
-    // Move the cached page and position to current page
+    // If the cached page offset is what we want, don't bother visiting data
+    // Repeated access to a same page is th fastest
     if (__likely(cache_page_idx == page))
         return cache_page_offset;
-
+    // If the cached page is smaller than what we want, iterate from cached
+    // page instead of the beginning.
     if (cache_page_idx > page)
         cache_page_idx = (cache_page_offset = 0);
+
+    {
+    std::shared_lock __lck(_access_mut);
     while (cache_page_idx != page) {
         // Lines this page +1
         uint32_t nlinep1 = _mapped_data[cache_page_offset] + 1;
@@ -171,6 +266,7 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
             return ~uint32_t();
         ++cache_page_idx;
         cache_page_offset = next_off;
+    }
     }
 
     // cache_page_offset now points at beginning of required page
@@ -183,12 +279,13 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
 }
 
 std::pair<const uint32_t*, uint32_t>
-arr2d_reader::line_data(size_t line, size_t page) const noexcept {
+arr2d_reader::raw_line_data(size_t line, size_t page) const noexcept {
     uint32_t page_off = page_offset(page);
     if (page_off == ~uint32_t())  // Outbound page
         return std::make_pair(nullptr, ~uint32_t() - 1);
     else if (_mapped_data[page_off] <= line) // Outbound Line
         return std::make_pair(nullptr, ~uint32_t());
+    std::shared_lock __lck(_access_mut);
     return std::make_pair(
         // TODO: EXPLAIN THIS MONSTROSITY!!!
         _mapped_data + page_off + _mapped_data[page_off + line + 1] + 1,
@@ -197,10 +294,53 @@ arr2d_reader::line_data(size_t line, size_t page) const noexcept {
 }
 
 uint32_t arr2d_reader::uncmprs_size(size_t line, size_t page) const noexcept {
-    const uint32_t* lineptr = line_data(line, page).first;
-    if (lineptr == nullptr)
+    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
+    if (cmprs_sz == ~uint32_t() - 1) // Outbound page
         return ~uint32_t();
+    else if (cmprs_sz == ~uint32_t()) // Outbound line
+        return 0;
     return lineptr[-1];
+}
+
+size_t arr2d_reader::line_data(compressionLib::fastPForCodec &co, uint32_t *out,
+                               size_t outsz, size_t line, size_t page) const
+{
+    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
+    if (cmprs_sz == ~uint32_t() - 1) // No more pages
+        return ~uint32_t();
+    // The page exists, but does not have this line
+    else if (cmprs_sz == ~uint32_t())
+        return 0;
+
+    // TODO: Segfault if `lineptr` is invalid due to remapping
+    // Solve by returning {ptr, cmprs_sz, uncmprs_sz} tuple in raw_line_data
+    uint32_t uncmprs_size = lineptr[-1];
+    if (outsz + 4 >= uncmprs_size)
+        return uncmprs_size; // Not enough space
+    co.decodeArray(lineptr, cmprs_sz, out, outsz);
+    ASSERT(outsz == uncmprs_size,
+           "arr2d error in uncompressing line to buffer");
+    return uncmprs_size;
+}
+
+bool arr2d_reader::line_data(compressionLib::fastPForCodec &co,
+    std::vector<uint32_t> &out, size_t line, size_t page) const
+{
+    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
+    if (cmprs_sz == ~uint32_t() - 1) // No more pages
+        return false;
+    // The page exists, but does not have this line
+    else if (cmprs_sz == ~uint32_t())
+        return true;
+
+    size_t uncmprs_size = lineptr[-1];
+    out.resize(uncmprs_size + 4);
+    size_t buf_sz = out.size();
+    co.decodeArray(lineptr, cmprs_sz, out.data(), buf_sz);
+    ASSERT(uncmprs_size == buf_sz,
+           "arr2d error in uncompressing line to buffer");
+    out.resize(uncmprs_size);
+    return true;
 }
 
 uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
@@ -211,68 +351,46 @@ uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
 
     while (_cur_page_res.empty()) {
         // Sort the numbers by number of elements in current page ascending
-        std::sort(_lines_to_query.begin(), _lines_to_query.end(), [this] (uint32_t l, uint32_t r) {
-            return _reader->line_data(l, _next_page_idx).second <
-                   _reader->line_data(r, _next_page_idx).second;
-        });
+        std::sort(_lines_to_query.begin(), _lines_to_query.end(),
+                  [this](uint32_t l, uint32_t r) {
+                      return _reader->uncmprs_size(l, _next_page_idx) <
+                             _reader->uncmprs_size(r, _next_page_idx);
+                  });
         _lines_to_query.erase(std::unique(
             _lines_to_query.begin(), _lines_to_query.end()
         ), _lines_to_query.end());
 
         // Decompress the `_lines_to_query[0]`th line in current page
-        auto [lineptr, cmprs_sz] =
-            _reader->line_data(_lines_to_query[0], _next_page_idx);
-        if (cmprs_sz >= ~uint32_t() - 1) {
-            _cur_page_res.clear();
-            if (cmprs_sz == ~uint32_t() - 1) // No more pages
-                return ~uint32_t();
-            // The page exists, but does not have this line
-            ++_next_page_idx; 
-            continue;
-        }
-        uint32_t uncmprs_sz = lineptr[-1];
-
-        _cur_page_res.resize(uncmprs_sz + 4);
-        size_t decode_sz = _cur_page_res.size();
-        // decodeArray do not change input data
-        _codec.decodeArray(lineptr, cmprs_sz,
-                           _cur_page_res.data(), decode_sz);
-        ASSERT(decode_sz == _cur_page_res.size() - 4, "Decode first line error");
-        ASSERT(decode_sz == uncmprs_sz, "Decode first line error");
-        _cur_page_res.resize(decode_sz);
+        if (!_reader->line_data(_codec, _cur_page_res, _lines_to_query[0],
+                                _next_page_idx))
+            return ~uint32_t();
 
         std::vector<uint32_t> decode_buf, next_res;
         for (size_t i = 1; i < _lines_to_query.size() &&
              _cur_page_res.size() > redundancy; ++i)
         {
-            std::tie(lineptr, cmprs_sz) = 
-                _reader->line_data(_lines_to_query[i], _next_page_idx);
-            if (lineptr == nullptr) {
+            // Decode next line
+            _reader->line_data(_codec, decode_buf, _lines_to_query[i],
+                               _next_page_idx); // Always returns true
+            // Do not call intersection if the line is empty. Not necessary.
+            if (decode_buf.empty()) {
                 _cur_page_res.clear();
                 continue;
             }
-            uncmprs_sz = lineptr[-1];
 
-            // Prepare space for uncompression and intersection
-            decode_buf.resize(uncmprs_sz + 4);
+            // Prepare space for intersection
             next_res.resize(_cur_page_res.size() + 4);
-
-            // Decode next line
-            decode_sz = decode_buf.size();
-            _codec.decodeArray(lineptr, cmprs_sz,
-                               decode_buf.data(), decode_sz);
-            ASSERT(decode_sz == uncmprs_sz, "Decode error");
             // Intersect with previous results
             size_t inters_sz = compressionLib::i32_intersect(
-                decode_buf.data(), decode_sz,
+                decode_buf.data(), decode_buf.size(),
                 _cur_page_res.data(), _cur_page_res.size(), next_res.data());
             next_res.resize(inters_sz);
 
             // Swap preserves buffer allocated
             std::swap(next_res, _cur_page_res);
-            // _cur_page_res should be in descending order, so back()s
-            // return ascending values
         }
+        // _cur_page_res should be in descending order, so back()s
+        // return ascending values
         ++_next_page_idx;
     }
     std::reverse(_cur_page_res.begin(), _cur_page_res.end());
@@ -291,7 +409,7 @@ arr2d_intersect::decompress_entire_line(uint32_t line, const arr2d_reader* r) {
     arr2d_intersect q(r);
     q._lines_to_query.assign({line});
 
-    while (r->line_data(0, q._next_page_idx).second != ~uint32_t() - 1) {
+    while (r->uncmprs_size(line, q._next_page_idx) != ~uint32_t()) {
         uint32_t first = q.next_intersect();
         if (first != ~uint32_t()) {
             res.push_back(first);
@@ -355,22 +473,10 @@ uint32_t arr2d_intersect::next_frequent(uint32_t min_freq) {
     flatmap_bad cur_page_freqs;
     while (_cur_page_res.empty()) {
         for (uint32_t line : _lines_to_query) {
-            auto [lineptr, cmprs_sz] =
-                _reader->line_data(line, _next_page_idx);
-            if (cmprs_sz == ~uint32_t() - 1) // No more pages
-                return ~uint32_t();
-            if (cmprs_sz == ~uint32_t())
-                continue; // The page exists, but does not have this line
-
             // Uncompress this line and +1 frequency for each elem in it
-            size_t uncmprs_sz = lineptr[-1];
-            decode_buf.resize(uncmprs_sz + 4);
-            size_t decode_sz = decode_buf.size();
-            _codec.decodeArray(lineptr, cmprs_sz, decode_buf.data(), decode_sz);
-            ASSERT(decode_sz == uncmprs_sz, "Decode error");
-            decode_buf.resize(decode_sz);
-
-            // +1 frequency for each elem in the uncompressed line
+            if (!_reader->line_data(_codec, decode_buf, line,
+                                    _next_page_idx))
+                return ~uint32_t(); // No more pages
             for (uint32_t elem : decode_buf)
                 ++cur_page_freqs[elem];
         }

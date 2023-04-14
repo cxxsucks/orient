@@ -1,7 +1,7 @@
 #pragma once
-#include <mutex>
 #include <orient/fs/predef.hpp>
 #include <orient/util/compresslib/intersection.h>
+#include <shared_mutex>
 
 struct arr2d_writer {
     orie::str_t _saving_path;
@@ -16,13 +16,14 @@ struct arr2d_writer {
         : _saving_path(std::move(saving_path)) {}
 };
 
+// A view on a 2-dimensional 32bit integers in ascending order
+// created by `arr2d_writer`. 
 class arr2d_reader {
 public:
     bool _rmfile_on_dtor;
 private:
 #ifdef _WIN32
     HANDLE _map_descriptor;
-    std::shared_mutex _move_file_unmap_mut;
 #else
     int _map_descriptor;
 #endif // _WIN32
@@ -35,32 +36,52 @@ private:
     mutable uint32_t _cache_page_idx = 0;
     mutable uint32_t _cache_page_offset = 0;
     mutable std::mutex _cache_mut;
+    mutable std::shared_mutex _access_mut;
 
-    uint32_t page_offset(size_t page) const noexcept;
-
-public:
-    // Get both compressed data and its compressed size in 4 bytes.
     // [nullptr, ~uint32_t()] if line is out of bound but page is not
     // [nullptr, ~uint32_t() - 1] if page is out of bound
     // res.first[-1] is uncompressed size in 4 bytes :)
     std::pair<const uint32_t*, uint32_t>
-    line_data(size_t line, size_t page) const noexcept;
-    // ~uint32_t() if page or line is out of bound
+    raw_line_data(size_t line, size_t page) const noexcept;
+
+public:
+    // Write decompressed data to out and total size (in 4 bytes).
+    // Return -1 if page is out of bound.
+    // If retval > outsz - 4, nothing is written or decompressed and a larger
+    // buffer is required.
+    size_t line_data(compressionLib::fastPForCodec& decomper, uint32_t* out,
+                     size_t outsz, size_t line, size_t page) const;
+    // Write decompressed data to a vector.
+    // Return false if page is out of bound, and out will be empty.
+    bool line_data(compressionLib::fastPForCodec& decomper,
+                   std::vector<uint32_t>& out, size_t line, size_t page) const;
+
+    // Get the offset of `page` in the file.
+    // Matching it against `~uint32_t()` is useful in determining whether
+    // a page exists or not.
+    uint32_t page_offset(size_t page) const noexcept;
+    // ~uint32_t() if page is out of bound, 0 if line is empty or out of bound
     // no throw because out of bound is common :)
     uint32_t uncmprs_size(size_t line, size_t page) const noexcept;
     const orie::str_t& saving_path() const noexcept { return _map_path; }
 
-    // Move the database file elsewhere. Thread safe, lock-free on Unix
+    // Move the database file elsewhere. 
+    // Move, clear and refresh cannot mutually run concurrently,
+    // but they can run with data query functions.
     void move_file(orie::str_t path);
     // Call this after some numbers are appended with
     // `arr2d_writer::append_to_file` to maniefst recent changes
-    // This function is NOT thread safe
+    // Move, clear and refresh cannot mutually run concurrently,
+    // but they can run with data query functions.
     void refresh();
-    // Clear all elements. This function is NOT thread safe
+    // Clear all elements.
+    // Move, clear and refresh cannot mutually run concurrently,
+    // but they can run with data query functions.
     void clear();
 
     // Throws system error if open failed
     arr2d_reader(orie::str_t arr_file_path);
+    // Map again instead of `memcpy`
     arr2d_reader(const arr2d_reader& r) : arr2d_reader(r._map_path) {}
     arr2d_reader& operator=(const arr2d_reader& r) {
         if (&r != this) {

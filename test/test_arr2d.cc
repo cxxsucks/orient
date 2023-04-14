@@ -72,19 +72,19 @@ TEST_F(arr2d, appendSimple) {
 
 TEST_F(arr2d, reader) {
     arr2d_reader reader(tmpPath.c_str());
+    EXPECT_EQ(reader.uncmprs_size(0, 1), 1000);
+    EXPECT_EQ(reader.uncmprs_size(1, 1), 1000);
+    EXPECT_EQ(reader.uncmprs_size(2, 1), 0);
+    EXPECT_EQ(reader.uncmprs_size(3, 1), 1000);
+
+    EXPECT_EQ(0, reader.uncmprs_size(15, 0));
+    EXPECT_EQ(0, reader.uncmprs_size(4, 1));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 999));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(999, 999));
+
     for (size_t i = 0; i < 15; ++i)
         ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
-    ASSERT_EQ(reader.uncmprs_size(0, 1), 1000);
-    ASSERT_EQ(reader.uncmprs_size(1, 1), 1000);
-    ASSERT_EQ(reader.uncmprs_size(2, 1), 0);
-    ASSERT_EQ(reader.uncmprs_size(3, 1), 1000);
-
-    ASSERT_EQ(nullptr, reader.line_data(15, 0).first);
-    ASSERT_EQ(nullptr, reader.line_data(4, 1).first);
-    ASSERT_EQ(nullptr, reader.line_data(0, 2).first);
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(15, 0));
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
 }
 
 TEST_F(arr2d, moveFile) {
@@ -103,17 +103,22 @@ TEST_F(arr2d, moveFile) {
 TEST_F(arr2d, emptyFile) {
     std::filesystem::remove(tmpPath);
     arr2d_reader reader(tmpPath.c_str());
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 0));
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(15, 0));
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
-    SetUp();
-    ASSERT_EQ(~uint32_t(), reader.uncmprs_size(0, 0));
+    // If the array is empty, its 0th page is still valid.
+    EXPECT_EQ(0, reader.uncmprs_size(0, 0));
+    EXPECT_EQ(0, reader.uncmprs_size(15, 0));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
+
+    SetUp(); // SetUp appends data to the array
+    // Until refresh, arr2d_reader are not aware of array writes.
+    EXPECT_EQ(0, reader.uncmprs_size(0, 0));
+    EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 1));
+
     reader.refresh();
+    EXPECT_EQ(reader.uncmprs_size(2, 1), 0);
+    EXPECT_EQ(reader.uncmprs_size(3, 1), 1000);
     for (size_t i = 0; i < 15; ++i)
         ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
-    ASSERT_EQ(reader.uncmprs_size(2, 1), 0);
-    ASSERT_EQ(reader.uncmprs_size(3, 1), 1000);
 }
 
 TEST_F(arr2d, uncmprsOneLine) {
