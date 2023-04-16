@@ -278,68 +278,68 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     return cache_page_offset;
 }
 
-std::pair<const uint32_t*, uint32_t>
+std::tuple<const uint32_t*, uint32_t, uint32_t>
 arr2d_reader::raw_line_data(size_t line, size_t page) const noexcept {
     uint32_t page_off = page_offset(page);
     if (page_off == ~uint32_t())  // Outbound page
-        return std::make_pair(nullptr, ~uint32_t() - 1);
+        return std::make_tuple(nullptr, ~uint32_t(), ~uint32_t());
     else if (_mapped_data[page_off] <= line) // Outbound Line
-        return std::make_pair(nullptr, ~uint32_t());
+        return std::make_tuple(nullptr, 0, 0);
+
+    uint32_t line_off = page_off + line + 1;
     std::shared_lock __lck(_access_mut);
-    return std::make_pair(
+    return std::make_tuple(
         // TODO: EXPLAIN THIS MONSTROSITY!!!
-        _mapped_data + page_off + _mapped_data[page_off + line + 1] + 1,
-        _mapped_data[page_off + line + 2] - _mapped_data[page_off + line + 1] - 1
+        _mapped_data + page_off + _mapped_data[line_off] + 1,
+        _mapped_data[line_off + 1] - _mapped_data[line_off] - 1,
+        _mapped_data[page_off + _mapped_data[line_off]]
     );
 }
 
 uint32_t arr2d_reader::uncmprs_size(size_t line, size_t page) const noexcept {
-    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
-    if (cmprs_sz == ~uint32_t() - 1) // Outbound page
-        return ~uint32_t();
-    else if (cmprs_sz == ~uint32_t()) // Outbound line
-        return 0;
-    return lineptr[-1];
+    return std::get<2>(raw_line_data(line, page));
 }
 
 size_t arr2d_reader::line_data(compressionLib::fastPForCodec &co, uint32_t *out,
                                size_t outsz, size_t line, size_t page) const
 {
-    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
-    if (cmprs_sz == ~uint32_t() - 1) // No more pages
-        return ~uint32_t();
-    // The page exists, but does not have this line
-    else if (cmprs_sz == ~uint32_t())
+    auto [lineptr, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
+    if (cmprs_sz == ~uint32_t()) // Requested page is out of bound
+        return ~size_t();
+    // Do not run decompression if the line has nothing.
+    // Not necessary, but faster for empty lines.
+    else if (uncmprs_sz == 0)
         return 0;
 
     // TODO: Segfault if `lineptr` is invalid due to remapping
     // Solve by returning {ptr, cmprs_sz, uncmprs_sz} tuple in raw_line_data
-    uint32_t uncmprs_size = lineptr[-1];
-    if (outsz + 4 >= uncmprs_size)
-        return uncmprs_size; // Not enough space
+    if (outsz + 4 >= uncmprs_sz)
+        return uncmprs_sz; // Not enough space
     co.decodeArray(lineptr, cmprs_sz, out, outsz);
-    ASSERT(outsz == uncmprs_size,
+    ASSERT(outsz == uncmprs_sz,
            "arr2d error in uncompressing line to buffer");
-    return uncmprs_size;
+    return uncmprs_sz;
 }
 
 bool arr2d_reader::line_data(compressionLib::fastPForCodec &co,
     std::vector<uint32_t> &out, size_t line, size_t page) const
 {
-    auto [lineptr, cmprs_sz] = raw_line_data(line, page);
-    if (cmprs_sz == ~uint32_t() - 1) // No more pages
+    auto [lineptr, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
+    if (cmprs_sz == ~uint32_t()) // Requested page is out of bound
         return false;
-    // The page exists, but does not have this line
-    else if (cmprs_sz == ~uint32_t())
+    // Do not run decompression if the line has nothing.
+    // Not necessary, but faster for empty lines.
+    else if (uncmprs_sz == 0) {
+        out.clear();
         return true;
+    }
 
-    size_t uncmprs_size = lineptr[-1];
-    out.resize(uncmprs_size + 4);
+    out.resize(uncmprs_sz + 4);
     size_t buf_sz = out.size();
     co.decodeArray(lineptr, cmprs_sz, out.data(), buf_sz);
-    ASSERT(uncmprs_size == buf_sz,
+    ASSERT(uncmprs_sz == buf_sz,
            "arr2d error in uncompressing line to buffer");
-    out.resize(uncmprs_size);
+    out.resize(uncmprs_sz);
     return true;
 }
 
@@ -363,7 +363,12 @@ uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
         // Decompress the `_lines_to_query[0]`th line in current page
         if (!_reader->line_data(_codec, _cur_page_res, _lines_to_query[0],
                                 _next_page_idx))
-            return ~uint32_t();
+            return ~uint32_t(); // No more pages; intersection finished
+        if (_cur_page_res.empty()) {
+            // Trying to intersect an empty line; no result in this page
+            ++_next_page_idx;
+            continue;
+        }
 
         std::vector<uint32_t> decode_buf, next_res;
         for (size_t i = 1; i < _lines_to_query.size() &&
@@ -372,11 +377,6 @@ uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
             // Decode next line
             _reader->line_data(_codec, decode_buf, _lines_to_query[i],
                                _next_page_idx); // Always returns true
-            // Do not call intersection if the line is empty. Not necessary.
-            if (decode_buf.empty()) {
-                _cur_page_res.clear();
-                continue;
-            }
 
             // Prepare space for intersection
             next_res.resize(_cur_page_res.size() + 4);

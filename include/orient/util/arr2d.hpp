@@ -38,11 +38,15 @@ private:
     mutable std::mutex _cache_mut;
     mutable std::shared_mutex _access_mut;
 
-    // [nullptr, ~uint32_t()] if line is out of bound but page is not
-    // [nullptr, ~uint32_t() - 1] if page is out of bound
-    // res.first[-1] is uncompressed size in 4 bytes :)
-    std::pair<const uint32_t*, uint32_t>
+    // Tuple of pointer to compressed data, compressed and decompressed size
+    // [nullptr, -1, -1] if page is out of bound
+    // [nullptr, 0, 0] if line is out of bound but page is not
+    std::tuple<const uint32_t*, uint32_t, uint32_t>
     raw_line_data(size_t line, size_t page) const noexcept;
+    // Get the offset of `page` in the file.
+    // Matching it against `~uint32_t()` is useful in determining whether
+    // a page exists or not.
+    uint32_t page_offset(size_t page) const noexcept;
 
 public:
     // Write decompressed data to out and total size (in 4 bytes).
@@ -56,10 +60,6 @@ public:
     bool line_data(compressionLib::fastPForCodec& decomper,
                    std::vector<uint32_t>& out, size_t line, size_t page) const;
 
-    // Get the offset of `page` in the file.
-    // Matching it against `~uint32_t()` is useful in determining whether
-    // a page exists or not.
-    uint32_t page_offset(size_t page) const noexcept;
     // ~uint32_t() if page is out of bound, 0 if line is empty or out of bound
     // no throw because out of bound is common :)
     uint32_t uncmprs_size(size_t line, size_t page) const noexcept;
