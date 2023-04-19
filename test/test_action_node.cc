@@ -25,8 +25,8 @@ struct actionNode : public ::testing::Test {
             b << std::string(1000, 'z'); //~10Kib
             (c << "Hello\nWorld!\n").put('\0');
         }
-        a << "\nHello\nWorld\n"; 
-        b << "\nHello\nWorld\n"; 
+        a << "\nHello\nWorld\n";
+        b << "\nHello\nWorld\n";
     }
 };
 
@@ -120,7 +120,7 @@ TEST_F(actionNode, fprint0) {
     EXPECT_EQ(31, _do_tests(print));
 
     // Close the printing stream by resetting the node
-    print = print_node(false, '\n');  
+    print = print_node(false, '\n');
     // Throws if unable to open output file
 #ifndef _WIN32
     // TODO: no chmod on Windows
@@ -132,7 +132,11 @@ TEST_F(actionNode, fprint0) {
     // There should be 31 null separators in output file
     orie::str_t out_content;
     std::getline(std::basic_ifstream<orie::char_t>(
+#if defined(_WIN32) && !defined(_MSC_VER)
+        orie::xxstrcpy(orie::sv_t(out_path)), std::ios_base::binary
+#else
         out_path, std::ios_base::binary
+#endif // defined
     ), out_content);
     EXPECT_EQ(31, std::count(out_content.begin(), out_content.end(), '\0'));
 

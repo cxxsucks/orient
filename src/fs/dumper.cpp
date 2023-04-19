@@ -32,7 +32,7 @@ __handle_unknown_dtype(const orie::char_t* fullp) noexcept {
     if (S_ISSOCK(stbuf.st_mode))
         return orie::char_t(DT_SOCK); // On Windows these are negative values
     if (S_ISBLK(stbuf.st_mode))
-        return orie::char_t(DT_BLK); 
+        return orie::char_t(DT_BLK);
     // Should not reach here, but don't crash so easily.
     orie::NATIVE_STDERR << NATIVE_PATH("Unknown file type: ") << fullp << '\n';
     return DT_REG;
@@ -74,9 +74,9 @@ dumper::fetch_dir_info(str_t& fullpath) {
         case DT_SOCK: tag = orie::sock_tag; break;
         case DT_CHR:  tag = orie::char_tag; break;
         case DT_REG:  tag = orie::file_tag; break;
-        default: 
+        default:
             // Should not reach, but don't crash because of this
-            std::cerr << "Warning: unknown file type " 
+            std::cerr << "Warning: unknown file type "
                       << static_cast<int>(ent->d_type) << '\n';
             continue; // Do not add it
         }
@@ -89,7 +89,7 @@ dumper::fetch_dir_info(str_t& fullpath) {
 
 size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer& w,
                         const dir_info_t& info, size_t nth_file)
-{  
+{
     auto& d = _index._unplaced_dat; // aliase
     sv_t basename_view(fullpath.c_str() + fullpath.size() - basename_len,
                        basename_len);
@@ -106,7 +106,7 @@ size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer
         __place_a_name(parent_view, d);
     }
 
-    // Dump dir tag, basename len and basename first 
+    // Dump dir tag, basename len and basename first
     d.push_back(std::byte(orie::dir_tag));
     __place_a_name(basename_view, d);
     place_trigram(basename_view, nth_file / nfile_in_batch, w);
@@ -143,7 +143,7 @@ size_t dumper::dump_noconcur(str_t& fullpath, size_t basename_len, arr2d_writer&
     size_t subname_since = fullpath.size();
     for (const str_t& subdir_basename : info.first) {
         fullpath += subdir_basename;
-        if (!is_pruned(fullpath)) 
+        if (!is_pruned(fullpath))
             nth_file = dump_noconcur(fullpath, subdir_basename.size(), w,
                                      fetch_dir_info(fullpath), nth_file);
         fullpath.erase(subname_since);
@@ -222,7 +222,7 @@ void dumper::rebuild_database() {
         // On Windows, if root path is '\', dump all drives;
         // Dump fake root dir's metadata first
         _index._unplaced_dat.assign({
-            std::byte(), std::byte()
+            std::byte(), std::byte(),
             std::byte(dir_tag), std::byte(), std::byte(),
         }); // Parent path length (0), tag and name length (0)
 
@@ -230,13 +230,13 @@ void dumper::rebuild_database() {
         for (str_t dri = L"\\A:\\"; dri[1] <= L'Z'; ++dri[1]) {
             if (::GetDriveTypeW(dri.c_str() + 1) != DRIVE_FIXED)
                 continue;
-            // For Windows drives only, '\' must be present 
+            // For Windows drives only, '\' must be present
             // for its `stat` to return without error
             dir_info_t dri_info = fetch_dir_info(dri);
             dri.pop_back(); // dump_*concur must NOT have ending '\\'
             if (is_noconcur(dri) || is_noconcur(_root_path))
-                dump_noconcur(dri, 2, dri_info, 1);
-            else dump_concur(dri, 2, dri_info, 1);
+                dump_noconcur(dri, 2, w, dri_info, 1);
+            else dump_concur(dri, 2, w, dri_info, 1);
             dri.push_back(separator);
         }
 

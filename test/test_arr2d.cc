@@ -7,7 +7,7 @@ struct arr2d : public testing::Test {
     std::filesystem::path tmpPath;
     arr2d_writer writer;
 
-    arr2d() 
+    arr2d()
         : tmpPath(std::filesystem::temp_directory_path() /
                   ("arr2dTest" + std::to_string(std::random_device()())))
         , writer(tmpPath.native()) { }
@@ -34,7 +34,11 @@ struct arr2d : public testing::Test {
 
 // Simple writer test without using reader
 TEST_F(arr2d, writeSimple) {
+#ifdef _WIN32
+    FILE* st = _wfopen(tmpPath.c_str(), L"rb");
+#else
     FILE* st = fopen(tmpPath.c_str(), "rb");
+#endif // _WIN32
     ASSERT_NE(st, nullptr);
 
     std::unique_ptr<uint32_t[]> dat_buf(new uint32_t[1000000]);

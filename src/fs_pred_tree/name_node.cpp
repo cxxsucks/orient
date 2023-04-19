@@ -5,7 +5,7 @@ namespace orie {
 namespace pred_tree {
 
 glob_node::glob_node(bool full, bool lname, bool icase)
-    : _is_fullpath(full), _is_lname(lname), _is_icase(icase) 
+    : _is_fullpath(full), _is_lname(lname), _is_icase(icase)
     , _query(nullptr), _last_match(nullptr), _full_match_depth(999999)
 { ::memset(_pattern.data(), 0, sizeof(_pattern)); }
 
@@ -27,9 +27,9 @@ bool glob_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
         throw orie::pred_tree::uninitialized_node(NATIVE_SV("--name"));
     if (_is_lname && it.file_type() != link_tag)
-        return false; // Not a link 
+        return false; // Not a link
 
-    if (_is_fullpath && !_is_lname) 
+    if (_is_fullpath && !_is_lname)
         // FNM_CASEFOLD is a GNU extension :(
         return orie::glob_match(_pattern.data(), it.path().c_str(), _is_icase);
 
@@ -145,7 +145,7 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
     if (_pattern[0] == '\0')
         throw orie::pred_tree::uninitialized_node(NATIVE_SV("--name"));
     if (_is_lname && it.file_type() != link_tag)
-        return false; // Not a symlink 
+        return false; // Not a symlink
 
     // Get the target string_view for matching
     sv_t haystack;
@@ -160,7 +160,7 @@ bool strstr_node::apply_blocked(fs_data_iter& it) {
         if (re_len <= 0)
             return true;
         haystack = sv_t(linkat_path, re_len);
-    } 
+    }
     else if (_is_fullpath)
         haystack = it.path();
     else haystack = it.basename();
@@ -176,7 +176,7 @@ bool regex_node::apply_blocked(fs_data_iter& it) {
     if (_re == nullptr)
         throw uninitialized_node(NATIVE_SV("-bregex"));
     if (_is_lname && it.file_type() != link_tag)
-        return false; // Not a link 
+        return false; // Not a link
 
     PCRE2_SPTR re_ptr; ssize_t re_len;
     char_t linkat_path[path_max];
@@ -227,7 +227,7 @@ bool regex_node::next_param(sv_t param) {
     int errcode; PCRE2_SIZE erroffset;
     _re.reset(pcre2_compile(
         // char -> unsigned char
-        reinterpret_cast<PCRE2_SPTR>(param.data()), param.size(), 
+        reinterpret_cast<PCRE2_SPTR>(param.data()), param.size(),
         _is_icase ? PCRE2_CASELESS : 0,
         &errcode, &erroffset, nullptr
     ), pcre2_code_free);
@@ -248,13 +248,13 @@ bool regex_node::next_param(sv_t param) {
 fuzz_node::fuzz_node(bool full, bool lname)
     : _is_full(full), _is_lname(lname), _next_cutoff(false)
     , _cutoff(85.0), _query(nullptr), _last_match(nullptr)
-    , _min_haystack_len(0) {};
+    , _min_haystack_len(0) {}
 
 fuzz_node::fuzz_node(const fuzz_node& rhs)
     : _matcher(rhs._matcher), _is_full(rhs._is_full)
     , _is_lname(rhs._is_lname), _next_cutoff(rhs._next_cutoff)
     , _cutoff(rhs._cutoff) , _query(nullptr), _last_match(nullptr)
-    , _min_haystack_len(rhs._min_haystack_len) {};
+    , _min_haystack_len(rhs._min_haystack_len) {}
 
 fuzz_node& fuzz_node::operator=(const fuzz_node& rhs) {
     if (&rhs != this) {
@@ -287,7 +287,7 @@ void fuzz_node::next(fs_data_iter& it, const fs_data_iter&, bool t) {
     while (it.depth() != 0) {
         // Iterate over current batch
         do {
-            if (apply_blocked(it)) 
+            if (apply_blocked(it))
                 goto done;
             ++it;
         } while (it.record().in_batch_pos() != 0 && it.depth() != 0);
@@ -316,7 +316,7 @@ bool fuzz_node::next_param(sv_t param) {
     if (param.substr(0, 2) == NATIVE_SV("--")) {
         if (param == NATIVE_SV("--full"))
             _is_full = true;
-        else if (param == NATIVE_SV("--cutoff")) 
+        else if (param == NATIVE_SV("--cutoff"))
             _next_cutoff = true;
         else if (param == NATIVE_SV("--readlink"))
             _is_lname = true;
@@ -329,7 +329,7 @@ bool fuzz_node::next_param(sv_t param) {
         const char_t* __beg = param.data(),
             *__end = __beg + param.size(),
             *__numend = orie::from_char_t(__beg, __end, targ);
-        if (__numend != __end) 
+        if (__numend != __end)
             throw pred_tree::not_a_number(param);
         if (targ > 100)
             throw pred_tree::invalid_param_name(param, NATIVE_SV(
@@ -342,7 +342,7 @@ bool fuzz_node::next_param(sv_t param) {
         if (param.size() >= 2)
             _min_haystack_len = param.size() - 2;
         _query.reset_fuzz_needle(param);
-    } 
+    }
     return true;
 }
 
@@ -375,7 +375,7 @@ bool type_node::next_param(sv_t param) {
         }
         if (i >= 8) break;
     }
-    if (i == 0) 
+    if (i == 0)
         throw invalid_param_name(param, sv_t(NATIVE_PATH("-type")));
     return true;
 }

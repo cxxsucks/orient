@@ -4,7 +4,6 @@ extern "C" {
 #if _WIN32
 #include <shlwapi.h>
 #ifdef _MSC_VER
-#pragma comment(lib, "Shlwapi.lib")
 #pragma warning(disable: 4996)
 #endif
 
@@ -62,9 +61,11 @@ namespace orie {
     inline std::wostream& NATIVE_STDERR = std::wcerr;
 
 // For _waccess
+#ifndef R_OK
     enum { R_OK = 4, W_OK = 2, X_OK = 1 };
+#endif
 
-#else 
+#else
     #define PCRE2_CODE_UNIT_WIDTH 8
     using dir_t = ::DIR;
     using dirent_t = ::dirent;
@@ -83,14 +84,15 @@ namespace orie {
     inline std::ostream& NATIVE_STDERR = std::cerr;
 #endif
 
-    using uid_t = decltype(stat_t::st_uid);
-    using gid_t = decltype(stat_t::st_gid);
-    using ino_t = decltype(stat_t::st_ino);
-    using mode_t = decltype(stat_t::st_mode);
+    using uid_t = decltype(orie::stat_t::st_uid);
+    using gid_t = decltype(orie::stat_t::st_gid);
+    using ino_t = decltype(orie::stat_t::st_ino);
+    using mode_t = decltype(orie::stat_t::st_mode);
 
     // https://en.cppreference.com/w/cpp/string/char_traits
     // Used in case-ignored comparison
-    struct fs_icase_traits : public std::char_traits<char_t> {
+    struct fs_icase_traits : public std::char_traits<orie::char_t> {
+        using char_t = orie::char_t;
         static char_t to_upper(char_t ch) {
             if constexpr (sizeof(char_t) == 1)
                 return ::toupper(ch);
@@ -131,7 +133,7 @@ namespace orie {
         dir_pop_tag = '-'
     };
 
-// Syscall Wrappers. 
+// Syscall Wrappers.
 // In orient's context, Windows paths may start with a redundant '\\'
 // which is dropped when invoking the "syscall".
 #ifdef _WIN32
@@ -163,13 +165,14 @@ namespace orie {
         return ::wclosedir(d);
     }
 
+#ifdef _MSC_VER
     //! @brief Get the absolute name of @p src, with an optional starting '\\'.
     //! @param [out] resolv Non-null buffer holding resolved path.
     //! @b NO redundant '\\' will be placed in @p resolv[0]
     //! @return Size written to @p resolv not including '\0'
     //! @retval -1 Failure or buffer too small
     inline ssize_t realpath(const char_t* src,
-                            char_t* resolv, size_t buf_len) 
+                            char_t* resolv, size_t buf_len)
     {
         DWORD _buf_len = static_cast<DWORD>(buf_len);
         while (*src == separator)
@@ -201,6 +204,18 @@ namespace orie {
             resolv[--saved] = L'\0';
         return static_cast<ssize_t>(saved);
     }
+#else
+    // MinGW has no `GetFinalPathNameByHandleW`; simply copy src to dest.
+    inline ssize_t realpath(const char_t* src,
+                            char_t* resolv, size_t buf_len)
+    {
+        size_t src_len = wcslen(src) + 1;
+        if (src_len > buf_len)
+            return -1;
+        memcpy(resolv, src, src_len * sizeof(wchar_t));
+        return src_len - 1;
+    }
+#endif // _MSC_VER
 
     //! @brief Unix fnmatch(3) and Windows PathMatchSpecW wrapper.
     inline bool glob_match(const char_t* needle, const char_t* haystack, bool) {
@@ -239,7 +254,7 @@ namespace orie {
     //! @return Size written ro @p resolv not including '\0'
     //! @retval ~size_t() on fail
     inline ssize_t realpath(const char_t* src,
-                            char_t* resolv, size_t buf_len) 
+                            char_t* resolv, size_t buf_len)
     {
         if (buf_len >= PATH_MAX) {
             if (::realpath(src, resolv) == nullptr)
@@ -259,4 +274,4 @@ namespace orie {
         return ::fnmatch(needle, haystack, icase ? FNM_CASEFOLD : 0) == 0;
     }
 #endif
-};
+}

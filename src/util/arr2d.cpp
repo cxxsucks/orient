@@ -1,11 +1,17 @@
 extern "C" {
 #include <unistd.h>
+#include <sys/mman.h>
 }
 #include <orient/util/arr2d.hpp>
+#ifdef _WIN32
+#include <orient/util/charconv_t.hpp>
+#endif // _WIN32
+
 #include <algorithm>
 #include <mutex>
 // Return values of `munmap(2)` are NOT checked because:
 // https://stackoverflow.com/questions/22779556/linux-error-from-munmap
+
 
 void arr2d_writer::add_int(size_t row, uint32_t val) {
     if (row >= _data_pending.size())
@@ -22,10 +28,12 @@ void arr2d_writer::append_pending_to_file() {
     FILE* fp = _wfopen(_saving_path.c_str(), L"rb+");
     if (fp == nullptr) {
         if ((fp = _wfopen(_saving_path.c_str(), L"wb")) == nullptr)
-            throw std::runtime_error("Open failed: " + _saving_path);
+            throw std::runtime_error("Open failed: " +
+                                     orie::xxstrcpy(orie::sv_t(_saving_path)));
         fclose(fp);
         if ((fp = _wfopen(_saving_path.c_str(), L"rb+")) == nullptr)
-            throw std::runtime_error("Open failed: " + _saving_path);
+            throw std::runtime_error("Open failed: " +
+                                     orie::xxstrcpy(orie::sv_t(_saving_path)));
     }
 #else
     FILE* fp = fopen(_saving_path.c_str(), "rb+");
@@ -65,7 +73,7 @@ void arr2d_writer::append_pending_to_file() {
         fwrite(cmprs_buf.data(), sizeof(uint32_t), cmprs_len, fp);
         d.clear();
 
-        // In header section, write offset to line data 
+        // In header section, write offset to line data
         fseek(fp, hdr_off, SEEK_SET);
         fwrite(&line_off, sizeof(uint32_t), 1, fp);
         hdr_off += sizeof(uint32_t);
@@ -106,7 +114,7 @@ void arr2d_reader::move_file(orie::str_t path) {
                     MOVEFILE_REPLACE_EXISTING) == 0)
     {
         __lck.unlock();
-        refresh(); 
+        refresh();
         THROW_SYS_ERROR;
     }
     _map_path = std::move(path);
@@ -127,7 +135,7 @@ void arr2d_reader::clear() {
 #ifdef _WIN32
     std::unique_lock __lck(_access_mut);
     // Unmap original data
-    if (_mapped_sz != 0) 
+    if (_mapped_sz != 0)
         UnmapViewOfFile(_mapped_data);
     static const uint32_t dummy[2] = {0, 0};
     _mapped_sz = 0;
@@ -169,12 +177,12 @@ void arr2d_reader::refresh() {
     const uint32_t* old_dat = _mapped_data;
     size_t old_sz = _mapped_sz;
 #ifdef _WIN32
-    struct _stat64 stbuf;
-    if (_fstat64(_fileno(_map_descriptor), &stbuf) != 0)
-        THROW_SYS_ERROR
+    _LARGE_INTEGER st_size;
+    if (GetFileSizeEx(_map_descriptor, &st_size) == FALSE)
+        THROW_SYS_ERROR;
 
     std::unique_lock __lck(_access_mut);
-    if (stbuf.st_size == 0) {
+    if (st_size.QuadPart == 0) {
         static const uint32_t dummy[2] = {0, 0};
         _mapped_sz = 0;
         _mapped_data = dummy;
@@ -194,7 +202,7 @@ void arr2d_reader::refresh() {
 
     if (_mapped_sz != 0) // Previous map was not empty
         UnmapViewOfFile(const_cast<uint32_t*>(old_dat));
-    _mapped_sz = static_cast<size_t>(stbuf.st_size);
+    _mapped_sz = static_cast<size_t>(st_size.QuadPart);
     CloseHandle(map_obj);
 
 #else
@@ -208,7 +216,7 @@ void arr2d_reader::refresh() {
         static const uint32_t dummy[2] = {0, 0};
         _mapped_sz = 0;
         // The first 0 bytes are definitely correct so no undefined behaviors
-        _mapped_data = dummy; 
+        _mapped_data = dummy;
         if (old_sz != 0) // Previous map was not empty
             munmap(const_cast<uint32_t*>(old_dat), old_sz);
         return;
@@ -248,12 +256,21 @@ arr2d_reader::arr2d_reader(orie::str_t fpath)
 }
 
 arr2d_reader::~arr2d_reader() noexcept {
+#ifdef _WIN32
+    if (_mapped_sz != 0)
+        UnmapViewOfFile(const_cast<uint32_t*>(_mapped_data));
+    if (_map_descriptor != INVALID_HANDLE_VALUE)
+        CloseHandle(_map_descriptor);
+    if (_rmfile_on_dtor)
+        DeleteFileW(_map_path.c_str());
+#else
     if (_mapped_sz != 0)
         munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
     if (_map_descriptor >= 0)
         close(_map_descriptor);
     if (_rmfile_on_dtor)
         unlink(_map_path.c_str());
+#endif // _WIN32
 }
 
 uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
@@ -363,7 +380,7 @@ bool arr2d_reader::line_data(compressionLib::fastPForCodec &co,
 uint32_t arr2d_intersect::next_intersect(size_t redundancy) {
     if (_reader == nullptr || _lines_to_query.empty())
         return ~uint32_t();
-    if (!_cur_page_res.empty()) 
+    if (!_cur_page_res.empty())
         goto retrive;
 
     while (_cur_page_res.empty()) {
