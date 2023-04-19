@@ -180,8 +180,9 @@ namespace orie {
             return 1;
         }
 
-        HANDLE hdl = ::CreateFileW(src, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        HANDLE hdl = ::CreateFileW(src, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                   OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+                                   nullptr);
         if (hdl == INVALID_HANDLE_VALUE)
             return -1;
         DWORD saved = ::GetFinalPathNameByHandleW(hdl, resolv, _buf_len,

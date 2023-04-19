@@ -145,6 +145,34 @@ std::basic_string<des_t> xxstrcpy(std::basic_string_view<src_t> src) {
     return res;
 }
 
+#ifdef _WIN32
+// string to wstring specialization
+template<>
+inline std::wstring xxstrcpy(std::string_view src) {
+    int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), src.size(),
+                                  nullptr, 0);
+    if (len <= 0)
+        return std::wstring();
+    std::wstring utf16_str(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, src.data(), src.size(),
+                        utf16_str.data(), len);
+    return utf16_str;
+}
+
+// wstring to string specialization
+template<>
+inline std::string xxstrcpy(std::wstring_view src) {
+    int len = WideCharToMultiByte(CP_UTF8, 0, src.data(), src.size(), nullptr,
+                                  0, nullptr, nullptr);
+    if (len <= 0)
+        return std::wstring();
+    std::string utf8_str(len - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, src.data(), src.size(), utf8_str.data(),
+                        len, nullptr, nullptr);
+    return utf8_str;
+}
+#endif
+
 /** @brief Convert a number to string
  * @tparam cal_t an arithmetic type. Either integers or floating points
  * @param [out] buf pre-allocated buffer to which the converted string write.
