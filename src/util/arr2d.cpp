@@ -13,6 +13,9 @@ extern "C" {
 // Return values of `munmap(2)` are NOT checked because:
 // https://stackoverflow.com/questions/22779556/linux-error-from-munmap
 
+// A legitimate empty array containing 1 page and 0 lines.
+static const uint32_t dummy[2] = {0, 0};
+
 void arr2d_writer::add_int(size_t row, uint32_t val) {
     if (row >= _data_pending.size())
         _data_pending.insert(_data_pending.cend(), row - _data_pending.size() + 1,
@@ -93,23 +96,7 @@ void arr2d_writer::append_pending_to_file() {
 void arr2d_reader::move_file(orie::str_t path) {
 #ifdef _WIN32
     // On Windows, a file MUST be closed before move or deletion.
-    // A lock must be introduced to avoid accessing during the gap when
-    // the file is unmapped.
-    std::unique_lock __lck(_access_mut);
-    // Unmap original data
-    if (_mapped_sz != 0) {
-        UnmapViewOfFile(_mapped_data);
-        static const uint32_t dummy[2] = {0, 0};
-        _mapped_sz = 0;
-        _mapped_data = dummy;
-    }
-
-    // Close file
-    if (_map_descriptor != INVALID_HANDLE_VALUE) {
-        CloseHandle(_map_descriptor);
-        _map_descriptor = INVALID_HANDLE_VALUE;
-    }
-
+    close();
     auto moveRes = MoveFileExW(_map_path.c_str(), path.c_str(),
                                MOVEFILE_REPLACE_EXISTING);
     if (moveRes == TRUE)
@@ -118,7 +105,6 @@ void arr2d_reader::move_file(orie::str_t path) {
     _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
                                   FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                                   FILE_ATTRIBUTE_NORMAL, nullptr);
-    __lck.unlock();
     refresh();
     if (moveRes == FALSE)
         THROW_SYS_ERROR;
@@ -135,19 +121,7 @@ void arr2d_reader::clear() {
     if (_mapped_sz == 0)
         return;
 #ifdef _WIN32
-    std::unique_lock __lck(_access_mut);
-    // Unmap original data
-    if (_mapped_sz != 0)
-        UnmapViewOfFile(_mapped_data);
-    static const uint32_t dummy[2] = {0, 0};
-    _mapped_sz = 0;
-    _mapped_data = dummy;
-
-    // Close file
-    if (_map_descriptor != INVALID_HANDLE_VALUE) {
-        CloseHandle(_map_descriptor);
-        _map_descriptor = INVALID_HANDLE_VALUE;
-    }
+    close();
 
     // Delete the file at _map_path
     if (DeleteFileW(_map_path.c_str()) == FALSE) {
@@ -155,7 +129,6 @@ void arr2d_reader::clear() {
         _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
                                       FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                                       FILE_ATTRIBUTE_NORMAL, nullptr);
-        __lck.unlock(); // `refresh` also locks
         refresh();
         THROW_SYS_ERROR;
     }
@@ -170,7 +143,7 @@ void arr2d_reader::clear() {
 
 #else
     if (_map_descriptor >= 0)
-        close(_map_descriptor);
+        ::close(_map_descriptor);
     unlink(_map_path.c_str());
     _map_descriptor = open(_map_path.c_str(), O_RDONLY | O_CREAT, 0600);
     if (_map_descriptor == -1)
@@ -180,16 +153,30 @@ void arr2d_reader::clear() {
 }
 
 void arr2d_reader::refresh() {
+    // If the file is not opened, open it here.
+#ifdef _WIN32
+    if (_map_descriptor == INVALID_HANDLE_VALUE) {
+        _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
+                                      FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
+                                      FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (_map_descriptor == INVALID_HANDLE_VALUE)
+#else
+    if (_map_descriptor < 0) {
+        _map_descriptor = open(_map_path.c_str(), O_RDONLY | O_CREAT, 0600);
+        if (_map_descriptor == -1)
+#endif
+            THROW_SYS_ERROR;
+    }
+
     const uint32_t* old_dat = _mapped_data;
     size_t old_sz = _mapped_sz;
 #ifdef _WIN32
-    _LARGE_INTEGER st_size;
+    LARGE_INTEGER st_size;
     if (GetFileSizeEx(_map_descriptor, &st_size) == FALSE)
         THROW_SYS_ERROR;
 
     std::unique_lock __lck(_access_mut);
     if (st_size.QuadPart == 0) {
-        static const uint32_t dummy[2] = {0, 0};
         _mapped_sz = 0;
         _mapped_data = dummy;
         if (old_sz != 0)
@@ -203,13 +190,13 @@ void arr2d_reader::refresh() {
         THROW_SYS_ERROR;
     _mapped_data = static_cast<const uint32_t*>(
         MapViewOfFile(map_obj, FILE_MAP_READ, 0, 0, 0));
+    CloseHandle(map_obj);
     if (_mapped_data == nullptr)
         THROW_SYS_ERROR;
 
     if (_mapped_sz != 0) // Previous map was not empty
         UnmapViewOfFile(const_cast<uint32_t*>(old_dat));
     _mapped_sz = static_cast<size_t>(st_size.QuadPart);
-    CloseHandle(map_obj);
 
 #else
     struct stat stbuf;
@@ -219,7 +206,6 @@ void arr2d_reader::refresh() {
     std::unique_lock __lck(_access_mut);
     if (stbuf.st_size == 0) {
         // Fake page with 0 lines and no next page
-        static const uint32_t dummy[2] = {0, 0};
         _mapped_sz = 0;
         // The first 0 bytes are definitely correct so no undefined behaviors
         _mapped_data = dummy;
@@ -244,38 +230,49 @@ void arr2d_reader::refresh() {
 }
 
 arr2d_reader::arr2d_reader(orie::str_t fpath)
-    : _rmfile_on_dtor(false), _map_path(std::move(fpath))
-    , _mapped_data(nullptr) , _mapped_sz(0)
-    , _cache_page_idx(0), _cache_page_offset(0)
-{
+    : _rmfile_on_dtor(false)
 #ifdef _WIN32
-    _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
-                                  FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
-                                  FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (_map_descriptor == INVALID_HANDLE_VALUE)
+    , _map_descriptor(INVALID_HANDLE_VALUE)
 #else
-    _map_descriptor = open(_map_path.c_str(), O_RDONLY | O_CREAT, 0600);
-    if (_map_descriptor == -1)
+    , _map_descriptor(-1)
 #endif
-        THROW_SYS_ERROR;
-    refresh();
-}
+    , _map_path(std::move(fpath))
+    , _mapped_data(nullptr) , _mapped_sz(0)
+    , _cache_page_idx(0), _cache_page_offset(0) { refresh(); }
 
 arr2d_reader::~arr2d_reader() noexcept {
-#ifdef _WIN32
-    if (_mapped_sz != 0)
-        UnmapViewOfFile(const_cast<uint32_t*>(_mapped_data));
-    if (_map_descriptor != INVALID_HANDLE_VALUE)
-        CloseHandle(_map_descriptor);
+    close();
     if (_rmfile_on_dtor)
+#ifdef _WIN32
         DeleteFileW(_map_path.c_str());
 #else
-    if (_mapped_sz != 0)
-        munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
-    if (_map_descriptor >= 0)
-        close(_map_descriptor);
-    if (_rmfile_on_dtor)
         unlink(_map_path.c_str());
+#endif
+}
+
+void arr2d_reader::close() noexcept {
+    std::unique_lock __lck(_access_mut);
+#ifdef _WIN32
+    if (_mapped_sz != 0) {
+        UnmapViewOfFile(const_cast<uint32_t*>(_mapped_data));
+        _mapped_sz = 0;
+        _mapped_data = dummy;
+    }
+    if (_map_descriptor != INVALID_HANDLE_VALUE) {
+        CloseHandle(_map_descriptor);
+        _map_descriptor = INVALID_HANDLE_VALUE;
+    }
+
+#else
+    if (_mapped_sz != 0) {
+        munmap(const_cast<uint32_t*>(_mapped_data), _mapped_sz);
+        _mapped_sz = 0;
+        _mapped_data = dummy;
+    }
+    if (_map_descriptor >= 0) {
+        ::close(_map_descriptor);
+        _map_descriptor = -1;
+    }
 #endif // _WIN32
 }
 

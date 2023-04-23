@@ -181,7 +181,7 @@ inline std::string xxstrcpy(std::wstring_view src) {
                                   0, nullptr, nullptr);
     if (len <= 0)
         return std::string();
-    std::string utf8_str(len - 1, '\0');
+    std::string utf8_str(len, '\0');
     WideCharToMultiByte(CP_UTF8, 0, src.data(), srcsz, utf8_str.data(),
                         len, nullptr, nullptr);
     return utf8_str;

@@ -8,7 +8,7 @@ namespace dmp {
 
 // Low-level filesystem database writer
 // All members can be directly modified
-struct dumper {
+class dumper {
 public:
     // TODO: Changeable in conf file
     // Minimum size of each chunk. Actual size will be a bit larger.

@@ -43,7 +43,12 @@ namespace dmp {
 
 dumper::dir_info_t
 dumper::fetch_dir_info(str_t& fullpath) {
-    orie::dir_t* dirp = orie::opendir(fullpath.c_str());
+    const orie::char_t* c_fullpath = fullpath.c_str();
+#ifdef _WIN32
+    if (c_fullpath[0] == separator)
+        ++c_fullpath;
+#endif
+    orie::dir_t* dirp = orie::opendir(c_fullpath);
     if (dirp == nullptr)
         return dir_info_t();
     orie::dirent_t* ent;
@@ -57,7 +62,7 @@ dumper::fetch_dir_info(str_t& fullpath) {
         if (ent->d_type == DT_UNKNOWN) {
             size_t len_orig = fullpath.size();
             (fullpath += separator) += ent->d_name;
-            ent->d_type = __handle_unknown_dtype(fullpath.c_str());
+            ent->d_type = __handle_unknown_dtype(c_fullpath);
             fullpath.erase(len_orig);
         }
         if (ent->d_type == DT_DIR) {
@@ -94,7 +99,7 @@ size_t dumper::dump_one(const str_t& fullpath, size_t basename_len, arr2d_writer
     sv_t basename_view(fullpath.c_str() + fullpath.size() - basename_len,
                        basename_len);
 
-    // Dumps full path len and full path if group counter reaches 24
+    // Dumps full path len and full path if group counter reaches `nfile_in_batch`
     if (nth_file % nfile_in_batch == 0) {
         _pos_of_batches.push_back(d.size());
         w.add_int(0, d.size());
@@ -212,6 +217,7 @@ size_t dumper::dump_concur(str_t& fullpath, size_t basename_len, arr2d_writer& w
 void dumper::rebuild_database() {
     _index.clear();
     _invidx.clear();
+    _invidx.close();
     _pos_of_batches.clear();
     _chunk_of_batches.clear();
     arr2d_writer w(_invidx.saving_path());
@@ -220,11 +226,20 @@ void dumper::rebuild_database() {
     if (_root_path.size() == 1) {
 #ifdef _WIN32
         // On Windows, if root path is '\', dump all drives;
-        // Dump fake root dir's metadata first
+        // Dump fake root dir's metadata first.
+
+        // Chunk number and in-chunk position of the fake root dir
+        // which are both 0 because index is just cleared.
+        _pos_of_batches.push_back(0);
+        w.add_int(0, 0);
+        _chunk_of_batches.push_back(_index.chunk_count());
+        w.add_int(1, 0);
+        // Parent path length (0), tag and name length (0)
         _index._unplaced_dat.assign({
-            std::byte(), std::byte(),
+            std::byte(next_group_tag), std::byte(), std::byte(),
             std::byte(dir_tag), std::byte(), std::byte(),
-        }); // Parent path length (0), tag and name length (0)
+        }); 
+        n_file = 1;
 
         // All drives are its sub dir
         for (str_t dri = L"\\A:\\"; dri[1] <= L'Z'; ++dri[1]) {
@@ -235,8 +250,8 @@ void dumper::rebuild_database() {
             dir_info_t dri_info = fetch_dir_info(dri);
             dri.pop_back(); // dump_*concur must NOT have ending '\\'
             if (is_noconcur(dri) || is_noconcur(_root_path))
-                n_file = dump_noconcur(dri, 2, w, dri_info, 1);
-            else n_file = dump_concur(dri, 2, w, dri_info, 1);
+                n_file += dump_noconcur(dri, 2, w, dri_info, 1);
+            else n_file += dump_concur(dri, 2, w, dri_info, 1);
             dri.push_back(separator);
         }
 

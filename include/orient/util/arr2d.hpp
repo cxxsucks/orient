@@ -33,8 +33,8 @@ private:
     size_t _mapped_sz;
 
     // Cache the starting point of a page for repeated access
-    mutable uint32_t _cache_page_idx = 0;
-    mutable uint32_t _cache_page_offset = 0;
+    mutable uint32_t _cache_page_idx;
+    mutable uint32_t _cache_page_offset;
     mutable std::mutex _cache_mut;
     mutable std::shared_mutex _access_mut;
 
@@ -78,6 +78,10 @@ public:
     // Move, clear and refresh cannot mutually run concurrently,
     // but they can run with data query functions.
     void clear();
+    // Close the file containing the array. The reader will be viewing an
+    // empty array after close. Call to `refresh` reopens the original array.
+    // Implemented by `munmap` and `close`
+    void close() noexcept;
 
     // Throws system error if open failed
     arr2d_reader(orie::str_t arr_file_path);
@@ -90,7 +94,7 @@ public:
         }
         return *this;
     }
-    // munmap and close
+    // munmap, close and remove file if `_rmfile_on_dtor` is set
     ~arr2d_reader() noexcept;
 };
 

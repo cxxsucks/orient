@@ -19,7 +19,7 @@
 #endif
 #endif
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
 
 int __inline __builtin_clz(uint32_t value) {

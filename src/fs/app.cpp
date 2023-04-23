@@ -126,7 +126,7 @@ app& app::read_conf(str_t path) {
         throw std::runtime_error("Cannot read orient conf file");
 
 #ifdef _MSC_VER
-    ifs.imbue(std::locale("en_US.UTF-8"));
+    ifs.imbue(std::locale("en_US.utf8"));
 #endif
     _dumper.reset();
     str_t conf_cont;
@@ -190,7 +190,7 @@ app& app::write_conf(str_t path) {
         return *this;
 
 #ifdef _MSC_VER
-    ofs.imbue(std::locale("en_US.UTF-8"));
+    ofs.imbue(std::locale("en_US.utf8"));
 #endif
     ofs << NATIVE_PATH("DB_PATH `") << db_path() << char_t('`');
     ofs << NATIVE_PATH("\nROOT_PATH `") << _dumper->_root_path << char_t('`');

@@ -410,9 +410,9 @@ class access_node : public fs_node {
 public:
     double success_rate() const noexcept override { 
         double res = 1.0;
-        if (_access_test_mode | R_OK) res *= 0.9;
-        if (_access_test_mode | W_OK) res *= 0.6;
-        if (_access_test_mode | X_OK) res *= 0.3;
+        if (_access_test_mode & R_OK) res *= 0.9;
+        if (_access_test_mode & W_OK) res *= 0.6;
+        if (_access_test_mode & X_OK) res *= 0.3;
         return res;
     }
     double cost() const noexcept override { return 1e-5; }
