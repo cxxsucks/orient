@@ -15,12 +15,12 @@ struct arr2d : public testing::Test {
     void SetUp() override {
         writer._data_pending.resize(15);
         for (size_t i = 0; i < 15; ++i)
-            for (size_t j = 0; j < i * 100 + 100; ++j)
+            for (uint32_t j = 0; j < i * 100 + 100; ++j)
                 writer._data_pending[i].push_back(j * 7);
         writer.append_pending_to_file();
 
         writer._data_pending.resize(4);
-        for (size_t i = 0; i < 1000; ++i) {
+        for (uint32_t i = 0; i < 1000; ++i) {
             writer._data_pending[0].push_back(100000 + 13 * i);
             writer._data_pending[1].push_back(100000 + 17 * i);
             // Empty 2nd line
@@ -105,15 +105,18 @@ TEST_F(arr2d, moveFile) {
 }
 
 TEST_F(arr2d, emptyFile) {
-    std::filesystem::remove(tmpPath);
     arr2d_reader reader(tmpPath.c_str());
+    reader.clear();
     // If the array is empty, its 0th page is still valid.
     EXPECT_EQ(0, reader.uncmprs_size(0, 0));
     EXPECT_EQ(0, reader.uncmprs_size(15, 0));
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
 
-    SetUp(); // SetUp appends data to the array
+    // SetUp appends data to the array. Windows prevents ANY writes
+    // to a file if it is opened, so no appending in Win32 :(
+#ifndef _WIN32
+    SetUp(); 
     // Until refresh, arr2d_reader are not aware of array writes.
     EXPECT_EQ(0, reader.uncmprs_size(0, 0));
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 1));
@@ -123,6 +126,7 @@ TEST_F(arr2d, emptyFile) {
     EXPECT_EQ(reader.uncmprs_size(3, 1), 1000);
     for (size_t i = 0; i < 15; ++i)
         ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
+#endif
 }
 
 TEST_F(arr2d, uncmprsOneLine) {

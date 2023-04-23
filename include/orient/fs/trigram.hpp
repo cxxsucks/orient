@@ -45,7 +45,7 @@ public:
     void reset_fuzz_needle(sv_t needle) { reset_strstr_needle(needle, false); }
 
     uint32_t next_batch_possible() { return _query.next_intersect(1); }
-    uint32_t next_fuzz_possible(size_t min_freq) {
+    uint32_t next_fuzz_possible(uint32_t min_freq) {
         return _query.next_frequent(min_freq);
     }
 

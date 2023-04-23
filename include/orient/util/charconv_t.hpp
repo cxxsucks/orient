@@ -9,12 +9,17 @@
 #ifdef _MSC_VER
 // Negate unsigned, implicit narrow cast
 #pragma warning(disable: 4996 4146 4244)
-#else
+#endif // _MSC_VER
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#endif // _MSC_VER
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 #endif // _WIN32
 
 namespace orie {
@@ -157,12 +162,13 @@ std::basic_string<des_t> xxstrcpy(std::basic_string_view<src_t> src) {
 // string to wstring specialization
 template<>
 inline std::wstring xxstrcpy(std::string_view src) {
-    int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), src.size(),
+    int srcsz = static_cast<int>(src.size());
+    int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), srcsz,
                                   nullptr, 0);
     if (len <= 0)
         return std::wstring();
     std::wstring utf16_str(len, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, src.data(), src.size(),
+    MultiByteToWideChar(CP_UTF8, 0, src.data(), srcsz,
                         utf16_str.data(), len);
     return utf16_str;
 }
@@ -170,12 +176,13 @@ inline std::wstring xxstrcpy(std::string_view src) {
 // wstring to string specialization
 template<>
 inline std::string xxstrcpy(std::wstring_view src) {
-    int len = WideCharToMultiByte(CP_UTF8, 0, src.data(), src.size(), nullptr,
+    int srcsz = static_cast<int>(src.size());
+    int len = WideCharToMultiByte(CP_UTF8, 0, src.data(), srcsz, nullptr,
                                   0, nullptr, nullptr);
     if (len <= 0)
         return std::string();
     std::string utf8_str(len - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, src.data(), src.size(), utf8_str.data(),
+    WideCharToMultiByte(CP_UTF8, 0, src.data(), srcsz, utf8_str.data(),
                         len, nullptr, nullptr);
     return utf8_str;
 }

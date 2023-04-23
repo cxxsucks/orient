@@ -103,6 +103,9 @@ add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
 target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
+if(WIN32)
+    target_link_libraries(orie PUBLIC shlwapi)
+endif(WIN32)
 target_include_directories(orie PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)

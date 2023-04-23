@@ -91,14 +91,11 @@ fullpath_trigram_ext(sv_t pat, bool glob, uint32_t* out, size_t outsz) {
     auto bn_res = glob 
         ? glob_trigram_ext(basename, out, outsz, true)
         : std::make_pair(strstr_trigram_ext(basename, out, outsz), false);
-    // As long as basename contains any trigram, it is used, and other
-    // names are not scanned at all.
+    // As long as basename contains any trigram, it is used.
     if (bn_res.first != 0)
         return bn_res;
 
-    // Actual placing of the best name to `out`
-    // res = glob ? glob_trigram_ext(res_name, out, outsz, true).first
-    //            : strstr_trigram_ext(res_name, out, outsz);
+    // Or the rightmost name containing trigram(s) is used.
     return std::make_pair(res, false);
 }
 

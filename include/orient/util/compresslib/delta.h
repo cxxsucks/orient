@@ -28,9 +28,9 @@ template <class T> void delta(const T initoffset, T *data, const size_t size) {
 }
 
 template <size_t size, class T> void delta(const T initoffset, T *data) {
-  if (size == 0)
+  if constexpr (size == 0)
     return; // nothing to do
-  if (size > 1)
+  if constexpr (size > 1)
     for (size_t i = size - 1; i > 0; --i) {
       data[i] -= data[i - 1];
     }
@@ -60,14 +60,14 @@ void inverseDelta(const T initoffset, T *data, const size_t size) {
   }
 }
 template <size_t size, class T> void inverseDelta(const T initoffset, T *data) {
-  if (size == 0)
+  if constexpr (size == 0)
     return; // nothing to do
   data[0] += initoffset;
   const size_t UnrollQty = 4;
   const size_t sz0 =
       (size / UnrollQty) * UnrollQty; // equal to 0, if size < UnrollQty
   size_t i = 1;
-  if (sz0 >= UnrollQty) {
+  if constexpr (sz0 >= UnrollQty) {
     T a = data[0];
     for (; i < sz0 - UnrollQty; i += UnrollQty) {
       a = data[i] += a;

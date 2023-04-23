@@ -31,8 +31,8 @@ extern "C" {
 #define __likely(x) __builtin_expect(!!(x), 1)
 #define __unlikely(x) __builtin_expect(!!(x), 0)
 #else
-#define __likely(x)
-#define __unlikely(x)
+#define __likely(x) x
+#define __unlikely(x) x
 #endif
 #endif
 

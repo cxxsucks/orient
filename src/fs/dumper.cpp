@@ -235,8 +235,8 @@ void dumper::rebuild_database() {
             dir_info_t dri_info = fetch_dir_info(dri);
             dri.pop_back(); // dump_*concur must NOT have ending '\\'
             if (is_noconcur(dri) || is_noconcur(_root_path))
-                dump_noconcur(dri, 2, w, dri_info, 1);
-            else dump_concur(dri, 2, w, dri_info, 1);
+                n_file = dump_noconcur(dri, 2, w, dri_info, 1);
+            else n_file = dump_concur(dri, 2, w, dri_info, 1);
             dri.push_back(separator);
         }
 

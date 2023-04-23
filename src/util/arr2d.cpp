@@ -1,17 +1,17 @@
+#include <orient/util/arr2d.hpp>
+#ifdef _WIN32
+#include <orient/util/charconv_t.hpp>
+#else
 extern "C" {
 #include <unistd.h>
 #include <sys/mman.h>
 }
-#include <orient/util/arr2d.hpp>
-#ifdef _WIN32
-#include <orient/util/charconv_t.hpp>
 #endif // _WIN32
 
 #include <algorithm>
 #include <mutex>
 // Return values of `munmap(2)` are NOT checked because:
 // https://stackoverflow.com/questions/22779556/linux-error-from-munmap
-
 
 void arr2d_writer::add_int(size_t row, uint32_t val) {
     if (row >= _data_pending.size())
@@ -28,7 +28,7 @@ void arr2d_writer::append_pending_to_file() {
     FILE* fp = _wfopen(_saving_path.c_str(), L"rb+");
     if (fp == nullptr) {
         if ((fp = _wfopen(_saving_path.c_str(), L"wb")) == nullptr)
-            throw std::runtime_error("Open failed: " +
+            throw std::runtime_error("Create failed: " +
                                      orie::xxstrcpy(orie::sv_t(_saving_path)));
         fclose(fp);
         if ((fp = _wfopen(_saving_path.c_str(), L"rb+")) == nullptr)
@@ -110,16 +110,18 @@ void arr2d_reader::move_file(orie::str_t path) {
         _map_descriptor = INVALID_HANDLE_VALUE;
     }
 
-    if (MoveFileExW(_map_path.c_str(), path.c_str(),
-                    MOVEFILE_REPLACE_EXISTING) == 0)
-    {
-        __lck.unlock();
-        refresh();
-        THROW_SYS_ERROR;
-    }
-    _map_path = std::move(path);
+    auto moveRes = MoveFileExW(_map_path.c_str(), path.c_str(),
+                               MOVEFILE_REPLACE_EXISTING);
+    if (moveRes == TRUE)
+        _map_path = std::move(path);
+    // Open original file (fail) or moved file (success)
+    _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
+                                  FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
     __lck.unlock();
     refresh();
+    if (moveRes == FALSE)
+        THROW_SYS_ERROR;
 
 #else
     // On Unix, moving or deleting a file when still open is possible
@@ -149,6 +151,10 @@ void arr2d_reader::clear() {
 
     // Delete the file at _map_path
     if (DeleteFileW(_map_path.c_str()) == FALSE) {
+        // Open original file again
+        _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
+                                      FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                      FILE_ATTRIBUTE_NORMAL, nullptr);
         __lck.unlock(); // `refresh` also locks
         refresh();
         THROW_SYS_ERROR;
@@ -244,7 +250,7 @@ arr2d_reader::arr2d_reader(orie::str_t fpath)
 {
 #ifdef _WIN32
     _map_descriptor = CreateFileW(_map_path.c_str(), GENERIC_READ,
-                                  FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                  FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
                                   FILE_ATTRIBUTE_NORMAL, nullptr);
     if (_map_descriptor == INVALID_HANDLE_VALUE)
 #else

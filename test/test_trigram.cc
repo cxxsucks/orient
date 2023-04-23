@@ -102,6 +102,62 @@ TEST(trigramParse, fullGlobNoSep) {
     EXPECT_EQ(glob_trigram_ext(NATIVE_SV("0123]45"), buf, 32, true).first, 0);
 }
 
+// Note that separator in Win32 is '\\' instead of '/'
+#ifdef _WIN32
+TEST(trigramParse, fullStrstr) {
+    uint32_t buf[32] = {};
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\01234"), false, buf, 32),
+              std::make_pair(size_t(3), false)); // true means is basename
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\01234\\"), false, buf, 32),
+              std::make_pair(size_t(3), false));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\01234\\01"), false, buf, 32),
+              std::make_pair(size_t(3), false));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\01234\\012"), false, buf, 32),
+              std::make_pair(size_t(1), false));
+
+    // Corner Cases
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV(""), false, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("0\\0\\0\\"), false, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("\\\\\\\\"), false, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012\\\\\\\\"), false, buf, 32),
+              std::make_pair(size_t(1), false));
+}
+
+TEST(trigramParse, fullGlob) {
+    uint32_t buf[32] = {};
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\*01234"), true, buf, 32),
+              std::make_pair(size_t(3), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\*01234?"), true, buf, 32),
+              std::make_pair(size_t(3), false));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\*01234\\"), true, buf, 32),
+              std::make_pair(size_t(3), false));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\*01234\\01"), true, buf, 32),
+              std::make_pair(size_t(3), false));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345\\*01234\\*012"), true, buf, 32),
+              std::make_pair(size_t(1), true));
+
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012[345]678"), true, buf, 32),
+              std::make_pair(size_t(2), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012[345]67"), true, buf, 32),
+              std::make_pair(size_t(1), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012[345678"), true, buf, 32),
+              std::make_pair(size_t(1), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012]345678"), true, buf, 32),
+              std::make_pair(size_t(4), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012[34\\5]6789"), true, buf, 32),
+              std::make_pair(size_t(2), true));
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("*012[34\\5]67"), true, buf, 32),
+              std::make_pair(size_t(1), false));
+
+    // Corner Cases
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV(""), true, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("?\\*\\[]\\"), true, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("\\\\\\\\"), true, buf, 32).first, 0);
+    EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("?012[34]\\\\\\\\"), true, buf, 32),
+              std::make_pair(size_t(1), false));
+}
+
+#else
 TEST(trigramParse, fullStrstr) {
     uint32_t buf[32] = {};
     EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("012345/01234"), false, buf, 32),
@@ -154,6 +210,7 @@ TEST(trigramParse, fullGlob) {
     EXPECT_EQ(fullpath_trigram_ext(NATIVE_SV("?012[34]////"), true, buf, 32),
               std::make_pair(size_t(1), false));
 }
+#endif
 
 // Simulate a search from 100K "batchs" spanning 4 "pages" with each batch
 // containing ~400 trigrams each (400 characters)
@@ -169,10 +226,10 @@ static void trigramTestFilePrep() {
 
     orie::char_t buf[401] = {};
     std::mt19937 rd(123456789); // For reproduceability
-    std::uniform_int_distribution<orie::char_t> dist(0x21, 0x7e);
+    std::uniform_int_distribution<int> dist(0x21, 0x7e);
     arr2d_writer writer(tmpPath.native());
 
-    for (size_t i = 0; i < 90000; i++) {
+    for (uint32_t i = 0; i < 90000; i++) {
         for (size_t j = 0; j < 400; j++)
             buf[j] = dist(rd);
         place_trigram(orie::sv_t(buf, 400), i, writer);
@@ -181,9 +238,9 @@ static void trigramTestFilePrep() {
     }
 
     place_trigram(NATIVE_SV("Hello World!"), 90000, writer);
-    for (size_t i = 90001; i < 100000; i++) {
+    for (uint32_t i = 90001; i < 100000; i++) {
         for (size_t j = 0; j < 400; j++)
-            buf[j] = dist(rd);
+            buf[j] = static_cast<orie::char_t>(dist(rd));
         place_trigram(orie::sv_t(buf, 400), i, writer);
     }
     writer.append_pending_to_file();
@@ -229,6 +286,30 @@ TEST(trigramSearch, glob) {
               std::make_pair(false, false));
 }
 
+#ifdef _WIN32
+TEST(trigramSearch, fullStrstr) {
+    EXPECT_EQ(_do_tests(NATIVE_SV("abcde\\world"), false, true),
+              std::make_pair(true, true));
+    EXPECT_EQ(_do_tests(NATIVE_SV("world\\ab"), false, true),
+              std::make_pair(true, true));
+    EXPECT_EQ(_do_tests(NATIVE_SV("wor1d\\ab"), false, true),
+              std::make_pair(false, true));
+}
+
+TEST(trigramSearch, fullGlob) {
+    EXPECT_EQ(_do_tests(NATIVE_SV("hallo\\World"), true, true),
+              std::make_pair(true, false));
+    EXPECT_EQ(_do_tests(NATIVE_SV("hallo\\Wo*ld"), true, true),
+              std::make_pair(false, true));
+    EXPECT_EQ(_do_tests(NATIVE_SV("Hallo?World"), true, true),
+              std::make_pair(true, false));
+    EXPECT_EQ(_do_tests(NATIVE_SV("Hallo[a ]World"), true, true),
+              std::make_pair(false, false));
+    EXPECT_EQ(_do_tests(NATIVE_SV("Hello*ab"), true, true),
+              std::make_pair(true, true));
+}
+
+#else
 TEST(trigramSearch, fullStrstr) {
     EXPECT_EQ(_do_tests(NATIVE_SV("abcde/world"), false, true),
               std::make_pair(true, true));
@@ -250,6 +331,7 @@ TEST(trigramSearch, fullGlob) {
     EXPECT_EQ(_do_tests(NATIVE_SV("Hello*ab"), true, true),
               std::make_pair(true, true));
 }
+#endif
 
 TEST(trigramSearch, fuzz) {
     for (size_t i = 10; i > 0; --i) {

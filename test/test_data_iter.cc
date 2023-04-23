@@ -30,12 +30,12 @@ struct dataIter : public ::testing::Test {
         create_directories(tmpPath / "dirEmpty");
         create_symlink("..", tmpPath / "dirB" / "dirBA" / "linkBAB");
 
-        std::ofstream(tmpPath / "fileA").is_open();
-        std::ofstream(tmpPath / "fileB").is_open();
-        std::ofstream(tmpPath / "dirA" / "fileAA").is_open();
-        std::ofstream(tmpPath / "dirA" / "fileAB").is_open();
-        std::ofstream(tmpPath / "dirB" / "fileBA").is_open();
-        std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA").is_open();
+        std::ofstream(tmpPath / "fileA");
+        std::ofstream(tmpPath / "fileB");
+        std::ofstream(tmpPath / "dirA" / "fileAA");
+        std::ofstream(tmpPath / "dirA" / "fileAB");
+        std::ofstream(tmpPath / "dirB" / "fileBA");
+        std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA");
 
         dmp = new dumper(dbPath.c_str(), __dummy_pool);
         dmp->_root_path = tmpPath.native();
