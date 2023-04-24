@@ -39,7 +39,7 @@ protected:
             .add_start_path(orie::str_t());
     }
     void TearDown() override {
-        if (!_app.has_data())
+        if (!_app) // No dumper
             return;
         auto todel = _app.db_path();
         _app = orie::app(_pool);
@@ -63,16 +63,16 @@ TEST_F(orieApp, replicateRoot) {
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 }
 
-/* Since v0.4.0 pruned root path is undefined
+TEST_F(orieApp, invalidRoot) {
+    _app.set_root_path(tmpPath / "nonexistent");
+    EXPECT_THROW(_app.update_db(), std::runtime_error);
+} 
+
 TEST_F(orieApp, rootPruned) {
     _app.add_ignored_path(tmpPath.native())
         .update_db();
-    ASSERT_FALSE(_app); // No write to database file
-    // Pruned paths override root paths
-    // Only the 2 "dir9" inside "dir11" would match
-    EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
+    EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 } 
-*/
 
 TEST_F(orieApp, prunedPath) {
     _app.add_ignored_path((tmpPath / "dir10").native())

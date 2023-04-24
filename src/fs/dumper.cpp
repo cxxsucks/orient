@@ -217,7 +217,9 @@ size_t dumper::dump_concur(str_t& fullpath, size_t basename_len, arr2d_writer& w
 void dumper::rebuild_database() {
     _index.clear();
     _invidx.clear();
+#ifdef _WIN32
     _invidx.close();
+#endif
     _pos_of_batches.clear();
     _chunk_of_batches.clear();
     arr2d_writer w(_invidx.saving_path());
@@ -250,8 +252,8 @@ void dumper::rebuild_database() {
             dir_info_t dri_info = fetch_dir_info(dri);
             dri.pop_back(); // dump_*concur must NOT have ending '\\'
             if (is_noconcur(dri) || is_noconcur(_root_path))
-                n_file += dump_noconcur(dri, 2, w, dri_info, 1);
-            else n_file += dump_concur(dri, 2, w, dri_info, 1);
+                n_file = dump_noconcur(dri, 2, w, dri_info, n_file);
+            else n_file = dump_concur(dri, 2, w, dri_info, n_file);
             dri.push_back(separator);
         }
 
@@ -291,6 +293,12 @@ void dumper::rebuild_database() {
     w.append_pending_to_file();
     _invidx.refresh();
     assert(_pos_of_batches.size() == _chunk_of_batches.size());
+
+    // Having only a few files suggests permission errors while traversing 
+    // filesystem. Due to internal implementation of `fs_data_iter`, a forward
+    // index with only 1 file results undefined behavior.
+    if (n_file <= 2)
+        throw std::runtime_error("Too few files are read.");
 }
 
 dumper::dumper(sv_t database_path, fifo_thpool& pool)

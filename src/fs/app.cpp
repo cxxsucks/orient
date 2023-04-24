@@ -23,11 +23,17 @@ app& app::update_db() {
 
     // Move current dumper to a temporary location in case it is being used by
     // jobs. Old database is also scheduled to be deleted on job finish.
+    try {
 #ifdef _WIN32
-    _dumper->move_file(db_path + std::to_wstring(::rand()));
+        _dumper->move_file(db_path + std::to_wstring(::rand()));
 #else
-    _dumper->move_file(db_path + std::to_string(::rand()));
+        _dumper->move_file(db_path + std::to_string(::rand()));
 #endif
+    } catch(const std::system_error& e) {
+        // If move fails, the original data remain unchanged.
+        throw std::runtime_error(std::string("Moving original data failed: ") +
+            e.what() + " Is another `orient` instance or other process using it?");
+    }
     _dumper->set_remove_on_destroy(true);
 
     // Setup the new dumper
@@ -40,7 +46,18 @@ app& app::update_db() {
 #endif
 
     // Dump with the new dumper. While dumping, old dumper remain functional
-    dumper_new->rebuild_database();
+    try {
+        dumper_new->rebuild_database();
+    } catch(const std::exception& e) {
+        // Keep the old one if the new dumper got errors while building.
+        dumper_new->set_remove_on_destroy(true);
+        dumper_new.reset();
+        // Move original data back.
+        _dumper->move_file(db_path);
+        throw std::runtime_error(std::string("Updatedb failed: ") + e.what() +
+            "\nThis is usually caused by invalid or inaccessible root path.");
+    }
+    
     // Destroy old (pointer to) dumper
     std::lock_guard __lck2(_paths_mut);
     _dumper = std::move(dumper_new);

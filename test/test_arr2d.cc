@@ -113,11 +113,14 @@ TEST_F(arr2d, emptyFile) {
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(4, 1));
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 2));
 
+#ifdef _WIN32
     // SetUp appends data to the array. Windows prevents ANY writes
     // to a file if it is opened, so no appending in Win32 :(
-#ifndef _WIN32
+    reader.close();
+#endif
     SetUp(); 
     // Until refresh, arr2d_reader are not aware of array writes.
+    // (on both Unix and Windows)
     EXPECT_EQ(0, reader.uncmprs_size(0, 0));
     EXPECT_EQ(~uint32_t(), reader.uncmprs_size(0, 1));
 
@@ -126,7 +129,6 @@ TEST_F(arr2d, emptyFile) {
     EXPECT_EQ(reader.uncmprs_size(3, 1), 1000);
     for (size_t i = 0; i < 15; ++i)
         ASSERT_EQ(reader.uncmprs_size(i, 0), i * 100 + 100);
-#endif
 }
 
 TEST_F(arr2d, uncmprsOneLine) {
