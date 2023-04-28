@@ -2,8 +2,10 @@
 
 # Avoid repeatedly including the targets
 if(NOT TARGET orie::orie)
-    find_package(rapidfuzz)
-    find_package(zstd)
+    # zstd has non-CMake version which is not problematic for use
+    # but CMake still complains with `find_package`.
+    find_package(zstd QUIET)
+    find_package(rapidfuzz QUIET)
     # Provide path for scripts
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 
