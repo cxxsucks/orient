@@ -20,10 +20,12 @@ public:
     fifo_thpool& _pool;
 
 private:
-    std::unique_ptr<std::thread> _auto_update_thread;
+    std::thread _auto_update_thread;
     // Mutex of special paths
     std::mutex _paths_mut;
     std::condition_variable _auto_update_cv;
+
+    void handle_connection_impl(int connfd);
 
 public:
     static app os_default(fifo_thpool& pool);
@@ -55,7 +57,7 @@ public:
 
     // Getters
     const str_t& db_path() const noexcept {
-        return _dumper->_data_dumped.saving_path();
+        return _dumper->fwdidx_path();
     }
     const str_t& root_path() const noexcept { return _dumper->_root_path; }
     const str_t& conf_path() const noexcept { return _conf_path; }
@@ -79,17 +81,18 @@ public:
     // Paths can only be set in valid state
     bool valid() const noexcept { return _dumper != nullptr; }
     bool has_data() const noexcept {
-        return _dumper != nullptr && _dumper->_data_dumped.chunk_count() != 0;
+        return _dumper != nullptr && _dumper->chunk_count() != 0;
     }
 
     // To keep jobs safe after updatedb, which resets dumped data in
-    // app class, shared pointer to originally dumped data is stored
-    // along with the job itself.
+    // app class, shared pointer to previous data is stored along with
+    // the job itself.
     typedef std::vector<std::pair<
         std::shared_ptr<dmp::dumper>, 
         // Use unique_ptr simply because async_job is not movable
         std::unique_ptr<pred_tree::async_job<fs_data_iter, sv_t>>
     >> job_list;
+
     template <class callback_t>
     void run(fsearch_expr& expr, callback_t callback);
     job_list get_jobs(fsearch_expr& expr);
@@ -115,12 +118,11 @@ template <class Rep, class Period>
 app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
                             bool immediate)
 {
-    if (_auto_update_thread != nullptr)
-        stop_auto_update();
+    stop_auto_update();
     _auto_update_stopped = false;
-    assert(_auto_update_thread == nullptr);
+    assert(!_auto_update_thread.joinable());
 
-    _auto_update_thread.reset(new std::thread( [this, interval, immediate] () {
+    _auto_update_thread = std::thread( [this, interval, immediate] () {
         bool not_first = false;
         while (!_auto_update_stopped) {
             // Do not update if first time inside the loop and
@@ -141,7 +143,7 @@ app& app::start_auto_update(const std::chrono::duration<Rep, Period>& interval,
             _auto_update_cv.wait_for(__lck, interval, 
                 [this] () {return _auto_update_stopped;});
         }
-    }));
+    });
     return *this;
 }
 

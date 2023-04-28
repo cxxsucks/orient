@@ -1,10 +1,21 @@
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <iterator>
 #include <ctime>
 
 #include "excepts.hpp"
+
+#ifndef __likely
+#ifdef __GNUC__
+#define __likely(x) __builtin_expect(!!(x), 1)
+#define __unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#define __likely(x) x
+#define __unlikely(x) x
+#endif
+#endif
 
 namespace orie {
 namespace pred_tree {
@@ -65,9 +76,10 @@ struct tribool_bad {
     }
 };
 
-enum class CONDS : int8_t {
-    OR, AND, XOR,
-    NOR, NAND, XNOR
+enum CONDS : int8_t {
+    OR = 1, AND = 2, XOR = 3,
+    NOR = 5, NAND = 6, XNOR = 7,
+    NOT_MASK = 4
 };
 
 /** @class orie::pred_tree::node
@@ -89,13 +101,49 @@ public:
      * @note Pure virtual on base node. */
     virtual bool apply_blocked(iter_t& it) = 0;
     /** @brief Test whether an iterator satifies the predicate.
-     * @return May return one of True, False or "Too Complicated, not Done" (uncertain)
-     * @retval uncertain Subclasses are free to provide a hint that computation is too heavy and
-     * shall be run in a seperate thread.
+     * @return May return one of True, False or @b uncertain, which means
+     * "Too complicated to compute in a short span"
+     * @retval uncertain Subclasses are free to provide a hint that computation
+     * is too heavy and shall be run in a seperate thread.
      * @note Default implementation simply call "apply_blocked" */
     virtual tribool_bad apply(iter_t& it) {
         return static_cast<tribool_bad>(apply_blocked(it));
     }
+
+    /** @brief Moves @p it to where the predicate is true (or false), or @p end
+     * if no such one exists.
+     * @param it The start iterator. @b CANNOT equal to @p end.
+     * @param true_or_false Control whether move @p it to a position where the
+     * predicate is @p true_or_false for @p it.
+     * @warning @p it != @p end
+     * @note Base impl simply iterates @p it in a loop, calling @a apply_blocked.
+     * @note May be faster than pure iteration. Whether it is faster can be queried
+     * with @a faster_with_next( @p true_or_false ) */
+    virtual void next(iter_t& it, const iter_t& end, bool true_or_false) {
+        while (it != end && apply_blocked(it) == true_or_false)
+            ++it;
+    }
+    /** @brief Like @a next but stops on @b uncertain (too complicated) results
+     * @param it The start iterator. @b CANNOT equal to @p end.
+     * @warning @p it != @p end IMPORTANT!!
+     * @return Whether the result is uncertain for @p it's current position
+     * @note Base impl simply calls @a next and returns false. */
+    virtual bool next_or_uncertain(iter_t& it, const iter_t& end,
+                                   bool true_or_false)
+    {
+        // tribool_bad res;
+        // do {
+        //     res = apply(it);
+        //     ++it;
+        // } while (it != end && !res.is_uncertain() &&
+        //          res != tribool_bad(true_or_false));
+        // return res.is_uncertain();
+        next(it, end, true_or_false);
+        return false;
+    }
+    // Is using `next` faster than simple iteration?
+    virtual bool faster_with_next(bool) { return false; }
+
     /** @brief Some node accept options as strings, which are parsed by passing them here.
      * @param param The next option string to be parsed.
      * @note Multiple option strings must be parsed by multiple calls to this function 
@@ -120,7 +168,7 @@ public:
      * @note If the node only has room for one child, @p is_left is ignored.
      * @note Default implementation of base class just throws. */
     virtual void setprev(orie::pred_tree::node<iter_t, sv_t>*, bool) {
-        throw std::invalid_argument("This finder cannot own previous tasks!");
+        throw std::invalid_argument("This pred cannot own previous preds!");
     }
 
     // Updates the value returned by "cost". Call it on root node after modification.
@@ -149,9 +197,18 @@ struct truefalse_node : public node<iter_t, sv_t> {
     }
 
     // Instantly return the field "always" for true/false node
-    bool apply_blocked(iter_t&) override {return always;}
-    // Does nothing for true/false node.
-    // void update_cost() noexcept override {}
+    bool apply_blocked(iter_t &) override { return always; }
+
+    // For -true, next(..., true) advances while next(false) gives end.
+    // The inverse is true for -false.
+    void next(iter_t& it, const iter_t& end, bool t) override {
+        if (t == always)
+            ++it;
+        else it = end;
+    }
+    // Technically, for -true next(..., false) is fast, as assigning incoming
+    // iterator to `end` is the only thing to do. Inverse is true for -false.
+    bool faster_with_next(bool t) override { return t != always; }
 
     // 1.0 if "always" is true, 0.0 otherwise
     double success_rate() const noexcept override {
@@ -219,8 +276,19 @@ struct not_node : public mod_base_node<iter_t, sv_t> {
             !mod_base_node<iter_t, sv_t>::prev->apply_blocked(entry) : false;
     }
     tribool_bad apply(iter_t& entry) override {
-        return mod_base_node<iter_t, sv_t>::prev ?
-            !mod_base_node<iter_t, sv_t>::prev->apply(entry) : tribool_bad::False;
+        return mod_base_node<iter_t, sv_t>::prev 
+            ? !mod_base_node<iter_t, sv_t>::prev->apply(entry)
+            : tribool_bad::False;
+    }
+
+    void next(iter_t& it, const iter_t& end, bool t) override {
+        mod_base_node<iter_t, sv_t>::prev->next(it, end, !t);
+    }
+    bool next_or_uncertain(iter_t& it, const iter_t& end, bool t) override {
+        return mod_base_node<iter_t, sv_t>::prev->next_or_uncertain(it, end, !t);
+    }
+    bool faster_with_next(bool t) override {
+        return mod_base_node<iter_t, sv_t>::prev->faster_with_next(!t);
     }
 
     double success_rate() const noexcept override {
@@ -243,44 +311,63 @@ struct not_node : public mod_base_node<iter_t, sv_t> {
 template <class iter_t, class sv_t>
 class cond_node : public node<iter_t, sv_t> {
     std::shared_ptr<node<iter_t, sv_t>> _left, _right;
-    CONDS _cond;
     double _lsucc = 0.5, _lcost = 100, _rsucc = 0.5, _rcost = 100;
-    bool _r2l = false, _commu = true;
+    CONDS _cond;
+    bool _commu = false;
+
+    // Cache variables.
+    // Required to keep results of consecutive calls to `next` sorted
+    bool _nextl_uncertain, _nextr_uncertain;
+    // Used to feed _left and _right alternating iterators
+    uint8_t turn = 0;
+    // Store _left and _right's results and return smaller one
+    iter_t _next_res[2];
+    // It will never be dereferenced and is often dangling
+    iter_t* _last_match;
 
 public:
     bool communicative() const noexcept override { return _commu; }
 
     void update_cost() noexcept override {
-        if (_left) {
-            _left->update_cost();
-            _lsucc = _left->success_rate();
-            _lcost = _left->cost() + 1e-8;
-        } else _lsucc = 0.0, _lcost = 1e-8;
-        if (_right) {
-            _right->update_cost();
-            _rsucc = _right->success_rate();
-            _rcost = _right->cost() + 1e-8;
-        } else _rsucc = 0.0, _rcost = 1e-8;
+        bool r2l = false;
+        _left->update_cost();
+        _lsucc = _left->success_rate();
+        _lcost = _left->cost() + 1e-8;
+        _right->update_cost();
+        _rsucc = _right->success_rate();
+        _rcost = _right->cost() + 1e-8;
 
-        if (!_right || !_right->communicative() ||
-                !_left || !_left->communicative()) {
+        if (!_right->communicative() || !_left->communicative()) {
             _commu = false;
-            _r2l = false;
             return;
-        }
+        } else _commu = true;
 
-        switch (_cond) {
-        case CONDS::OR: case CONDS::NOR:
-            // Right succeeds with less price
-            _r2l = _rcost + _lcost * (1 - _rsucc) < _lcost + _rcost * (1 - _lsucc);
-            break;
-        case CONDS::AND: case CONDS::NAND:
-            // Right fails with less price
-            _r2l = _rcost + _lcost * _rsucc < _lcost + _rcost * _lsucc;
-            break;
-        case CONDS::XNOR: case CONDS::XOR: 
-            _r2l = false;   // Must evaluate both
-        }   
+        if (_left->faster_with_next(true) && !_right->faster_with_next(true))
+            r2l = false;
+        else if (!_left->faster_with_next(true) && _right->faster_with_next(true))
+            r2l = true;
+        else
+            switch (_cond) {
+            case CONDS::OR: case CONDS::NOR:
+                // Right succeeds with less price
+                r2l = _rcost + _lcost * (1 - _rsucc) 
+                    < _lcost + _rcost * (1 - _lsucc);
+                break;
+            case CONDS::AND: case CONDS::NAND:
+                // Right fails with less price
+                r2l = _rcost + _lcost * _rsucc < _lcost + _rcost * _lsucc;
+                break;
+            case CONDS::XNOR: case CONDS::XOR: 
+                r2l = false;   // Must evaluate both
+                break;
+            default:
+                std::terminate();
+            }
+        if (r2l) {
+            std::swap(_left, _right);
+            std::swap(_lcost, _rcost);
+            std::swap(_lsucc, _rsucc);
+        }
     } 
 
     double success_rate() const noexcept override {
@@ -304,29 +391,17 @@ public:
     double cost() const noexcept override {
         switch (_cond) {
         case CONDS::AND: case CONDS::NAND:
-            return _r2l ?
-                _rcost + _lcost * _rsucc :
-                _lcost + _rcost * _lsucc;
+            return 2e-8 + _lcost + _rcost * _lsucc;
         case CONDS::OR: case CONDS::NOR:
-            return _r2l ?
-                _rcost + _lcost * (1 - _rsucc) :
-                _lcost + _rcost * (1 - _lsucc);
+            return 2e-8 + _lcost + _rcost * (1 - _lsucc);
         case CONDS::XOR: case CONDS::XNOR:
-            return _lcost + _rcost + 2e-8;
+            return 2e-8 + _lcost + _rcost;
         default: return std::numeric_limits<double>::quiet_NaN();
         }        
     }
 
     bool apply_blocked(iter_t& ent) override {
-        if (!_left || !_right)
-            return false;
-        node<iter_t, sv_t> *fir, *sec;
-        if (_r2l) {
-            sec = _left.get(), fir = _right.get();
-        } else {
-            fir = _left.get(), sec = _right.get();
-        }
-        
+        node<iter_t, sv_t> *fir = _left.get(), *sec = _right.get();
         bool fir_res = fir->apply_blocked(ent);
         switch (_cond) {
         case CONDS::NOR:
@@ -341,21 +416,13 @@ public:
             return !(fir_res ^ sec->apply_blocked(ent));
         case CONDS::XOR:
             return fir_res ^ sec->apply_blocked(ent);
+        default:
+            std::terminate(); // Unreachable
         }
-        // Unreachable
-        std::terminate();
     }
-    
-    tribool_bad apply(iter_t& ent) override {
-        if (!_left || !_right)
-            return tribool_bad::False;
-        node<iter_t, sv_t> *fir, *sec;
-        if (_r2l) {
-            sec = _left.get(), fir = _right.get();
-        } else {
-            fir = _left.get(), sec = _right.get();
-        }
 
+    tribool_bad apply(iter_t& ent) override {
+        node<iter_t, sv_t> *fir = _left.get(), *sec = _right.get();
         tribool_bad fir_res = fir->apply(ent);
         switch (_cond) {
         case CONDS::NOR:
@@ -374,11 +441,159 @@ public:
             return !(fir_res ^ sec->apply(ent));
         case CONDS::XOR:
             return fir_res ^ sec->apply(ent);
+        default:
+            std::terminate(); // Unreachable
         }
-        // Unreachable
-        std::terminate();
     } 
-    
+
+    bool faster_with_next(bool t) override {
+        CONDS cond_true = t ? _cond : CONDS(_cond ^ CONDS::NOT_MASK);
+        bool query = true;
+        switch (cond_true) {
+        case CONDS::XOR: case CONDS::XNOR:
+            return false;
+        case CONDS::NOR: // BOTH childern must be false
+            query = false; [[fallthrough]];
+        case CONDS::AND: // BOTH children must be true
+            return _left->faster_with_next(query);
+        case CONDS::NAND: // BOTH childern must be false
+            query = false; [[fallthrough]];
+        case CONDS::OR: // BOTH children must be true
+            return _left->faster_with_next(query) &&
+                   _right->faster_with_next(query);
+        default:
+            std::terminate();
+        }
+    }
+
+    void next(iter_t& it, const iter_t& end, bool t) override {
+        bool query = true;
+        // Turn NEXT_FALSE query to NEXT_TRUE one by negating the conjunction.
+        // For instance, since NOT AND is NAND - that's the definition of NAND
+        // after all - the NEXT_FALSE of an AND node is equivalent to the
+        // NEXT_TRUE of an NAND. `t` is no longer useful after this maneuver.
+        CONDS cond_true = t ? _cond : CONDS(_cond ^ CONDS::NOT_MASK);
+        node<iter_t, sv_t> *lhs = _left.get(), *rhs = _right.get();
+
+        switch (cond_true) {
+        case CONDS::XOR: case CONDS::XNOR:
+            return node<iter_t, sv_t>::next(it, end, t);
+        
+        case CONDS::NOR: // BOTH childern must be false
+            query = false; [[fallthrough]];
+        case CONDS::AND: // BOTH children must be true
+            lhs->next(it, end, query);
+            while (it != end) {
+                if (rhs->apply_blocked(it) == query)
+                    return;
+                lhs->next(it, end, query);
+            }
+            break;
+
+        case CONDS::NAND: // ANY childern needs be false
+            query = false; [[fallthrough]];
+        case CONDS::OR: // ANY children needs be true
+            if (__unlikely(&it != _last_match)) {
+                ++turn;
+                _next_res[0] = it;
+                _next_res[1] = it;
+                it = _next_res[1]; // TODO: THIS IS SO DUMB!!!!!!!!!!!!!!!!
+                lhs->next(_next_res[turn & 1], end, query);
+                rhs->next(_next_res[!(turn & 1)], end, query);
+                _last_match = &it;
+            }  
+
+            if (_next_res[turn & 1] == _next_res[!(turn & 1)]) {
+                if (_next_res[turn & 1] == end) {
+                    it = end;
+                    return;
+                }
+                rhs->next(_next_res[!(turn & 1)], end, query);
+            }
+            if (_next_res[turn & 1] < _next_res[!(turn & 1)]) {
+                it = _next_res[turn & 1];
+                lhs->next(_next_res[turn & 1], end, query);
+            } else {
+                it = _next_res[!(turn & 1)];
+                rhs->next(_next_res[!(turn & 1)], end, query);
+            }
+            break;
+
+        default:
+            std::terminate();
+        }
+    }
+
+    bool next_or_uncertain(iter_t& it, const iter_t& end, bool t) override {
+        bool query = true;
+        CONDS cond_true = t ? _cond : CONDS(_cond ^ CONDS::NOT_MASK);
+        node<iter_t, sv_t> *lhs = _left.get(), *rhs = _right.get();
+
+        switch (cond_true) {
+        case CONDS::XOR: case CONDS::XNOR:
+            return node<iter_t, sv_t>::next_or_uncertain(it, end, t);
+
+        case CONDS::NOR: // BOTH childern must be false
+            query = false; [[fallthrough]];
+        case CONDS::AND: { // BOTH children must be true
+            bool fir_unct = lhs->next_or_uncertain(it, end, query);
+            while (it != end) {
+                if (fir_unct) return true; // Uncertain AND any is uncertain
+                tribool_bad sec_res = rhs->apply(it);
+                if (sec_res.is_uncertain())
+                    return true;
+                else if (sec_res == tribool_bad::True)
+                    return false;
+                lhs->next(it, end, query);
+            }
+            break;
+        }
+
+        case CONDS::NAND: // ANY childern needs be false
+            query = false; [[fallthrough]];
+        case CONDS::OR: { // ANY children needs be true
+            if (__unlikely(&it != _last_match)) {
+                ++turn;
+                _next_res[turn & 1] = it;
+                _next_res[!(turn & 1)] = it;
+                it = _next_res[!(turn & 1)]; // TODO: THIS IS SO DUMB!!!!!!!!!!!!!!!!
+                _nextl_uncertain = 
+                    lhs->next_or_uncertain(_next_res[turn & 1], end, query);
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
+                _last_match = &it;
+            }  
+
+            if (_next_res[turn & 1] == _next_res[!(turn & 1)]) {
+                if (_next_res[turn & 1] == end) {
+                    it = end;
+                    return false;
+                }
+                _nextl_uncertain &= _nextr_uncertain;
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
+            }
+            if (_next_res[turn & 1] < _next_res[!(turn & 1)]) {
+                it = _next_res[turn & 1];
+                bool ret = _nextl_uncertain;
+                _nextl_uncertain = 
+                    lhs->next_or_uncertain(_next_res[turn & 1], end, query);
+                return ret;
+            } else {
+                it = _next_res[!(turn & 1)];
+                bool ret = _nextr_uncertain;
+                _nextr_uncertain =
+                    rhs->next_or_uncertain(_next_res[!(turn & 1)], end, query);
+                return ret;
+            }
+        }
+
+        default:
+            std::terminate();
+        }
+        return false;// End iterator reached
+    }
+
     node<iter_t, sv_t>* clone() const override {
         return new cond_node<iter_t, sv_t>(*this);
     }
@@ -394,7 +609,7 @@ public:
         else _right.reset(heap_node);
     }
  
-    cond_node(CONDS cond) : _cond(cond) {}
+    cond_node(CONDS cond) : _cond(cond), _last_match(nullptr) {}
 };
 
 // MODIF: -quitmod
@@ -424,11 +639,33 @@ public:
         return false;
     }
 
+    void next(iter_t& it, const iter_t& end, bool t) override {
+        if (_quit_after <= 0)
+            throw quitted();
+        if(mod_base_node<iter_t, sv_t>::prev)
+            mod_base_node<iter_t, sv_t>::prev->next(it, end, t);
+        else ++it;
+        --_quit_after;
+    }
+    bool next_or_uncertain(iter_t& it, const iter_t& end, bool t) override {
+        if (_quit_after <= 0)
+            throw quitted();
+        bool res = mod_base_node<iter_t, sv_t>::prev == nullptr ? true :
+            mod_base_node<iter_t, sv_t>::prev->next_or_uncertain(it, end, t);
+        if (!res)
+            --_quit_after;
+        return res;
+    }
+    bool faster_with_next(bool t) override {
+        return mod_base_node<iter_t, sv_t>::prev &&
+               mod_base_node<iter_t, sv_t>::prev->faster_with_next(t);
+    }
+
     bool apply_blocked(iter_t& it) override {
         bool res = (mod_base_node<iter_t, sv_t>::prev == nullptr ||
                     mod_base_node<iter_t, sv_t>::prev->apply_blocked(it));
         if (res && --_quit_after <= 0)
-            throw quitted("-quitmod reached 0");
+            throw quitted();
         return res;
     }
 };

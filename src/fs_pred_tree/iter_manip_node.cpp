@@ -7,11 +7,12 @@ tribool_bad downdir_node::apply(fs_data_iter& it) {
     if (!prev)
         return tribool_bad::False;
     fs_data_iter down = it.current_dir_iter();
+    it.close_index_view();
     size_t cnt_true = 0;
     bool has_uncertain = false;
 
     while (down != down.end()) {
-        tribool_bad prev_res = prev->apply_blocked(down);
+        tribool_bad prev_res = prev->apply(down);
         if (prev_res.is_uncertain()) 
             has_uncertain = true;
         else if (prev_res == tribool_bad::True) {
@@ -35,7 +36,7 @@ bool downdir_node::apply_blocked(fs_data_iter& it) {
     if (!prev)
         return false;
     fs_data_iter down = it.current_dir_iter();
-    it.close_fsdb_view();
+    it.close_index_view();
     // return min < std::count_if(down, down.end, prev->apply_blocked) < max
     // Unfortunately std::count_if will not stop prematurely
     // even if the result is determined.
@@ -89,19 +90,19 @@ bool downdir_node::next_param(sv_t param) {
 }
 
 bool updir_node::apply_blocked(fs_data_iter& it) {
-    fs_data_record up_rec = it.record(1);
     for (auto& done_item : _last_done_q)
-        if (up_rec == done_item.first)
+        if (it.parent_path() == done_item.first)
             return done_item.second;
     if (!prev)
         return false;
 
     fs_data_iter up_iter = it;
     up_iter.updir();
+    it.close_index_view();
     bool ret = prev->apply_blocked(up_iter);
     
     std::lock_guard<std::mutex> _lck(_last_done_mut);
-    _last_done_q[_last_idx] = std::make_pair(up_rec, ret);
+    _last_done_q[_last_idx] = std::make_pair(it.parent_path(), ret);
     ++_last_idx; _last_idx &= 7;
     return ret;
 }

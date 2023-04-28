@@ -21,8 +21,9 @@ struct ABunchOfDirs {
     path tmpPath, dbPath;
     std::unique_ptr<dumper> dmp = nullptr;
     time_t since;
+    bool persistent;
 
-    ABunchOfDirs(size_t depth = 5) {
+    ABunchOfDirs(size_t depth = 5, bool persist = false) : persistent(persist) {
         tmpPath = temp_directory_path() 
             / ("ABunchOfDirs_" + std::to_string(std::random_device()()));
         dbPath = temp_directory_path() 
@@ -56,8 +57,11 @@ struct ABunchOfDirs {
     }
 
     ~ABunchOfDirs() { 
-        remove_all(tmpPath);
+        dmp.reset();
+        if (!persistent)
+            remove_all(tmpPath);
         remove(dbPath);
+        remove(dbPath += "_inv");
     }
 
     ABunchOfDirs(ABunchOfDirs&& rhs) = delete;

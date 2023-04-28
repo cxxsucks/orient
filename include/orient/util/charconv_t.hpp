@@ -4,10 +4,23 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
+
+#ifdef _WIN32
 #ifdef _MSC_VER
 // Negate unsigned, implicit narrow cast
 #pragma warning(disable: 4996 4146 4244)
 #endif // _MSC_VER
+#ifndef WIN32_LEAN_AND_MEAN
+#	define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#endif // _WIN32
 
 namespace orie {
 
@@ -20,7 +33,7 @@ namespace orie {
  * @return dest */
 template<class des_t, class src_t, typename = std::enable_if_t<
     std::is_assignable_v<des_t&, src_t> > >
-des_t* strncpy(des_t* dest, const src_t* src, size_t nmemb) 
+des_t* strncpy(des_t* dest, const src_t* src, size_t nmemb)
     noexcept(std::is_nothrow_assignable_v<des_t&, src_t>) {
     if (!dest || !src)
         return dest;
@@ -39,7 +52,7 @@ des_t* strncpy(des_t* dest, const src_t* src, size_t nmemb)
  * @return dest */
 template<class des_t, class src_t, typename = std::enable_if_t<
     std::is_assignable_v<des_t&, src_t> >>
-des_t* strcpy(des_t* dest, const src_t* src) 
+des_t* strcpy(des_t* dest, const src_t* src)
     noexcept(std::is_nothrow_assignable_v<des_t&, src_t>) {
     return orie::strncpy<des_t, src_t>(dest, src, ~size_t());
 }
@@ -145,13 +158,43 @@ std::basic_string<des_t> xxstrcpy(std::basic_string_view<src_t> src) {
     return res;
 }
 
+#ifdef _WIN32
+// string to wstring specialization
+template<>
+inline std::wstring xxstrcpy(std::string_view src) {
+    int srcsz = static_cast<int>(src.size());
+    int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), srcsz,
+                                  nullptr, 0);
+    if (len <= 0)
+        return std::wstring();
+    std::wstring utf16_str(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, src.data(), srcsz,
+                        utf16_str.data(), len);
+    return utf16_str;
+}
+
+// wstring to string specialization
+template<>
+inline std::string xxstrcpy(std::wstring_view src) {
+    int srcsz = static_cast<int>(src.size());
+    int len = WideCharToMultiByte(CP_UTF8, 0, src.data(), srcsz, nullptr,
+                                  0, nullptr, nullptr);
+    if (len <= 0)
+        return std::string();
+    std::string utf8_str(len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, src.data(), srcsz, utf8_str.data(),
+                        len, nullptr, nullptr);
+    return utf8_str;
+}
+#endif
+
 /** @brief Convert a number to string
  * @tparam cal_t an arithmetic type. Either integers or floating points
  * @param [out] buf pre-allocated buffer to which the converted string write.
  * @param base base of the output string, defaulted to 10
  * @param digits Only used in floating-point types. Number of decimal digits written to buf.
  * @return @b JUST FOUND SOME BUGS DO NOT USE RETURN VALUE */
-template<class cal_t, class char_t> 
+template<class cal_t, class char_t>
 char_t* to_char_t(char_t* buf, cal_t num, unsigned base = 10,
 [[maybe_unused]] unsigned digits = 7) noexcept
 {
@@ -187,7 +230,7 @@ char_t* to_char_t(char_t* buf, cal_t num, unsigned base = 10,
             *buf-- = to_digit_val(val % base);
             val /= base;
         }
-        ret[1] = 46, ret[0] = to_digit_val(val); 
+        ret[1] = 46, ret[0] = to_digit_val(val);
         if (in_dig != 0) {
             ret[digits + 1] = 101;
             to_char_t(ret + digits + 2, in_dig, base);
@@ -197,14 +240,14 @@ char_t* to_char_t(char_t* buf, cal_t num, unsigned base = 10,
 }
 
 /*! @brief Parse a cstring from @p begin to @p end
-* @param [in] begin The beginning of a string representing a number. 
-* @param [in] end The end of a string representing a number. 
+* @param [in] begin The beginning of a string representing a number.
+* @param [in] end The end of a string representing a number.
 * @param base Base of the number the string represents, defaulted to 10.
 * @param [out] res Result to save to.
 * @return Length consumed in @c src
-* @throw @c std::out_of_range when quoations do not bound 
+* @throw @c std::out_of_range when quoations do not bound
 * @note @p end is nullable (when @p begin is null-terminated) but @p begin is not */
-template<class cal_t, class char_t> const char_t* 
+template<class cal_t, class char_t> const char_t*
 from_char_t(const char_t* beg, const char_t* const end, cal_t& res, unsigned base = 10) noexcept
 {
     auto get_digit_val = [](char_t ch, unsigned b) {
@@ -235,7 +278,7 @@ from_char_t(const char_t* beg, const char_t* const end, cal_t& res, unsigned bas
         }
     }
     if (beg != end && base >= 15 && (beg[-1] == 69 || beg[-1] == 101)) {
-        if (has_point) 
+        if (has_point)
             res -= pivot * 15;
         else (res -= 15) /= base;
         if (res <= 1e-5) need_exp = true;
@@ -332,7 +375,7 @@ next_token(const char_t* src, size_t src_size) {
 }
 
 //! @brief Split a std string by the C string provided by spl.
-//! @tparam container_t A container supporting `emplace_back` method 
+//! @tparam container_t A container supporting `emplace_back` method
 //! (like @c `std::vector` ).
 //! @return The container
 template <typename container_t, typename char_t = char>

@@ -1,6 +1,7 @@
 #pragma once
 #include <orient/pred_tree/node.hpp>
 #include <orient/fs/data_iter.hpp>
+#include <orient/fs/trigram.hpp>
 
 #include <fstream>
 #include <string>
@@ -108,11 +109,22 @@ protected:
     bool _is_fullpath;
     bool _is_lname;
     bool _is_icase;
-    // Total 256B
+    // Total 256B till here
+
+    dmp::trigram_query _query;
+    fs_data_iter* _last_match;
+    size_t _full_match_depth;
+
+    bool __next_param_impl(sv_t param);
 
 public:
-    double success_rate() const noexcept override { return 0.05; }
-    double cost() const noexcept override { return 2.5e-7; }
+    double success_rate() const noexcept override {
+        return (_is_fullpath ? 0.8 : 0.5)
+               * std::pow(0.1, _query.trigram_size());
+    }
+    double cost() const noexcept override {
+        return _is_fullpath ? 3e-7 : 2e-7;
+    }
     fs_node* clone() const override {
         return new glob_node(*this);
     }
@@ -120,18 +132,32 @@ public:
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
+    bool faster_with_next(bool t) override {
+        return t && !_is_lname && _query.trigram_size();
+    }
+    void next(fs_data_iter& it, const fs_data_iter&, bool t) override;
+
     glob_node(bool full = false, bool lname = false, bool icase = false);
+    glob_node(const glob_node& rhs);
+    glob_node& operator=(const glob_node& r);
 };
 
 // Strictly speaking strstr_node "is not a" glob node,
 // but their memory layout and next_param methods are exactly identical.
 // The inheritance is more of a code reusing trick than an abstraction.
 struct strstr_node : public glob_node {
-    double cost() const noexcept override { return 1e-7; }
+    double success_rate() const noexcept override {
+        return (_is_fullpath ? 0.6 : 0.1)
+               * std::pow(0.1, _query.trigram_size());
+    }
+    double cost() const noexcept override {
+        return _is_fullpath ? 2e-7 : 1e-7;
+    }
     fs_node* clone() const override {
         return new strstr_node(*this);
     }
 
+    bool next_param(sv_t param) override;
     bool apply_blocked(fs_data_iter& it) override; 
 
     strstr_node(bool full = false, bool lname = false, bool icase = false)
@@ -169,8 +195,11 @@ class fuzz_node : public fs_node {
     bool _is_lname;
     bool _next_cutoff;
     double _cutoff;
-    // Prevent too short matches like "e" matching "hello"
-    // Set to half of needle length
+
+    dmp::trigram_query _query;
+    fs_data_iter* _last_match;
+    // Prevent short matches like "mylinux" matching "linux-6.2.2-"
+    // Set to needle length - 2
     size_t _min_haystack_len;
 
 public:
@@ -180,12 +209,18 @@ public:
         return new fuzz_node(*this);
     }
 
+    bool faster_with_next(bool t) override {
+        return t && !_is_lname && !_is_full &&
+               _query.trigram_size() >= 4;
+    }
+    void next(fs_data_iter& it, const fs_data_iter&, bool t) override;
+
     bool apply_blocked(fs_data_iter& it) override; 
     bool next_param(sv_t param) override;
 
-    fuzz_node(bool full = false, bool lname = false)
-        : _is_full(full), _is_lname(lname), _next_cutoff(false)
-        , _cutoff(90.0), _min_haystack_len(0) {};
+    fuzz_node(bool full = false, bool lname = false);
+    fuzz_node(const fuzz_node& rhs);
+    fuzz_node& operator=(const fuzz_node& rhs);
 };
 
 class type_node : public fs_node {
@@ -375,9 +410,9 @@ class access_node : public fs_node {
 public:
     double success_rate() const noexcept override { 
         double res = 1.0;
-        if (_access_test_mode | R_OK) res *= 0.9;
-        if (_access_test_mode | W_OK) res *= 0.6;
-        if (_access_test_mode | X_OK) res *= 0.3;
+        if (_access_test_mode & R_OK) res *= 0.9;
+        if (_access_test_mode & W_OK) res *= 0.6;
+        if (_access_test_mode & X_OK) res *= 0.3;
         return res;
     }
     double cost() const noexcept override { return 1e-5; }
@@ -568,13 +603,13 @@ public:
  */
 class updir_node : public fs_mod_node {
     // Circular array queue caching recently judged results
-    std::array<std::pair<fs_data_record, bool>, 8> _last_done_q;
+    std::array<std::pair<str_t, bool>, 8> _last_done_q;
     size_t _last_idx = 0;
     // Lock for the queue.
     std::mutex _last_done_mut;
 
 public:
-    double cost() const noexcept override { return prev_cost / 8.0 + 2e-7; }
+    double cost() const noexcept override { return prev_cost * 0.4 + 2e-7; }
     fs_node* clone() const override {
         return new updir_node(*this);
     }
@@ -600,7 +635,7 @@ class downdir_node : public fs_mod_node {
     size_t _min_cnt = 0;
 
 public:
-    double cost() const noexcept override { return prev_cost * 8.0 + 5e-8; }
+    double cost() const noexcept override { return prev_cost * 8.0 + 2e-7; }
     fs_node* clone() const override {
         return new downdir_node(*this);
     }

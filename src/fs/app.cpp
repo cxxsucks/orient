@@ -15,7 +15,7 @@ app& app::update_db() {
     if (_dumper == nullptr)
         throw std::runtime_error("orient database not set with `set_db_path`"
                                  " or `read_conf`");
-    str_t db_path = _dumper->_data_dumped.saving_path();
+    str_t db_path = _dumper->fwdidx_path();
 
     // Having multiple dumpers running gets no performance gain
     static std::mutex global_dump_lock;
@@ -23,12 +23,18 @@ app& app::update_db() {
 
     // Move current dumper to a temporary location in case it is being used by
     // jobs. Old database is also scheduled to be deleted on job finish.
+    try {
 #ifdef _WIN32
-    _dumper->_data_dumped.move_file((db_path + std::to_wstring(::rand())).c_str());
+        _dumper->move_file(db_path + std::to_wstring(::rand()));
 #else
-    _dumper->_data_dumped.move_file((db_path + std::to_string(::rand())).c_str());
+        _dumper->move_file(db_path + std::to_string(::rand()));
 #endif
-    _dumper->_data_dumped._rmfile_on_dtor = true;
+    } catch(const std::system_error& e) {
+        // If move fails, the original data remain unchanged.
+        throw std::runtime_error(std::string("Moving original data failed: ") +
+            e.what() + " Is another `orient` instance or other process using it?");
+    }
+    _dumper->set_remove_on_destroy(true);
 
     // Setup the new dumper
     std::shared_ptr<dmp::dumper> dumper_new(new dmp::dumper(db_path, _pool));
@@ -40,7 +46,18 @@ app& app::update_db() {
 #endif
 
     // Dump with the new dumper. While dumping, old dumper remain functional
-    dumper_new->rebuild_database();
+    try {
+        dumper_new->rebuild_database();
+    } catch(const std::exception& e) {
+        // Keep the old one if the new dumper got errors while building.
+        dumper_new->set_remove_on_destroy(true);
+        dumper_new.reset();
+        // Move original data back.
+        _dumper->move_file(db_path);
+        throw std::runtime_error(std::string("Updatedb failed: ") + e.what() +
+            "\nThis is usually caused by invalid or inaccessible root path.");
+    }
+    
     // Destroy old (pointer to) dumper
     std::lock_guard __lck2(_paths_mut);
     _dumper = std::move(dumper_new);
@@ -48,7 +65,7 @@ app& app::update_db() {
 }
 
 app& app::stop_auto_update() {
-    if (_auto_update_thread != nullptr) {
+    if (_auto_update_thread.joinable()) {
     {
         std::unique_lock __lck(_paths_mut);
         _auto_update_stopped = true;
@@ -56,8 +73,8 @@ app& app::stop_auto_update() {
         // In the worst case, update starts right before notification
         // Will join after update finishes in this case.
         _auto_update_cv.notify_all();
-        _auto_update_thread->join();
-        _auto_update_thread.reset();
+        _auto_update_thread.join();
+        // _auto_update_thread.reset();
     }
     return *this;
 }
@@ -126,7 +143,7 @@ app& app::read_conf(str_t path) {
         throw std::runtime_error("Cannot read orient conf file");
 
 #ifdef _MSC_VER
-    ifs.imbue(std::locale("en_US.UTF-8"));
+    ifs.imbue(std::locale("en_US.utf8"));
 #endif
     _dumper.reset();
     str_t conf_cont;
@@ -190,7 +207,7 @@ app& app::write_conf(str_t path) {
         return *this;
 
 #ifdef _MSC_VER
-    ofs.imbue(std::locale("en_US.UTF-8"));
+    ofs.imbue(std::locale("en_US.utf8"));
 #endif
     ofs << NATIVE_PATH("DB_PATH `") << db_path() << char_t('`');
     ofs << NATIVE_PATH("\nROOT_PATH `") << _dumper->_root_path << char_t('`');
@@ -220,7 +237,7 @@ app::job_list app::get_jobs(fsearch_expr& expr) {
                    sizeof(char_t) * p.size()) == 0)
             p = _dumper->_root_path;
 
-        fs_data_iter it(&_dumper->_data_dumped, p);
+        fs_data_iter it(_dumper.get(), p);
         if (it == it.end()) // Invalid starting path
             continue;
 
@@ -262,7 +279,7 @@ app::~app() {
 
 #ifndef _WIN32
 app app::os_default(fifo_thpool& pool) {
-    std::string conf_dir = ::getenv("HOME");
+    std::string conf_dir = ::getenv("HOME") ? ::getenv("HOME") : "/var/tmp";
     ::mkdir((conf_dir += "/.config").c_str(), 0755);
     ::mkdir((conf_dir += "/orie").c_str(), 0700);
     app res(pool);

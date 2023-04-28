@@ -13,6 +13,7 @@ Release
 x64
 
 unused
+.cache
 **/*tmpdir*
 CMakeSettings.json
 win_port/packages

@@ -1,17 +1,24 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include <orient/app.hpp>
 #include <orient/fs_pred_tree/fs_expr_builder.hpp>
-#include "afixedbunchofdirs.hpp"
-
-static AFixedBunchOfDirs __fstore_dirs_global;
+#include "abunchofdirs.hpp"
 
 struct orieApp : public testing::Test {
-    orie::fifo_thpool _pool;
-    orie::app _app;
+    static orie::fifo_thpool _pool;
+    static orie::app _app;
+    static std::mutex _single_operation_mtx;
+    static bool inited;
+    static std::filesystem::path tmpPath, dbPath;
 
-    ABunchOfDirs& info() noexcept { return *__fstore_dirs_global.dirs; }
-    orieApp() : _pool(8), _app(_pool) {
-        __fstore_dirs_global.create(); 
+    std::unique_lock<std::mutex> _single_operation_lck;
+
+    orieApp() : _single_operation_lck(_single_operation_mtx) {
+        if (inited)
+            return;
+        ABunchOfDirs dirs(12, true);
+        dbPath = dirs.dbPath;
+        tmpPath = dirs.tmpPath;
+        inited = true;
     }
 
     size_t _do_tests(orie::sv_t expr_sv) {
@@ -26,57 +33,69 @@ struct orieApp : public testing::Test {
 protected:
     void SetUp() override {
         // set_db_path must precedes all getters and setters
-        _app.set_db_path(info().dbPath.c_str())
-            .set_root_path(info().tmpPath.native())
+        _app.set_db_path(dbPath.c_str())
+            .set_root_path(tmpPath.native())
             // Empty path is root path
             .add_start_path(orie::str_t());
     }
     void TearDown() override {
-        std::filesystem::remove(_app.db_path());
+        if (!_app) // No dumper
+            return;
+        auto todel = _app.db_path();
+        _app = orie::app(_pool);
+        std::filesystem::remove(todel);
+        std::filesystem::remove(todel + NATIVE_PATH("_inv"));
         std::filesystem::remove(temp_directory_path() / "testConf.txt");
     }
 };
 
+orie::fifo_thpool orieApp::_pool{8};
+orie::app orieApp::_app{_pool};
+bool orieApp::inited{false};
+std::mutex orieApp::_single_operation_mtx{};
+std::filesystem::path orieApp::tmpPath{};
+std::filesystem::path orieApp::dbPath{};
+
 TEST_F(orieApp, replicateRoot) {
-    _app.set_root_path((info().tmpPath).native())
-        .set_root_path((info().tmpPath).native())
+    _app.set_root_path(tmpPath.native())
+        .set_root_path(tmpPath.native())
         .update_db();
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 }
 
-/* Since v0.4.0 pruned root path is undefined
-TEST_F(orieApp, rootPruned) {
-    _app.add_ignored_path((info().tmpPath).native())
-        .update_db();
-    ASSERT_FALSE(_app); // No write to database file
-    // Pruned paths override root paths
-    // Only the 2 "dir9" inside "dir11" would match
-    EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
+TEST_F(orieApp, invalidRoot) {
+    _app.set_root_path(tmpPath / "nonexistent");
+    EXPECT_THROW(_app.update_db(), std::runtime_error);
 } 
-*/
+
+TEST_F(orieApp, rootPruned) {
+    _app.add_ignored_path(tmpPath.native())
+        .update_db();
+    EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
+} 
 
 TEST_F(orieApp, prunedPath) {
-    _app.add_ignored_path((info().tmpPath / "dir10").native())
-        .add_ignored_path((info().tmpPath / "dir11" / "dir10").native())
+    _app.add_ignored_path((tmpPath / "dir10").native())
+        .add_ignored_path((tmpPath / "dir11" / "dir10").native())
         .update_db();
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
 }
 
 TEST_F(orieApp, slowPaths) {
-    _app.add_slow_path((info().tmpPath / "dir10").native())
-        .add_slow_path((info().tmpPath / "dir11" / "dir10").native())
+    _app.add_slow_path((tmpPath / "dir10").native())
+        .add_slow_path((tmpPath / "dir11" / "dir10").native())
         .update_db();
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 }
 
 TEST_F(orieApp, slowRoot) {
-    _app.add_slow_path(info().tmpPath.native())
+    _app.add_slow_path(tmpPath.native())
         .update_db();
     EXPECT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 }
 
 TEST_F(orieApp, manyStartPath) {
-    _app.add_start_path(info().tmpPath.native())
+    _app.add_start_path(tmpPath.native())
         .add_start_path(canonical(temp_directory_path()).native())
         .update_db();
     // Root, /tmp and /tmp/ABunchOfDirs, 4 results each
@@ -89,9 +108,9 @@ TEST_F(orieApp, manyStartPath) {
 }
 
 TEST_F(orieApp, concurPreds) {
-    std::ofstream a(info().tmpPath / "dir1" / "file0");
-    std::ofstream b(info().tmpPath / "dir2" / "file0");
-    std::ofstream c(info().tmpPath / "dir3" / "file0");
+    std::ofstream a(tmpPath / "dir1" / "file0");
+    std::ofstream b(tmpPath / "dir2" / "file0");
+    std::ofstream c(tmpPath / "dir3" / "file0");
     for (size_t i = 0; i < 10; ++i) {
         a << std::string(500, 'z'); //~5Kib
         b << std::string(1000, 'z'); //~10Kib
@@ -110,8 +129,8 @@ TEST_F(orieApp, readDb) {
     _app.update_db();
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
 
-    _app = orie::app(_pool); // Reset
-    SetUp();
+    _app = orie::app(_pool);
+    SetUp(); // Reset
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
     _app.update_db();
     ASSERT_EQ(4, _do_tests(NATIVE_SV("-name dir9")));
@@ -119,16 +138,16 @@ TEST_F(orieApp, readDb) {
 
 TEST_F(orieApp, confFile) {
     // Generate configuration
-    _app.add_ignored_path((info().tmpPath / "dir10").native())
-        .add_ignored_path((info().tmpPath / "dir11" / "dir10").native())
+    _app.add_ignored_path((tmpPath / "dir10").native())
+        .add_ignored_path((tmpPath / "dir11" / "dir10").native())
         .update_db()
-        .write_conf((info().tmpPath / "testConf.txt").native());
+        .write_conf((tmpPath / "testConf.txt").native());
     ASSERT_TRUE(_app) << "Write Configuration Failed.";
     ASSERT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
 
     // Consume generated configuration & database
     _app = orie::app(_pool);
-    _app.read_conf((info().tmpPath / "testConf.txt").native())
+    _app.read_conf((tmpPath / "testConf.txt").native())
         .add_start_path(orie::str_t());
     EXPECT_EQ(2, _do_tests(NATIVE_SV("-name dir9")));
     _app.update_db();
@@ -137,7 +156,7 @@ TEST_F(orieApp, confFile) {
 
 TEST_F(orieApp, autoUpdate) {
     _app.start_auto_update(std::chrono::milliseconds(80), true);
-    std::ofstream(info().tmpPath / "testConf.txt") << "aaa";
+    std::ofstream(tmpPath / "testConf.txt") << "aaa";
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
     ASSERT_EQ(1, _do_tests(NATIVE_SV("-name testConf.txt")));
 
@@ -165,6 +184,7 @@ TEST_F(orieApp, osDefault) {
 
     std::filesystem::remove(conf_dir / "default.txt");
     std::filesystem::remove(conf_dir / "default.db");
+    std::filesystem::remove(conf_dir / "default.db_inv");
     // Create config
     _app = orie::app::os_default(_pool);
     _app.update_db().add_start_path(orie::str_t());
@@ -186,8 +206,8 @@ TEST_F(orieApp, osDefault) {
 #endif
 
 TEST_F(orieApp, main) {
-    auto conf_path = info().tmpPath / "mainConf.txt",
-         start_path = info().tmpPath / "dir10";
+    auto conf_path = tmpPath / "mainConf.txt",
+         start_path = tmpPath / "dir10";
     const orie::char_t* args[] = {
         NATIVE_PATH("a.out"), 
         start_path.c_str(),
@@ -200,7 +220,9 @@ TEST_F(orieApp, main) {
     // -conf file must be valid. 
     // Before app::write_conf, the file does not exist
     EXPECT_NE(0, fake_main(4, args));
+    // Write config file and close all files
     _app.write_conf(conf_path.native());
+    _app = orie::app(_pool);
     // Database not initialized
     EXPECT_NE(0, fake_main(4, args));
     // Ok; just updatedb. No result

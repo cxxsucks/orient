@@ -69,13 +69,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
 set(orie_src
     ${s}/app.cpp ${s}/data_iter.cpp
-    ${s}/dumper.cpp)
+    ${s}/dumper.cpp ${s}/trigram.cpp
+)
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs_pred_tree)
 set(orie_src ${orie_src}
     ${s}/action_node.cpp ${s}/content_node.cpp
     ${s}/iter_manip_node.cpp ${s}/name_node.cpp 
     ${s}/stat_node.cpp ${s}/fs_expr_builder.cpp
-    src/util/file_mem_chunk.cpp
+)
+set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/util/compresslib)
+set(orie_src ${orie_src}
+    ${s}/bitpacking.cpp
+    ${s}/integratedbitpacking.cpp
+    ${s}/intersection.cpp
+    ${s}/../file_mem_chunk.cpp
+    ${s}/../arr2d.cpp
 )
 unset(s)
 
@@ -83,8 +91,6 @@ unset(s)
 if(WIN32)
     set(orie_src ${orie_src}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/util/dirent_win.c)
-    install(FILES include/orient/util/dirent_win.h 
-            DESTINATION include/orient/util)
     set(orie_pcre2_libname ${orie_pcre2_libname}16)
 else(WIN32)
     set(orie_pcre2_libname ${orie_pcre2_libname}8)
@@ -95,9 +101,12 @@ add_executable(orient ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(orie PUBLIC ${orie_pcre2_libname})
 target_link_libraries(orie PRIVATE zstd rapidfuzz::rapidfuzz)
 target_link_libraries(orient PRIVATE orie)
+if(WIN32)
+    target_link_libraries(orie PUBLIC shlwapi)
+endif(WIN32)
 target_include_directories(orie PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    $<INSTALL_INTERFACE:include>)
 add_library(orie::orie ALIAS orie)
 
 # On most systems PCRE2 libs are known as pcre2-{8,16,32}
@@ -106,7 +115,7 @@ if (NOT ORIE_SYSTEM_PCRE2)
     set(orie_pcre2_libname ${orie_pcre2_libname}-static)
     set_target_properties(${orie_pcre2_libname} PROPERTIES
                           INTERFACE_INCLUDE_DIRECTORIES 
-                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+                          $<INSTALL_INTERFACE:include>)
     set(targs_to_install ${targs_to_install} ${orie_pcre2_libname})
     target_include_directories(orie PUBLIC 
                                $<BUILD_INTERFACE:${pcre2_BINARY_DIR}>)
@@ -125,13 +134,16 @@ unset(orie_pcre2_libname)
 install(TARGETS orient DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h")
 
 # Install liborie as CMake Module
 set(ORIE_CMAKE_CONFIG_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/orie)
-# Group all targets into a single exported target (only 1 in this case)
+# Group all (only 1 in this case, which is `orient`) library targets
+# into a single exported target
 install(TARGETS ${targs_to_install} EXPORT orieTargs DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-# Generate *Config.cmake for each target 
+# Generate *Config.cmake for each library target 
 # Only generate orie since pcre2 is static linked,
 # rapidfuzz and zstd handle install by themselves
 configure_package_config_file(orieConfig.cmake.in
@@ -163,4 +175,7 @@ endif(ORIE_LINK_STATIC)
 target_compile_options(orie PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+)
+target_compile_options(orie PUBLIC
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-mssse3 -mpopcnt>
 )

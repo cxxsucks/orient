@@ -4,6 +4,8 @@
 #include <optional>
 
 namespace orie {
+namespace dmp { class trigram_query; }
+
 
 /*! @class fs_data_record
  * @brief A non-owning, immutable reference to a file entry
@@ -12,10 +14,19 @@ namespace orie {
  * @c fs_data_iter */
 class fs_data_record {
 private:
-    dmp::file_mem_chunk* _dataref;
-    size_t _cur_pos;
+    dmp::dumper* _dumper;
+
+    // Current chunk in Forward Index, 0~4095
+    uint32_t _cur_chunk;
+    // Current batch in Inverted Index
+    uint32_t _cur_batch;
+
     const std::byte* _viewing;
-    uint8_t _cur_chunk;
+    // Current position in current chunk of Forward Index
+    size_t _cur_pos;
+
+    // Current position in the batch of Inverted Index
+    uint8_t _in_batch_pos;
     bool _is_viewing;
 
 public:
@@ -35,6 +46,10 @@ public:
     //! @throw std::out_of_range when encountering incomplete data
     ptrdiff_t increment();
 
+    //! @brief Move to the @p batch th batch of the index dumped by @p dumper
+    //! @note Calls @c start_visit inside and enables viewing
+    sv_t change_batch(size_t batch) noexcept;
+
     //! @brief Get the file name of current entry
     //! @c start_visit must be called beforehand 
     //! @warning Returned string view is @b not null-terminated
@@ -44,6 +59,12 @@ public:
     //! @c start_visit must be called beforehand 
     size_t file_name_len() const noexcept;
 
+    // Simple getters
+    uint8_t in_batch_pos() const noexcept { return _in_batch_pos; };
+    uint32_t at_batch() const noexcept { return _cur_batch; };
+    dmp::dumper* dumper() const noexcept { return _dumper; };
+    bool valid() const noexcept { return _cur_chunk < 4096; }
+
     //! @brief Get the type of the file.
     //! @retval unknown_tag End of data reached; no other functions shall be called.
     category_tag file_type() const noexcept;
@@ -51,16 +72,27 @@ public:
     // Compare equality of two records.
     bool operator==(const fs_data_record& rhs) const noexcept {
         return rhs._cur_pos == _cur_pos && rhs._cur_chunk == _cur_chunk &&
-               rhs._dataref == _dataref;
+               rhs._dumper == _dumper;
     }
     // Compare inequality of two records.
     bool operator!=(const fs_data_record& rhs) const noexcept {
         return rhs._cur_pos != _cur_pos || rhs._cur_chunk != _cur_chunk ||
-               rhs._dataref != _dataref;
+               rhs._dumper != _dumper;
+    }
+    // A record is smaller if the current position is smaller
+    bool operator<(const fs_data_record& rhs) const noexcept {
+        assert(_dumper == rhs._dumper);
+        return _cur_chunk == rhs._cur_chunk ? _cur_pos < rhs._cur_pos
+                                            : _cur_chunk < rhs._cur_chunk;
+    }
+    bool operator>(const fs_data_record& rhs) const noexcept {
+        assert(_dumper == rhs._dumper);
+        return _cur_chunk == rhs._cur_chunk ? _cur_pos > rhs._cur_pos
+                                            : _cur_chunk > rhs._cur_chunk;
     }
 
-    // Constructed record does NOT obtain a view
-    fs_data_record(dmp::file_mem_chunk* fsdb = nullptr) noexcept;
+    // Must call `change_batch` before calling `increment`
+    fs_data_record(dmp::dumper* dumper = nullptr) noexcept;
     // Copied record does NOT obtain a view
     fs_data_record(const fs_data_record& rhs) noexcept;
     fs_data_record& operator=(const fs_data_record& res) noexcept;
@@ -86,16 +118,16 @@ public:
     using reference = fs_data_iter&;
     using pointer = fs_data_iter*;
 
-private:
-    enum class has_recur_ : uint8_t {
-        enable, all_disable, temp_disable 
+    enum iter_mode : uint8_t {
+        enable, all_disable, temp_disable
     };
 
+private:
     fs_data_record _cur_record;
-    std::vector<fs_data_record> _sub_recs;
     size_t _push_count;
     str_t _prefix;
-    has_recur_ _recur;
+    uint32_t _root_path_len, _root_depth;
+    iter_mode _recur;
 
     // Cached file type, done in operator++
     category_tag _tag;
@@ -107,13 +139,16 @@ private:
 
 public:
     // Disable view to database. Re-established on ++ call.
-    void close_fsdb_view() noexcept {
-        path(); // Call path() to construct full path string
-        _cur_record.finish_visit();
+    void close_index_view() noexcept {
+        if (_cur_record.is_visiting()) {
+            path(); // Call path() to construct full path string
+            _cur_record.finish_visit();
+        }
     }
 
-    // Move *this one level up in filesystem hierchary. Return *this.
-    // Invalidates *this (== end) if already at top level.
+    // Move *this one level up in filesystem hierchary AND drops it
+    // in a "special state" where `stat`-related functions are valid,
+    // whereas others are not. Returns *this.
     fs_data_iter& updir();
 
     //! @brief Move the iterator to the given path.
@@ -124,20 +159,26 @@ public:
     // Get a non-recursive iterator over the parent directory of current entry.
     fs_data_iter current_dir_iter() const;
 
-    //! @brief Get the internal data record of the current entry or its parents.
-    //! @param sub Get the record of the sub-th parent. 0 returns current.
-    //! @retval end() On @p sub is greater than current depth.
-    const fs_data_record& record(size_t sub = 0) const noexcept;
-
-    // Set whether the iterator recursively delves into child directories. 
+    //! @brief Move to the @p batch th batch of the index
+    //! @note Calls @c start_visit inside and enables viewing
+    void change_batch(size_t batch) noexcept;
+    //! @brief Move to the @b next batch that may contain the trigram in @p qry
+    //! @param qry The trigram query already has a pattern set 
+    //! @param fuzz_thresh Number of trigrams the name must contain, 0 for
+    //! non-fuzzy matching
+    //! @note Becomes @a end if none could be found
+    void change_batch(dmp::trigram_query& qry, size_t fuzz_thresh = 0);
+    // Set this iterator to "normal" directory iteration mode, if not, then
+    // set whether the iterator recursively delves into child directories. 
     void set_recursive(bool enable) noexcept {
-        _recur = enable ? has_recur_::enable : has_recur_::all_disable;
+        _recur = enable ? iter_mode::enable : iter_mode::all_disable;
     }
-    // Skip traversal into current directory. Has no effect if current entry is
+    // Set this iterator to "normal" directory iteration mode, if not, then
+    // skip traversal into current directory. Has no effect if current entry is
     // not a directory.
     void disable_pending_recursion(bool enable = true) noexcept {
-        if (_recur != has_recur_::all_disable && file_type() == orie::dir_tag)
-            _recur = enable ? has_recur_::temp_disable : has_recur_::enable;
+        if (_recur != iter_mode::all_disable && file_type() == orie::dir_tag)
+            _recur = enable ? iter_mode::temp_disable : iter_mode::enable;
     }
 
     //! @brief Get a reference to current full path string.
@@ -145,16 +186,13 @@ public:
     const str_t& path() const;
     //! @brief Get the base name current path.
     //! @note Same as @code record().basename() @endcode when iter mode on
-    sv_t basename() const {
-        if (_cur_record.is_visiting())
-            return _cur_record.file_name_view();
-        sv_t res(_opt_fullpath.value());
-        return res.substr(_opt_fullpath.value().find_last_of(separator) + 1);
-    }
+    sv_t basename() const;
+
     // Get a reference to parent path string.
     // The reference is valid as long as the iterator is valid
     // and ALWAYS refers to parent path of the iterator at that time.
-    const str_t& parent_path() const noexcept {return _prefix;}
+    const str_t &parent_path() const noexcept { return _prefix; }
+
     //! @brief Whether the directory is empty. @c true for non-dirs;
     //! @warning Undefined if @a file_type returns unknown_tag (end reached)
     bool empty_dir() const noexcept;
@@ -183,7 +221,10 @@ public:
     blksize_t io_block_size() const noexcept;
 #endif // !_WIN32
 
-    size_t depth() const noexcept;
+    // Simple getters
+    const fs_data_record& record() const noexcept { return _cur_record; }
+    dmp::dumper* dumper() const noexcept { return _cur_record.dumper(); }
+    size_t depth() const noexcept { return _push_count; }
     //! @brief File type of current entry.
     //! @see fs_data_record::file_type()
     category_tag file_type() const noexcept { return _tag; }
@@ -199,26 +240,30 @@ public:
 
     // Increment the iterator.
     fs_data_iter& operator++();
-    // Compares two iterators. All end fs_data_iters are equal.
-    bool operator==(const fs_data_iter& rhs) const noexcept;
     fs_data_iter operator++(int) {
         fs_data_iter tmp(*this); ++*this; return tmp; 
     }
+    // Compares two iterators. All end fs_data_iters are equal.
+    bool operator==(const fs_data_iter& rhs) const noexcept;
     // Compares inequality of two iterators. All end fs_data_iters are equal.
     bool operator!=(const fs_data_iter& rhs) const noexcept {
         return !(*this == rhs);
     }
+    bool operator<(const fs_data_iter &rhs) const noexcept {
+        return _cur_record < rhs._cur_record;
+    }
+    bool operator>(const fs_data_iter &rhs) const noexcept {
+        return _cur_record > rhs._cur_record;
+    }
 
     // Construct using pointer to stored filesystem data and internal position
     // An end iterator will be constructed if the record is not a directory.
-    // Constructed iterator has iteration mode on.
-    fs_data_iter(dmp::file_mem_chunk* fsdb = nullptr);
+    fs_data_iter(dmp::dumper* dumper = nullptr);
     // Construct using pointer to stored filesystem data and starting path.
     // An end iterator will be constructed if the path is not part of the data
     // or is not a directory.
-    // Constructed iterator has iteration mode on.
-    fs_data_iter(dmp::file_mem_chunk* fsdb, sv_t start_path)
-        : fs_data_iter(fsdb) { change_root(start_path); }
+    fs_data_iter(dmp::dumper* dumper, sv_t start_path)
+        : fs_data_iter(dumper) { change_root(start_path); }
 
     // Copy the content of rhs.
     // Copied or moved iterator has iteration mode OFF!!!

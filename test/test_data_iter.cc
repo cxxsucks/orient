@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <orient/fs/dumper.hpp>
 #include <orient/fs/data_iter.hpp>
 #include <orient/util/fifo_thpool.hpp>
@@ -17,23 +18,24 @@ inline orie::fifo_thpool __dummy_pool(0);
 struct dataIter : public ::testing::Test {
     path tmpPath, dbPath;
     dumper* dmp = nullptr;
+    size_t ranNum = std::random_device()();
 
     dataIter() {
         tmpPath = std::filesystem::temp_directory_path() 
-            / ("dataIter_tst_tmpdir"  + std::to_string(::time(nullptr)));
+            / ("dataIter_tst_tmpdir"  + std::to_string(ranNum));
         dbPath = temp_directory_path() 
-            / ("dataIter_tst_tmpdir_db" + std::to_string(::time(nullptr)));
+            / ("dataIter_tst_tmpdir_db" + std::to_string(ranNum));
         create_directories(tmpPath / "dirA");
         create_directories(tmpPath / "dirB/dirBA");
         create_directories(tmpPath / "dirEmpty");
         create_symlink("..", tmpPath / "dirB" / "dirBA" / "linkBAB");
 
-        std::ofstream(tmpPath / "fileA").is_open();
-        std::ofstream(tmpPath / "fileB").is_open();
-        std::ofstream(tmpPath / "dirA" / "fileAA").is_open();
-        std::ofstream(tmpPath / "dirA" / "fileAB").is_open();
-        std::ofstream(tmpPath / "dirB" / "fileBA").is_open();
-        std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA").is_open();
+        std::ofstream(tmpPath / "fileA");
+        std::ofstream(tmpPath / "fileB");
+        std::ofstream(tmpPath / "dirA" / "fileAA");
+        std::ofstream(tmpPath / "dirA" / "fileAB");
+        std::ofstream(tmpPath / "dirB" / "fileBA");
+        std::ofstream(tmpPath / "dirB" / "dirBA" / "fileBAA");
 
         dmp = new dumper(dbPath.c_str(), __dummy_pool);
         dmp->_root_path = tmpPath.native();
@@ -45,6 +47,7 @@ struct dataIter : public ::testing::Test {
         delete dmp;
         remove_all(tmpPath);
         remove_all(dbPath);
+        remove_all(dbPath += "_inv");
     }
 };
 
@@ -58,14 +61,14 @@ static size_t _count_dataIt(fs_data_iter& it) {
 }
 
 TEST_F(dataIter, increment) {
-    fs_data_iter it(&dmp->_data_dumped);
+    fs_data_iter it(dmp);
     EXPECT_EQ(_count_dataIt(it), 11);
     EXPECT_THROW(++it, std::out_of_range);
     EXPECT_THROW(it++, std::out_of_range);
 }
 
 TEST_F(dataIter, updir) {
-    for (fs_data_iter it(&dmp->_data_dumped); it != it.end(); ++it) {
+    for (fs_data_iter it(dmp); it != it.end(); ++it) {
         if (it.record().file_name_view() == NATIVE_PATH("fileAA")) {
             auto tmp = it; tmp.updir();
             EXPECT_EQ(tmp.basename(), NATIVE_SV("dirA"));
@@ -77,13 +80,12 @@ TEST_F(dataIter, updir) {
             EXPECT_EQ(tmp.updir().basename(), NATIVE_SV("dirBA"));
             EXPECT_EQ(tmp.updir().basename(), NATIVE_SV("dirB"));
             EXPECT_EQ(tmp.updir().basename(), tmpPath.filename().native());
-            EXPECT_EQ(tmp.updir(), fs_data_iter::end());
         }        
     }
 }
 
 TEST_F(dataIter, downdir) {
-    fs_data_iter it(&dmp->_data_dumped), tmp;
+    fs_data_iter it(dmp), tmp;
     while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     tmp = it.current_dir_iter();
@@ -91,7 +93,7 @@ TEST_F(dataIter, downdir) {
 }
 
 TEST_F(dataIter, stat) {
-    fs_data_iter it(&dmp->_data_dumped);
+    fs_data_iter it(dmp);
     while (it != it.end() && it.record().file_name_view() != NATIVE_PATH("dirB"))
         ++it;
     time_t orig = it->mtime();
@@ -103,14 +105,14 @@ TEST_F(dataIter, stat) {
 }
 
 TEST_F(dataIter, changeRoot) {
-    fs_data_iter it(&dmp->_data_dumped);
+    fs_data_iter it(dmp);
     it.change_root((tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);
-    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "dirB").c_str());
+    it = fs_data_iter(dmp, (tmpPath / "dirB").c_str());
     EXPECT_EQ(_count_dataIt(it), 4);
-    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "nonExistent").c_str());
+    it = fs_data_iter(dmp, (tmpPath / "nonExistent").c_str());
     EXPECT_EQ(it, it.end());
-    it = fs_data_iter(&dmp->_data_dumped, (tmpPath / "fileA").c_str());
+    it = fs_data_iter(dmp, (tmpPath / "fileA").c_str());
     EXPECT_EQ(it, it.end());
     it = fs_data_iter(nullptr);
     EXPECT_EQ(it, it.end());

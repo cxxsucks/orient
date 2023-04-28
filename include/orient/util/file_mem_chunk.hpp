@@ -8,15 +8,15 @@
 namespace orie {
 namespace dmp {
 
-// At most 255 chunks of raw data with at most 8 chunks in memory
+// At most 4095 chunks of raw data with at most 8 chunks in memory
 // Others are stored in a file
 class file_mem_chunk {
 private:
     // Index of cache containing the chunk, >=8 for none
-    // 256-size heap-alloced array
+    // 4096-sized heap-alloced array
     uint8_t* _chunkid_to_cacheid;
     // Presum of size in bytes of each chunk
-    // 256-size heap-alloced array
+    // 4096-sized heap-alloced array
     size_t* _chunk_size_presum;
 
     // Compression Context
@@ -26,8 +26,8 @@ private:
 
     // Content of each cache
     std::vector<std::byte> _cached_dat[8];
-    // Chunk index of each cache
-    uint8_t _cacheid_to_chunkid[8];
+    // Chunk index of each cache; only lower 12 bits used
+    uint32_t _cacheid_to_chunkid[8];
 
 public:
     // Final block is not in file yet and can be freely modified
@@ -39,8 +39,8 @@ private:
 
     // File to save memory not in cache
     str_t _saving_path;
-    uint8_t _chunk_num, // Amount of total chunks in file
-            _next_overwrite; // Index of cache to get overwritten next (FIFO)
+    uint32_t _chunk_num; // Amount of total chunks in file
+    uint8_t _next_overwrite; // Index of cache to get overwritten next (FIFO)
     const uint8_t _cache_num; // Amount of cache blocks
 
     void __writer_lock() noexcept; // `finish_visit` is writer unlock
@@ -54,8 +54,8 @@ public:
     // Final block is not in file yet and can be freely modified
     // Modifications on this block is NOT thread safe to any functions
     std::vector<std::byte>& chunk_to_add() noexcept { return _unplaced_dat; };
-    size_t chunk_count() const noexcept { return _chunk_num; }
-    size_t chunk_size(uint8_t at) const;
+    uint32_t chunk_count() const noexcept { return _chunk_num; }
+    size_t chunk_size(uint32_t at) const;
     const str_t& saving_path() const noexcept { return _saving_path; }
 
     // Write the chunk returned in `chunk_to_add` to file, making it unchangable.
@@ -66,7 +66,7 @@ public:
     // Visit the `at`-th byte of `chunk_idx`-th block
     // The pointer is always valid before calling `finish_visit`
     // If exception is thrown (out of bound), no need for `finisg_visit`
-    const std::byte* start_visit(uint8_t chunk_idx, size_t at);
+    const std::byte* start_visit(uint32_t chunk_idx, size_t at);
     // Each `start_visit` must call one and only one `finish_visit`
     void finish_visit() noexcept;
 
