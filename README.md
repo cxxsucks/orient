@@ -1,22 +1,30 @@
 # orient
 
 A cross-platform filesystem indexer and searcher combining the merits of
-`find`, `locate` and `Everything`, optimized for SSDs and personal
-computers (\<5M files).
+`find`, `locate` and `Everything`, plus file content searches.
+Works on Linux, macOS and Windows.
+
+## Before you read
 
 Inverted index, the tech behind `plocate` which make searches done in
-constant time, is not implemented due to its sheer amount of workload.
-It will be worked on if this repo reached 512 stars, so smash that star
-button if the app proved useful for you!  
+near-constant time, **is implemented in `v0.4.0` and above**. Unfortunately
+`v0.4` is not well tested, and the release is currently `v0.3.x`. Also, all
+demostrations in the README are done on `v0.3.0`.
+For personal computers which usually have less than 3M files, inverted index
+does not make too much of a difference though.
+
+*Content searches are not indexed.* Indexing file content indexing
+will be worked on if this repo reached 512 stars, so smash that star
+button if the app proves useful for you or if you find it interesting!  
 (More about this [here](docs/TODO.md).)
 
-**IMPORTANT**: This README is about the CLI application.  
-For GUI frontend, see [SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere)  
-For developers, see [Lib Overview](docs/lib_overview.md).
+This README is about the CLI application. For GUI frontend, see
+[SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere).
+(also quite unstable)
 
 This project started being worked on since August 2022, but was not published
-until January 2023 dur to countless bugs. There may still be countless bugs
-currently though.
+until April 2023 due to countless bugs. There may still be countless bugs
+currently though, even on stable version (`v0.3.x`).
 
 ## Unique Features
 
@@ -47,16 +55,16 @@ For SSDs, a thread pool is set up for concurrent directory reads,
 drastically speeding up read speed.  
 For HDDs, this feature shall be disabled, as multithreaded IO gives no
 visible performance gains due to their spinning nature.  
-Whether multithread updatedb shall be enabled can be toggled per path.
+Whether multithreaded `updatedb` shall be enabled can be toggled per path.
 
-The figure shows that `orient` can scan 870000 files within 1.5 secs with
+The figure shows that `orient` can scan 810000 files within 1 secs with
 *cache dropped*, but the disk used is a rather high-end one. Take it with
 a grain of salt though.  
 ![updatedb](docs/md_pics/updatedb.png)  
 
 ### Rapid Fuzzy & Content matching
 
-Like updatedb, the same thread pool is also used for content match.
+Like `updatedb`, the same thread pool is also used for content match.
 Fuzzy matching `hello world` from the 75000-file Linux kernel source
 tree took 5.5secs when cache dropped and 1.5secs with cache.  
 ![contentMatch](docs/md_pics/content_match.png)  
@@ -103,7 +111,7 @@ Continued Table
 |    `find`    |   👍YES    |     👎NO     |     👎NO     | 👎NO  | 👍YES |
 |  `fsearch`   |   👍YES    |     👎NO     |   Partial    | 👍YES | 👎NO  |
 |   `locate`   |   👎NO     |     👍YES    |     👎NO     | 👎NO  | 👍YES |
-|   `orient`   |   👍YES    |     👎NO     |     👍YES    | 👍YES | 👍YES |
+|   `orient`   |   👍YES    |     👍YES    |     👍YES    | 👍YES | 👍YES |
 
 Notes:
 
@@ -147,7 +155,7 @@ orient /usr -quitmod \( -type l -a -okdir realpath \{\} \; \)
 # -quit -quitmod has some quirks; see docs/predicates.md
 ```
 
-### Use `orient`'s Alternative Syntax
+## Use `orient`'s Alternative Syntax
 
 `orient` does not have as much (unique) predicates as `find`. Instead,
 `orient` use `-PRED --ARG` syntax, giving multiple matching schemes to
@@ -197,7 +205,7 @@ children of directories.
 With modifiers, `-updir -downdir` can be applied to any predicate
 in `orient`, unlike `Everything` which hard code parent match to string
 matching only.  
-*Any* predicate include recursive use of `-updir -downdir` themselves.
+*Any* predicate includes recursive use of `-updir -downdir` themselves.
 
 Also `-downdir` is almost 0 overhead and `-updir` make searches **even**
 **faster** by caching recent matches.
@@ -233,7 +241,7 @@ machine🫥. Feel free to report whether it works on issue or discussion.
 ### Build From Source
 
 Building from source is recommended in the early stage of release.
-Give it a shot!  
+Give it a shot! (Required for `v0.4.0`)  
 Or even better, build both `orient` and
 [SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere).
 By building `SearchEverywhere`, `orient` also gets built.
@@ -246,7 +254,8 @@ Build dependencies:
 
 Aside from `CMake`, all dependency can be auto-downloaded by CMake.  
 Using an installed one is also possible, should you have already
-installed some of them, via toggling configure options below.
+installed some of them onto your system, via toggling these configure
+options below.
 
 Configure Options:
 
@@ -287,7 +296,7 @@ If you happen to use HDDs, do the following the first time running `orient`:
 
 On Linux, `/sys/block/sda/queue/rotational` provide insights on whether
 a disk is rotational, which macOS and Windows unfortunately (but
-unexpectedly) do not have.  
+expectedly) do not have.  
 In a future release root points will be aquired from `/etc/mtab` and
 `/sys/.../rotational`, which auto-configure root paths on Linux and macOS.
 > ApPlE iS sO cOoL! tHeY mUsT hAvE eQuIpPeD tHeIr MaCbOoKs WiTh ThE bEsT

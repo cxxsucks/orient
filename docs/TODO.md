@@ -1,48 +1,23 @@
 # TODO list for `orient` library and CLI
 
-## An Upcoming Rewrite
+## Indexing File Content
 
-TL;DR: Rapid, scalable search on par with `plocate` will be worked on
-when this repo reaches 512 stars, or this repo and `SearchEverywhere`
-reached 1024 stars in aggregate.  
+Now that an inverted index on file namehas been implemented, the next
+major leap would be in content searching by indexing some, but (evidently)
+not all, file content. A user would be able to select which files are to be
+indexed by specifying both starting directories and file names (or even
+complete `orient` expressions). Only text files less than 100KiB are indexed.  
+Similar to file name inverted index, trigrams would be the main indexing
+method, mapping file contents directly to file names.
 
-`plocate` is undeniably the state-of-the-art file searcher, being the
-first ever to ship an inverted index designed for filename searching.
-However, porting their inverted index is no easy task, as `plocate` is,
-after all, only a file name searcher.
+This is easier said than done, and if `orient` proved to be useless to
+its users, implementing such technique is not worthwhile, to say the least.
+Therefore, when this repository (`orient`) reached 512 starts, which is a
+decent indication of its usefulness towards normal users, development on
+indexing file content would commence. *Smash the star button if the repo*
+*interests you or proved useful for you.*
 
-Fortunately, there is still hope that such an advanced inverted index
-can be added to `orient`. The designing phase of this upcoming `orient`
-version has already finished, and can be viewed [here](trigram_design.md).
-Even a crude content indexer is [drafted](content_idx.md).  
-*Ideally*, this omniscent version would provide a constant-time file
-search (cost the same amount of time regardless of your fs size), while
-preserving all the rich functionalies already existed. Database file
-would also be much smaller, and memory usage spikes during updatedb
-is completely gone, giving unprecedented, enterprise level of scalability.
-
-The reality is far from ideal though. Turns out, the works needing to be
-done is an **absolute monstrosity** to say the least: zstd random access,
-TurboPFor, integration with `-and -or -not`, with multithreaded content
-match, with sequential predicates like `-size`, with`-updir -downdir`,
-the list goes on. Saying that it would fill my free time up is an
-underestimate, and there is a moderate chance that this project would
-turn into a full-time job.  
-Considering that whether the `find/locate` is useful to the general public
-or not is still unknown, plus that I have other jobs to work with, I
-decided to play it safe, releasing the *unscalable prototype version*
-first. If there are sufficient users or developers found `find/locate`
-useful, sacrificing my own free time for a new state-of-the-art file
-searcher may be a wise and enticing choice.
-
-To this day, the best metric of *usefulness* for softwares is GitHub stars
-imo. This repo (`orient`) being the place most of logic resides is more
-empthasized than the GUI repo (`SearchEverywhere`).  
-For a repo with moderate dedication put into it like this one, I think
-512 stars is an attainable goal, though I have no clue what the number
-should be since I have never published anything useful to GitHub.
-
-## QOL changes that are currently being worked on
+## QOL changes being worked on
 
 The TODOs on the following unordered list is, well, unordered.  
 For personal reasons, documentation and fixing bugs is my current focus.  
@@ -72,7 +47,7 @@ Feel free to start an issue on either bugs or feature requests.
     > Use `/proc/mount` and `/etc/mtabs` for mountpoints rather
     > than hard-code them.  
     > Determine SSD/HDD with `/sys/block/sda/queue/rotational`.
-- [] Use `std::shared_ptr<std::bytes>` in saving dumped data
+- [x] Use `std::vector<std::bytes>` in saving dumped data
     > Currently `std::shared_ptr<std::byte[]>`, which is not
     > "authentic" C++17 and some outdated compiler complains.  
     > Can be solved with custom deleter.  
@@ -84,8 +59,8 @@ Feel free to start an issue on either bugs or feature requests.
 - [] `-downdir` match number of children matched
     > Already implemented but untested, therefore not listed as a feature.
 - [] Use a non-bloated argument parser
-    > Reasons stated in `app::main`
-- [] Remove `app::main`, but add an overload of `app::get_jobs`
+    > Reasons stated in `main` function
+- [x] Remove `app::main`, but add an overload of `app::get_jobs`
     taking `argc argv`
 - [] Stream operator for `fs_data_iter`
     > Good for handling trailing `/` on Windows.
@@ -99,13 +74,13 @@ Feel free to start an issue on either bugs or feature requests.
 - [] `-find`-like `-H -L -P`
 - [] `-find`-like `-mindepth -maxdepth`
     > Not considered until a non-bloated arg parser is found,  
-    > as stated in `app::main`.
+    > as stated in `main` function.
 - [] `-newerXY`
 - [] `-printf` `-ls` `-fprintf` `-fls`
     > These preds/actions are so complex that time spent on
     > implementing them could be better spent on more useful
     > preds or code refactoring.  
-    > Can be implemented as a member function of `fs_data_iter`
+    > Can be implemented via a format method of `fs_data_iter`
 - [] Build a .deb
 - [] Build a .rpm
 - [] Arch `pkgbuild`
