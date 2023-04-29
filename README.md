@@ -1,100 +1,86 @@
 # orient
 
-A cross-platform filesystem indexer and searcher combining the merits of
-`find`, `locate` and `Everything`, plus file content searches.
-Works on Linux, macOS and Windows.
+[English](./README_en.md)
 
-## Before you read
+可以在Linux, macOS与Windows上运行的文件检索工具，含有`find`, `locate`
+以及`Everything`的各种功能，外加内容查找。
 
-Inverted index, the tech behind `plocate` which make searches done in
-near-constant time, **is implemented in `v0.4.0` and above**. Unfortunately
-`v0.4` is not well tested, and the release is currently `v0.3.x`. Also, all
-demostrations in the README are done on `v0.3.0`.
-For personal computers which usually have less than 3M files, inverted index
-does not make too much of a difference though.
+## 写在前面
 
-*Content searches are not indexed.* Indexing file content indexing
-will be worked on if this repo reached 512 stars, so smash that star
-button if the app proves useful for you or if you find it interesting!  
-(More about this [here](docs/TODO.md).)
+倒排索引是 `plocate` 背后的技术，可以在近乎恒定的时间内完成搜索，
+**在 `orient v0.4.0` 及更高版本中实现**。  
+不幸的是，`v0.4` 没有经过很好的测试，
+目前发布的版本是 `v0.3.x`。 此外，自述文件中的所有演示都是在 v0.3.0 上完成的。  
+对于通常只有小于三百万个文件的个人计算机，有没有倒排索引并不会造成太大的区别。
 
-This README is about the CLI application. For GUI frontend, see
+*文件内容未编入索引。*但当此仓库达到 512 颗星后，将着手开发文件内容索引。
+如果您觉得该项目有用或是有趣，请点个star吧！  
+（有关此内容的更多信息详见[此处](docs/TODO.md)。）
+
+本自述文件是关于 CLI 应用程序的。 对于 GUI 前端，请参见
 [SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere).
-(also quite unstable)
+(也挺不稳定的)
 
-This project started being worked on since August 2022, but was not published
-until April 2023 due to countless bugs. There may still be countless bugs
-currently though, even on stable version (`v0.3.x`).
+## 独特的功能
 
-## Unique Features
+### 轻量级
 
-### Extremely Lightweight
+唯一的运行时依赖项是 PCRE2，静态的可执行文件大小仅为 2.5MiB（stripped）。
 
-The only runtime dependency is PCRE2, and a fully static executable is
-only 2.5MiB in size (stripped).
+### Linux、macOS 和 **Windows**
 
-### Linux, macOS and **Windows**
+macOS 和 Windows 上的第一个自由软件文件索引器！😜
 
-The First Libre File Indexer Ever on macOS and Windows!😜  
+- 忽略欺骗 `find` 的 macOS firmlink, 例如 `/System/Volumes/Data`
+- 在 Windows 上使用原生 UTF-16，通过模板对代码进行最少的修改，实现性能和简洁性
+- 像处理 Unix 目录一样处理 Windows 驱动器（当然，“\\”是分隔符）
 
-- Ignores macOS firmlink `/System/Volumes/Data` which tricks `find`
-- Using native UTF-16 on Windows with minimal modification to code
-    (via templates), achieving both performance and simplicity
-- Handles Windows drives as if they were Unix directories
-    (with '\\' being separator of course)
-
-Screenshot on macOS and Windows respectively:  
+分别在 macOS 和 Windows 上的截图：
 ![orie_mac](docs/md_pics/orie_mac.png)  
 ![orie_win](docs/md_pics/orie_win.png)  
 
-### Non-root, multithreaded `updatedb` (SSD only)
+### 无需管理员权限的多线程(仅非机械硬盘)索引更新
 
-Unlike `locate`, rebuild filesystem index requires **NO** root permission
-(or Administrator on Windows). No setugid either.  
-For SSDs, a thread pool is set up for concurrent directory reads,
-drastically speeding up read speed.  
-For HDDs, this feature shall be disabled, as multithreaded IO gives no
-visible performance gains due to their spinning nature.  
-Whether multithreaded `updatedb` shall be enabled can be toggled per path.
+与 `locate` 不同，重建文件系统索引**不**需要root 权限（或 Windows 上的管理员）。
+也没有setugid。  
+对于SSD，设置线程池用于并发目录读取，大大加快读取速度。  
+对于HDD，应禁用此功能，因为多线程 IO 由于其旋转特性而不会提供明显的性能提升。  
+可以对路径切换是否启用多线程。
 
-The figure shows that `orient` can scan 810000 files within 1 secs with
-*cache dropped*, but the disk used is a rather high-end one. Take it with
-a grain of salt though.  
+图中显示 `orient` 可以在 1 秒内扫描 810000 个文件，*虽然已经清理了页面缓存*，
+但使用的磁盘是相当高端的，因此不要太当真。
 ![updatedb](docs/md_pics/updatedb.png)  
 
-### Rapid Fuzzy & Content matching
+### 快速模糊和内容匹配
 
-Like `updatedb`, the same thread pool is also used for content match.
-Fuzzy matching `hello world` from the 75000-file Linux kernel source
-tree took 5.5secs when cache dropped and 1.5secs with cache.  
+与`updatedb`一样，同样的线程池也用于内容匹配。
+从 75000 个文件的 Linux 内核源代码树中模糊匹配“hello world”在缓存删除时花费了
+5.5 秒，在使用缓存时花费了 1.5 秒。
 ![contentMatch](docs/md_pics/content_match.png)  
-(take with a grain of salt; 16x Intel i7 11800H and NVMe SSD)
-> On Windows content matching is **significantly slower**, a combined
-> effect of UTF8 to UTF16 conversion, lack of efficient kernel memory
-> mapping (`mmap(2)`) and the bloated, inefficient nature of Windows.
+（期望别那么高；使用设备是16x Intel i7 11800H 和 NVMe SSD）
+> 在 Windows 上，内容匹配**明显较慢**，这是由 UTF8 到 UTF16 转换
+> 缺乏有效的内核内存映射 (`mmap(2)`) 以及 Windows 臃肿、低效的综合影响。
 
 ~~Goodbye `find ... | xargs grep ...` and `find ... -a -exec grep ...`~~
 
-### `find`-like syntax
+### 类似 `find` 的语法
 
-As shown below, `orient` also implements **large portions of** `find`'s
-matches, making users easy to familierze themselves with existing
-experience in using `find` while also increasing the app's versatility.  
-![find](docs/md_pics/find.png)
+如下所示，`orient` 还实现了 **大部分** `find` 的
+匹配，让用户更容易熟悉使用`find`的现有经验，同时也增加了应用程序的多功能性。
+![查找](docs/md_pics/find.png)
 
-### Match parent dir or child file
+### 匹配父目录或子文件
 
-Unlike `Everything` which hard code parent match to string matching only,
-in `orient`, `-updir -downdir` can be applied to any predicate.
+不像 `Everything` 硬编码父匹配只匹配字符串，
+在 `orient` 中，`-updir -downdir` 可以应用于任何谓词。
 
-Also `-downdir` is almost 0 overhead and `-updir` make searches **even**
-**faster** by caching recent matches.  
-Matching Parent:  
+此外，`-downdir` 的开销几乎为 0，而 `-updir` 通过缓存最近的匹配项使搜索**更快**。
+匹配父目录：
 ![updir](docs/md_pics/updir.png)  
-Matching Children:  
+匹配子文件：
 ![downdir](docs/md_pics/downdir.png)
 
-## Comparison
+## 比较
 
 |              | Linux | Windows | macOS | Android |   License   |
 |:------------:|:-----:|:-------:|:-----:|:-------:|:-----------:|
@@ -113,31 +99,26 @@ Continued Table
 |   `locate`   |   👎NO     |     👍YES    |     👎NO     | 👎NO  | 👍YES |
 |   `orient`   |   👍YES    |     👍YES    |     👍YES    | 👍YES | 👍YES |
 
-Notes:
+注意：
 
-- *Partial*ly matching parent and children means while they do provide
-    options to match a file's parent or dir's children, such searches are
-    confined to string matches instead of all the app's features.
-- `Everything` CLI seems to have all results *prettified*, making it very
-    hard to use in combination with other tools, hence the 😕 face.
-- `eVeRyThInG` iS pRoPrIeTaRy, OnLy SdK pRoViDeD!!! OuR dEaR lEaDeR rIcHaRd
-    StAlLmAn WiLl NuKe it!!!
-    > What's worse, `Everything SDK` is filled with global states.🤮
+- *部分*匹配父项和子项意味着虽然它们确实提供了匹配文件的父项或目录的子项的选项，
+    但此类搜索仅限于字符串匹配而不是应用程序的所有功能。
+- `Everything` CLI 似乎对所有结果都进行了*美化*，使其很难与其他工具结合使用，
+    因此那里放了个疑惑的表情。
+- `Everything`是专有的，只有SDK！我们亲爱的领导人理查德·斯托曼会把它砸得稀巴烂！(手动狗头)
+    > 更糟糕的是，`Everything SDK` 充满了全局状态。🤮
 
-## Quick Start
+## 快速入门
 
-### Use `find`-like Syntax
+### 使用类似 `find` 的语法
 
-Users who are familiar with `find` could jumpstart with `orient`'s `find`
-compatible predicates, like `-regex`, `-lname`, `-okdir` and others.  
-Note that `orient` predicates are sometimes superset of their `find`
-counterparts, like `-quit` optionally accepts a integer argument meaning
-how many results can be produced before quitting. Its default value is 1
-so that when using `-quit` with no arguments it has no difference from
-that in `find`.  
+熟悉 `find` 的用户可以使用 `orient` 的 `find` 兼容语法快速上手，
+如`-regex`、`-lname`、`-okdir`等。  
+请注意，`orient` 谓词有时是其对应的 `find` 的超集，例如 `-quit`
+可选地接受一个整数参数，这意味着在退出之前可以产生多少结果。 它的默认值为 1，
+因此当使用不带参数的 `-quit` 时，它与使用 `find` 时没有区别。
 
-For predicates specific to `orient`, only `orient`-style syntax is
-provided, see below.
+对于特定于 `orient` 的谓词，仅提供 `orient` 风格的语法，见下文。
 
 ```sh
 # mp3 or mp4 file excluding under hidden dirs
@@ -155,29 +136,23 @@ orient /usr -quitmod \( -type l -a -okdir realpath \{\} \; \)
 # -quit -quitmod has some quirks; see docs/predicates.md
 ```
 
-## Use `orient`'s Alternative Syntax
+## 使用 `orient` 的替代语法
 
-`orient` does not have as much (unique) predicates as `find`. Instead,
-`orient` use `-PRED --ARG` syntax, giving multiple matching schemes to
-a single predicate, boosting code reuseability.
+`orient` 没有 `find` 那样多的（独特的）谓词。 相反，`orient` 使用
+`-PRED --ARG` 语法，为单个谓词提供多种匹配方案，从而提高代码的可重用性。
 
-- Path match predicates: `-name` `-bregex` `-strstr` `-fuzz`  
-    Arguments: `--ignore-case`(except `-fuzz`) `--full` `--readlink`
-- Content match predicates: `-content-{strstr,fuzz,regex}`  
-    Arguments: `--ignore-case`(except fuzz) `--blocked` `--allow-binary`
-- File stat predicates: `-size` `-{a,m,c}{time,min}` `-inum`  
-    Arguments: File name or integer prefixed by `+` or `-`
-- and more...
+- 路径匹配谓词：`-name` `-bregex` `-strstr` `-fuzz`
+     参数：`--ignore-case`（`-fuzz` 除外）`--full` `--readlink`
+- 内容匹配谓词：`-content-{strstr,fuzz,regex}`
+     参数：`--ignore-case`（`-fuzz` 除外）`--blocked` `--allow-binary`
+- 文件统计谓词：`-size` `-{a,m,c}{time,min}` `-inum`
+     参数：文件名或以“+”或“-”为前缀的整数
+- 以及更多...
 
-Many `find` compatible predicates are actually aliases, like  
-`-lname` is identical to `-name --readlink`  
-`-regex` - `-bregex --ignore-case` (the `b` stands for basename)  
-`-samefile` is basically `-inode` since `-inode` also accepts filename  
-> It is also possible to mix two syntaxes together, though unrecommended  
-> like `-iname --full` or `-anewer +5`
-
-Below are some simple examples.
-See more on how to use them [here](docs/predicates.md).
+许多 `find` 兼容谓词实际上是别名，例如 `-lname` 与 `-name --readlink` 相同，  
+`-regex` 与 `-bregex --ignore-case` 相同（`b` 代表基本名称）
+`-samefile` 就是 `-inode` 的代称，因为 `-inode` 也接受文件名
+> 也可以将两种语法混合在一起，但不推荐，例如 `-iname --full` 或 `-anewer +5`
 
 ```sh
 # Find C source files containing "hello"; orient style only
@@ -196,21 +171,17 @@ orient / -name --readlink "*tmp"
 orient / -bregex --readlink 'tmp$' # No `find` style alternative
 ```
 
-### Modifiers
+### 修饰符
 
-With the introduction of modifier predicates, it is possible to "do
-something" before propagating to other preds, which is exactly what
-`-updir` and `-downdir` does: they match the parent of files and
-children of directories.  
-With modifiers, `-updir -downdir` can be applied to any predicate
-in `orient`, unlike `Everything` which hard code parent match to string
-matching only.  
-*Any* predicate includes recursive use of `-updir -downdir` themselves.
+通过引入修饰谓词，可以在传播到其他谓词之前“做某事”，这正是 `-updir` 和 `-downdir`
+所做的：它们匹配文件的父目录和目录的子文件。  
+使用修饰符，`-updir -downdir` 可以应用于 `orient` 中的任何谓词，
+这与 `Everything` 不同，后者将父匹配硬编码为仅字符串匹配。  
+*任何* 谓词包括递归使用 `-updir -downdir` 本身。
 
-Also `-downdir` is almost 0 overhead and `-updir` make searches **even**
-**faster** by caching recent matches.
+此外，`-downdir` 的开销几乎为 0，而 `-updir` 通过缓存最近的匹配项使搜索**更快**。
 
-Some more modifiers include `-prunemod`, `-quitmod` and `-not`. Ex:  
+其他的修饰符包括`-prunemod`、`-quitmod`和`-not`。 例如：
 
 ```sh
 # Find bin/gcc*
@@ -227,46 +198,40 @@ find .. -type d -a -exec test -d '{}/.git' \; -a -print -a -prune
 orient / -updir \( -name src -a -updir -downdir -name .git \) -name "*.cc"
 ```
 
-## Installation
+## 安装
 
-Since the application is a CLI, simply grab the executable of your system
-and it should work.
-> On Linux, `-user -nouser -group -nogroup` require glibc to work.  
+由于该应用程序是命令行界面，只需获取系统的可执行文件，它就应该可以运行。
+> 在 Linux 上，`-user -nouser -group -nogroup` 需要 glibc 才能工作。
 
-Unfortunately the macOS ARM version is missing since I don't have one such
-machine🫥. Feel free to report whether it works on issue or discussion.
-> Currently this app is too little-tested to release to a distribution.  
-> May release to Arch AUR first btw.
+不幸的是，macOS ARM 版本缺失，因为苹果机太贵了🫥。请在Issue或Discussion
+中报告在该机器上是否可用。
+> 目前测试太少，不是很适合发布到发行版。  
+> 可能首先发布到 Arch AUR btw, 顺便说一下。
 
-### Build From Source
+### 从源代码构建
 
-Building from source is recommended in the early stage of release.
-Give it a shot! (Required for `v0.4.0`)  
-Or even better, build both `orient` and
-[SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere).
-By building `SearchEverywhere`, `orient` also gets built.
-Build dependencies:
+现在仍在发布的早期阶段，建议从源代码构建。(`v0.4.0`暂时必须源码编译)  
+也可以直接编译（更不稳定的）GUI
+[SearchEverywhere](https://github.com/cxxsucks/SearchEverywhere)，
+编译GUI的时候`orient` CLI也被顺带着编译了。  
+构建所需依赖：
 
 - CMake
 - PCRE2
 - rapidfuzz
 - GoogleTest (Test Only)
 
-Aside from `CMake`, all dependency can be auto-downloaded by CMake.  
-Using an installed one is also possible, should you have already
-installed some of them onto your system, via toggling these configure
-options below.
+除了 `CMake` 本身之外，所有依赖项都可以由 CMake 自动下载。
+如果您已经在系统上安装了其中一部分，通过切换下面的这些配置选项，也可以使用已安装的。
 
-Configure Options:
+配置选项：
 
-- `ORIE_TEST`: Build GoogleTest test suites
-- `ORIE_SYSTEM_PCRE2`: Use System PCRE2 Library instead of compiling
-    a new one.
-- `ORIE_LINK_STATIC`: Statically link orient executable
-- `ORIE_SYSTEM_RAPIDFUZZ`: Use System rapidfuzz Library (header only)
+- `ORIE_TEST`：构建 GoogleTest 测试套件
+- `ORIE_SYSTEM_PCRE2`：使用系统 PCRE2 库而不是编译新库。
+- `ORIE_LINK_STATIC`：静态链接 orient 可执行文件
+- `ORIE_SYSTEM_RAPIDFUZZ`：使用系统 rapidfuzz 库（仅标头）
 
-Replace the `OPTION` below with your enabled options, and run the
-following commands:
+将下面的 `OPTION` 替换为您启用的选项，然后运行以下命令：
 
 ```sh
 git clone https://github.com/cxxsucks/orient.git
@@ -276,76 +241,67 @@ make -j$(nproc)
 sudo make install
 ```
 
-## Caveats
+## 注意事项
 
-### Multithreaded Read by Default
+### 默认多线程读取
 
-Default config generation hard-codes some starting points and enables
-multithreaded read on all of them, which is suboptimal for rotational
-hard disks.  
-If you happen to use HDDs, do the following the first time running `orient`:
+默认配置硬编码了几个扫描，并在所有起点上启用多线程读取，这对于机械硬盘来说不是最佳选择。
+如果您碰巧使用 HDD，请在第一次运行 `orient` 时执行以下操作：
 
-1. Run `orient -updatedb`
-2. Immediately interrupt with `Ctrl-C`
-3. Open `~/.config/orie/default.txt` or `%APPDATA%\.orie\default.txt`
-4. Review the paths succeeding `ROOT`, remove the `SSD` field if any of
-    these paths are actually not on SSD.
-5. If there are any HDD root paths not listed, write
-    `ROOT "/path/to/mountpoint"` or simply do not index it with
-    `IGNORED "/path/to/mountpoint"`.
+1. 运行 `orient -updatedb`
+2. 立即用 `Ctrl-C` 打断
+3. 打开 `~/.config/orie/default.txt` 或 `%APPDATA%\.orie\default.txt`
+4. 查看 `ROOT` 之后的路径，如果这些路径中的任何一条实际上不在 SSD 上，则删除 `SSD` 字段。
+5. 如果有任何未列出的硬盘根路径，请写入 `ROOT "/path/to/mountpoint"` 或直接用
+    `IGNORED "/path/to/mountpoint"` 不对其进行索引。
 
-On Linux, `/sys/block/sda/queue/rotational` provide insights on whether
-a disk is rotational, which macOS and Windows unfortunately (but
-expectedly) do not have.  
-In a future release root points will be aquired from `/etc/mtab` and
-`/sys/.../rotational`, which auto-configure root paths on Linux and macOS.
-> ApPlE iS sO cOoL! tHeY mUsT hAvE eQuIpPeD tHeIr MaCbOoKs WiTh ThE bEsT
-> hArD dIsKs In ThE wOrLd AnD iS dEfInItElY nOt RoTaTiOnAl!
+在 Linux 上，`/sys/block/sda/queue/rotational` 能够判断某个硬盘是否是机械式的，
+不幸（但意料之中）的是macOS 和 Windows 没有。  
+在未来的版本中，将从 `/etc/mtab` 和 `/sys/.../rotational` 获取挂载点，
+它们将被用来在 Linux 和 macOS 上自动配置根路径。  
+> 苹果真酷！ 他们一定会为他们的 MacBook 配备世界上最好的硬盘，
+> 这些硬盘绝对不可能是机械的！
 
-### Untested features
+### 未测试的功能
 
-The `exec` series of predicates are implemented, but not tested, on Windows.  
-And a moderate amount of software engineering experience would tell that
-untested features would certainly contain errors, if not fail outright.
+`exec` 系列谓词已在 Windows 上实现，但未经测试。
+稍有软件开发常识的人都可以看出，这个未经测试的功能即使不会把程序搞崩，
+也肯定会错得离谱。  
+除了`exec`之外，其他未测试的功能及其原因都能在
+[TODO 列表](docs/TODO.md) 中找到。
 
-There are a number of untested features, with `exec` on Windows being the
-only one actually listed in [feature list](docs/predicates.md).  
-Other untested features are listed in [TODO list](docs/TODO.md), but not
-feature list, along with reasons why they are not tested.
+### **未实现**的`find`里的功能
 
-### **Unimplemented** `find` features
+主要是全局选项：
 
-Mostly global options:
-
-- `-context` (SELinux context)
-- `-printf -fprintf -ls -fls` (Format print)
-- `-newerXY`
-- `-mindepth` `-maxdepth`
-- `-H -L -P` (symlink following global options)
-- `-D` (debugopts)
-- `-O` (optimize level)
-    > `orient` has its own optimizer similar to `find -O3`
-- `-regextype` (hardcoded PCRE2)
-- `-warn -nowarn`
-- `-d -depth` (depth first search)
-    > `orient` can only search according to index.
-    > `-delete` is not affected though, unlike `find`.
-- `-files0-from`
-- `-mount -xdev -xautofs` (do not descend into mounts)
+- `-context`（SELinux 上下文）
+- `-printf -fprintf -ls -fls`（格式打印）
+-`-newerXY`
+-`-mindepth``-maxdepth`
+- `-H -L -P`（是否跟随符号链接）
+-`-D`（调试选项）
+- `-O`（优化级别）
+     > `orient` 有自己的优化器，类似于 `find -O3`
+- `-regextype`（硬编码 PCRE2）
+-`-警告-nowarn`
+- `-d -depth`（深度优先搜索）
+     > `orient`只能根据索引搜索。
+     > 与 `find` 不同，`-delete` 不受影响。
+-`-files0-from`
+- `-mount -xdev -xautofs`（不要进入挂载点）
 - `-help -version`
 
-## Future Work
+## 未来工作
 
-Documentations would be the center of works recently.  
-Bug reports and feature request are still accepted anyway, in GitHub Issues
-Tracker of this repository.  
-See [TODO List](docs/TODO.md) for details.
+文档将是最近工作的中心。  
+错误报告和功能请求仍可直接发到这个存储库的 Issue 里面。  
+更多工作详见[TODO列表](docs/TODO.md)。
 
-## Credits
+## 致谢
 
-- [dirent](https://github.com/tronkko/dirent): Unix `dirent` port to Windows
-    > Heavily modified here for symlink and (fake) device, socket support,
-    > therefore it is directly placed into source instead of module.
-- [PCRE2](https://github.com/PCRE2Project/pcre2) Regular Expression
+- [dirent](https://github.com/tronkko/dirent)：对 Windows 的 Unix `dirent` 适配
+    > 在这里对符号链接和（伪造的）设备、套接字支持进行了大量修改，
+    > 因此它直接放在源代码中而不是子模块中。
+- [PCRE2](https://github.com/PCRE2Project/pcre2) 正则表达式
 - [rapidfuzz-cpp](https://github.com/maxbachmann/rapidfuzz-cpp):
-    **Header Only** Fuzzy string matching library
+     **仅标头**的模糊字符串匹配库
