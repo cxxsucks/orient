@@ -22,7 +22,7 @@ add_executable(orientest
 target_include_directories(orientest PRIVATE ${GTEST_INCLUDE_DIRS})
 add_dependencies(orientest orie)
 target_link_libraries(orientest PRIVATE
-    orie GTest::gtest_main
+    orie GTest::gtest
     ${orie_pcre2_libname} rapidfuzz::rapidfuzz
 )
 

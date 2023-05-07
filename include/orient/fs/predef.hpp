@@ -38,6 +38,7 @@ extern "C" {
 
 #include <cstring>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 
 namespace orie {

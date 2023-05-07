@@ -228,6 +228,8 @@ static void trigramTestFilePrep() {
     std::mt19937 rd(123456789); // For reproduceability
     std::uniform_int_distribution<int> dist(0x21, 0x7e);
     arr2d_writer writer(tmpPath.native());
+    std::cout << "Generating numerous large random strings. May take quite long."
+              << std::endl;
 
     for (uint32_t i = 0; i < 90000; i++) {
         for (size_t j = 0; j < 400; j++)

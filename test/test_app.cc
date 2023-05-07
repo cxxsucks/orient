@@ -4,6 +4,9 @@
 #include "abunchofdirs.hpp"
 
 struct orieApp : public testing::Test {
+    // In orie::app tests, we created around 8500 files
+    // which is a rather huge work. Therefore they are only
+    // created once, used by all orie::app test cases below.
     static orie::fifo_thpool _pool;
     static orie::app _app;
     static std::mutex _single_operation_mtx;
@@ -15,7 +18,7 @@ struct orieApp : public testing::Test {
     orieApp() : _single_operation_lck(_single_operation_mtx) {
         if (inited)
             return;
-        ABunchOfDirs dirs(12, true);
+        ABunchOfDirs dirs(12, true); // Persistent directories
         dbPath = dirs.dbPath;
         tmpPath = dirs.tmpPath;
         inited = true;
@@ -35,9 +38,10 @@ protected:
         // set_db_path must precedes all getters and setters
         _app.set_db_path(dbPath.c_str())
             .set_root_path(tmpPath.native())
-            // Empty path is root path
+            // Empty path has same effect as "/"
             .add_start_path(orie::str_t());
     }
+
     void TearDown() override {
         if (!_app) // No dumper
             return;
@@ -235,3 +239,12 @@ TEST_F(orieApp, main) {
     std::flush(orie::NATIVE_STDOUT);
 }
 #endif
+
+// Not an elegant solution to deleting all temporary files
+int main(int argc, char **argv) {
+    printf("Running main() from %s\n", __FILE__);
+    testing::InitGoogleTest(&argc, argv);
+    int res = RUN_ALL_TESTS();
+    std::filesystem::remove_all(orieApp::tmpPath);
+    return res;
+}
