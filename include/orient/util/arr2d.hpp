@@ -38,10 +38,10 @@ private:
     mutable std::mutex _cache_mut;
     mutable std::shared_mutex _access_mut;
 
-    // Tuple of pointer to compressed data, compressed and decompressed size
-    // [nullptr, -1, -1] if page is out of bound
-    // [nullptr, 0, 0] if line is out of bound but page is not
-    std::tuple<const uint32_t*, uint32_t, uint32_t>
+    // Tuple of offset to compressed data, compressed and decompressed size
+    // [0, -1, -1] if page is out of bound
+    // [0, 0, 0] if line is out of bound but page is not
+    std::tuple<size_t, uint32_t, uint32_t>
     raw_line_data(size_t line, size_t page) const noexcept;
     // Get the offset of `page` in the file.
     // Matching it against `~uint32_t()` is useful in determining whether

@@ -276,6 +276,8 @@ void arr2d_reader::close() noexcept {
 #endif // _WIN32
 }
 
+// No locks needed inside implementation: all callers to the function
+// obtain locks before this calling it.
 uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     // Copy shared cache to local stack to reduce locking
     _cache_mut.lock();
@@ -291,8 +293,6 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     if (cache_page_idx > page)
         cache_page_idx = (cache_page_offset = 0);
 
-    {
-    std::shared_lock __lck(_access_mut);
     while (cache_page_idx != page) {
         // Lines this page +1
         uint32_t nlinep1 = _mapped_data[cache_page_offset] + 1;
@@ -304,7 +304,6 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
         ++cache_page_idx;
         cache_page_offset = next_off;
     }
-    }
 
     // cache_page_offset now points at beginning of required page
     // Write back cache
@@ -315,32 +314,36 @@ uint32_t arr2d_reader::page_offset(size_t page) const noexcept {
     return cache_page_offset;
 }
 
-std::tuple<const uint32_t*, uint32_t, uint32_t>
+// No locks needed inside implementation: all callers to the function
+// obtain locks before this calling it.
+std::tuple<size_t, uint32_t, uint32_t>
 arr2d_reader::raw_line_data(size_t line, size_t page) const noexcept {
     uint32_t page_off = page_offset(page);
     if (page_off == ~uint32_t())  // Outbound page
-        return std::make_tuple(nullptr, ~uint32_t(), ~uint32_t());
+        return std::make_tuple(0, ~uint32_t(), ~uint32_t());
     else if (_mapped_data[page_off] <= line) // Outbound Line
-        return std::make_tuple(nullptr, 0, 0);
+        return std::make_tuple(0, 0, 0);
 
     uint32_t line_off = page_off + line + 1;
-    std::shared_lock __lck(_access_mut);
     return std::make_tuple(
         // TODO: EXPLAIN THIS MONSTROSITY!!!
-        _mapped_data + page_off + _mapped_data[line_off] + 1,
+        // _mapped_data + page_off + _mapped_data[line_off] + 1,
+        page_off + _mapped_data[line_off] + 1,
         _mapped_data[line_off + 1] - _mapped_data[line_off] - 1,
         _mapped_data[page_off + _mapped_data[line_off]]
     );
 }
 
 uint32_t arr2d_reader::uncmprs_size(size_t line, size_t page) const noexcept {
+    std::shared_lock __lck(_access_mut);
     return std::get<2>(raw_line_data(line, page));
 }
 
 size_t arr2d_reader::line_data(compressionLib::fastPForCodec &co, uint32_t *out,
                                size_t outsz, size_t line, size_t page) const
 {
-    auto [lineptr, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
+    std::shared_lock __lck(_access_mut);
+    auto [lineoff, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
     if (cmprs_sz == ~uint32_t()) // Requested page is out of bound
         return ~size_t();
     // Do not run decompression if the line has nothing.
@@ -348,11 +351,9 @@ size_t arr2d_reader::line_data(compressionLib::fastPForCodec &co, uint32_t *out,
     else if (uncmprs_sz == 0)
         return 0;
 
-    // TODO: Segfault if `lineptr` is invalid due to remapping
-    // Solve by returning {ptr, cmprs_sz, uncmprs_sz} tuple in raw_line_data
     if (outsz + 4 >= uncmprs_sz)
         return uncmprs_sz; // Not enough space
-    co.decodeArray(lineptr, cmprs_sz, out, outsz);
+    co.decodeArray(_mapped_data + lineoff, cmprs_sz, out, outsz);
     ASSERT(outsz == uncmprs_sz,
            "arr2d error in uncompressing line to buffer");
     return uncmprs_sz;
@@ -361,7 +362,8 @@ size_t arr2d_reader::line_data(compressionLib::fastPForCodec &co, uint32_t *out,
 bool arr2d_reader::line_data(compressionLib::fastPForCodec &co,
     std::vector<uint32_t> &out, size_t line, size_t page) const
 {
-    auto [lineptr, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
+    std::shared_lock __lck(_access_mut);
+    auto [lineoff, cmprs_sz, uncmprs_sz] = raw_line_data(line, page);
     if (cmprs_sz == ~uint32_t()) // Requested page is out of bound
         return false;
     // Do not run decompression if the line has nothing.
@@ -373,7 +375,7 @@ bool arr2d_reader::line_data(compressionLib::fastPForCodec &co,
 
     out.resize(uncmprs_sz + 4);
     size_t buf_sz = out.size();
-    co.decodeArray(lineptr, cmprs_sz, out.data(), buf_sz);
+    co.decodeArray(_mapped_data + lineoff, cmprs_sz, out.data(), buf_sz);
     ASSERT(uncmprs_sz == buf_sz,
            "arr2d error in uncompressing line to buffer");
     out.resize(uncmprs_sz);
