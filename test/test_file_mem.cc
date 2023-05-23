@@ -146,6 +146,9 @@ TEST_F(fileMemChunk, clear) {
     EXPECT_EQ(visitD(), visitD());
 }
 
+// To MSVC Debugger users: Huge amounts of exceptions ahead!
+// MSVC Debugger prints a line for each exception, caught or not,
+// cluttering the debug console immediately.
 TEST_F(fileMemChunk, concurVisit) {
     orie::fifo_thpool largePool(25);
     for (size_t i = 0; i < 150; ++i)

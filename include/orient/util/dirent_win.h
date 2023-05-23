@@ -114,7 +114,7 @@ extern "C" {
 
 /* Socket */
 #if !defined(S_IFSOCK)
-#	define S_IFSOCK 0
+#	define S_IFSOCK (S_IFMT & 0XDDDDDDDD)
 #endif
 
 /* Read user permission */

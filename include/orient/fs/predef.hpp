@@ -9,6 +9,13 @@ extern "C" {
 
 #include <orient/util/dirent_win.h>
 #define NATIVE_PATH(str) L##str
+// Some dummy constants are not defined in `dirent_win.h`
+#define S_IRWXU (S_IXUSR | S_IWUSR | S_IRUSR)
+#define S_IRWXG (S_IXGRP | S_IWGRP | S_IRGRP)
+#define S_IRWXO (S_IXOTH | S_IWOTH | S_IROTH)
+#define S_ISUID 0
+#define S_ISGID 0
+
 #ifdef max
 #undef max
 #undef min

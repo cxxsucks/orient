@@ -1,6 +1,17 @@
 #include <orient/util/dirent_win.h>
 
 /*
+ * Dirent interface for Microsoft Visual Studio
+ *
+ * Copyright (C) 1998-2019 Toni Ronkko
+ * This file is part of dirent.  Dirent may be freely distributed
+ * under the MIT license.  For all details and documentation, see
+ * https://github.com/tronkko/dirent
+ * 
+ * (except the #include in line 1 of course)
+ */
+
+/*
  * Open directory stream DIRNAME for read and return a pointer to the
  * internal working area that is used to retrieve individual directory
  * entries.
