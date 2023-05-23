@@ -18,6 +18,10 @@
 #	pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Include windows.h without Windows Sockets 1.1 to prevent conflicts with
  * Windows Sockets 2.0.
@@ -94,23 +98,23 @@
 #	define S_IFIFO _S_IFIFO
 #endif
 
-/* Block device 
- * Unused on Windows. Since S_IFXXX is not a bitmask, meaning that
- * a switch statement is usually used in combination, assign it
- * a negative instead of 0.
- * (AT LEAST NOT A BITMASK IN LINUX) */
+/* Block device */
 #if !defined(S_IFBLK)
-#	define S_IFBLK -1
+#	define S_IFBLK 0
 #endif
 
-/* Link */
+/* Link 
+ * S_IFLNK is not defined in Windows's `stat.h`, so we define it here.
+ * In Windows's `stat.h`, file type macros (S_IFDIR, S_IFREG...) are defined
+ * bitmasks, except that they are NOT on Linux. So long as S_* & ~S_IFMT == 0,
+ * as is the case in Linux, the S_IS*(mode) macros works fine. */
 #if !defined(S_IFLNK)
-#	define S_IFLNK 40960
+#	define S_IFLNK (S_IFMT & 0XCCCCCCCC)
 #endif
 
-/* Socket (also unused) */
+/* Socket */
 #if !defined(S_IFSOCK)
-#	define S_IFSOCK -2
+#	define S_IFSOCK 0
 #endif
 
 /* Read user permission */
@@ -157,33 +161,6 @@
 #if !defined(S_IXOTH)
 #	define S_IXOTH 0
 #endif
-
-/* All user permission */
-#if !defined(S_IRWXU)
-#	define S_IRWXU (S_IRUSR | S_IWUSR | S_IXUSR)
-#endif
-
-/* All group permittion */
-#if !defined(S_IRWXG)
-#	define S_IRWXG (S_IRGRP | S_IWGRP | S_IXGRP)
-#endif
-
-/* All other permission */
-#if !defined(S_IRWXO)
-#	define S_IRWXO (S_IROTH | S_IWOTH | S_IXOTH)
-#endif
-
-/* Setuid */
-#if !defined(S_ISUID)
-#	define S_ISUID 0
-#endif
-
-/* Setgid */
-#if !defined(S_ISGID)
-#	define S_ISGID 0
-#endif
-
-// No sticky bit macro in Linux either
 
 /* Maximum length of file name */
 #if !defined(PATH_MAX)
@@ -249,7 +226,7 @@ struct _wdirent {
 	/* Always zero */
 	long d_ino;
 
-	/* File position within stream */
+	/* Position of next file in a directory stream */
 	long d_off;
 
 	/* Structure size */
@@ -276,6 +253,9 @@ struct _WDIR {
 	/* True if data is valid */
 	int cached;
 
+	/* True if next entry is invalid */
+	int invalid;
+
 	/* Win32 search handle */
 	HANDLE handle;
 
@@ -289,7 +269,7 @@ struct dirent {
 	/* Always zero */
 	long d_ino;
 
-	/* File position within stream */
+	/* Position of next file in a directory stream */
 	long d_off;
 
 	/* Structure size */
@@ -328,8 +308,14 @@ int _wreaddir_r(
 int closedir(DIR *dirp);
 int _wclosedir(_WDIR *dirp);
 
-void rewinddir(DIR* dirp);
-void _wrewinddir(_WDIR* dirp);
+void rewinddir(DIR *dirp);
+void _wrewinddir(_WDIR *dirp);
+
+long telldir(DIR *dirp);
+long _wtelldir(_WDIR *dirp);
+
+void seekdir(DIR *dirp, long loc);
+void _wseekdir(_WDIR *dirp, long loc);
 
 int scandir(const char *dirname, struct dirent ***namelist,
 	int (*filter)(const struct dirent*),
@@ -348,6 +334,8 @@ int strverscmp(const char *a, const char *b);
 #define wreaddir _wreaddir
 #define wclosedir _wclosedir
 #define wrewinddir _wrewinddir
+#define wtelldir _wtelldir
+#define wseekdir _wseekdir
 
 /* Compatibility with older Microsoft compilers and non-Microsoft compilers */
 #if !defined(_MSC_VER) || _MSC_VER < 1400
@@ -364,6 +352,7 @@ int strverscmp(const char *a, const char *b);
 /* Internal utility functions */
 WIN32_FIND_DATAW *dirent_first(_WDIR *dirp);
 WIN32_FIND_DATAW *dirent_next(_WDIR *dirp);
+long dirent_hash(WIN32_FIND_DATAW *datap);
 
 #if !defined(_MSC_VER) || _MSC_VER < 1400
 int dirent_mbstowcs_s(
@@ -381,4 +370,7 @@ int dirent_wcstombs_s(
 void dirent_set_errno(int error);
 #endif
 
-#endif // DIRENT_H
+#ifdef __cplusplus
+}
+#endif
+#endif /*DIRENT_H*/
