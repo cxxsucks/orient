@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
-enable_language(CXX)
+project(orient VERSION 0.4.0)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ORIE_TEST "Build Google Test for Orient Library" OFF)
 option(ORIE_SYSTEM_PCRE2 "Use System PCRE2 Library" OFF)
@@ -7,13 +9,13 @@ option(ORIE_SYSTEM_ZSTD "Use System zstd Library" OFF)
 option(ORIE_SYSTEM_RAPIDFUZZ "Use System rapidfuzz Library" OFF)
 option(ORIE_LINK_STATIC "Statically link orient executable" OFF)
 
-# Unfortunately PCRE2 provides no package name therefore whether to use system
-# library can only be manually toggled unlike GTest.
 include(FetchContent)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 set(targs_to_install orie)
 
+# Unfortunately PCRE2 provides no package name therefore whether to use system
+# library can only be manually toggled unlike GTest.
 if (NOT ORIE_SYSTEM_PCRE2)
     FetchContent_Declare(pcre2
         GIT_REPOSITORY https://github.com/PCRE2Project/pcre2
@@ -31,11 +33,12 @@ if (NOT ORIE_SYSTEM_PCRE2)
 endif(NOT ORIE_SYSTEM_PCRE2)
 set(orie_pcre2_libname pcre2-)
 
-# zstd CMake file is in build/cmake
 if (NOT ORIE_SYSTEM_ZSTD)
     FetchContent_Declare(zstd
         GIT_REPOSITORY https://github.com/facebook/zstd.git
         GIT_TAG v1.5.1)
+    # zstd CMake file is in build/cmake
+    # cannot simply call FetchContent_MakeAvailable due to this
     FetchContent_GetProperties(zstd)
     if (NOT zstd_POPULATED)
         FetchContent_Populate(zstd)
@@ -54,16 +57,9 @@ if (NOT ORIE_SYSTEM_RAPIDFUZZ)
         GIT_REPOSITORY https://github.com/maxbachmann/rapidfuzz-cpp.git
         GIT_TAG main)
     FetchContent_MakeAvailable(rapidfuzz)
-    # A bug in rapidfuzz cmake stopped it from installing if project name is set
 else (NOT ORIE_SYSTEM_RAPIDFUZZ)
     find_package(rapidfuzz REQUIRED)
 endif (NOT ORIE_SYSTEM_RAPIDFUZZ)
-
-# A bug in rapidfuzz cmake stopped it from installing if project name is set
-# therefore set project name here.
-project(orient VERSION 0.4.0)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # List common sources
 set(s ${CMAKE_CURRENT_SOURCE_DIR}/src/fs)
